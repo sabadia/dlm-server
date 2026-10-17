@@ -164,27 +164,47 @@ func (s *QueueService) Delete(ctx context.Context, id string, opts DeleteQueueOp
 		deleted *domain.Queue
 		moved   []*domain.Task
 	)
-	err := s.d.Store.WithTx(ctx, func(tx storage.Store) error {
-		q, err := tx.Queues().Get(ctx, id)
-		if err != nil {
-			return fmt.Errorf("service: delete queue: %w", err)
-		}
-		if err := q.CanDelete(); err != nil {
-			return fmt.Errorf("service: delete queue: %w", err)
-		}
-		if opts.MoveTasksTo != "" {
-			if moved, err = moveAllTasks(ctx, tx, id, opts.MoveTasksTo, s.d.now()); err != nil {
-				return err
+	deleteTx := func() error {
+		return s.d.Store.WithTx(ctx, func(tx storage.Store) error { //nolint:wrapcheck // wrapped inside the transaction
+			q, err := tx.Queues().Get(ctx, id)
+			if err != nil {
+				return fmt.Errorf("service: delete queue: %w", err)
 			}
+			if err := q.CanDelete(); err != nil {
+				return fmt.Errorf("service: delete queue: %w", err)
+			}
+			if opts.MoveTasksTo != "" {
+				if moved, err = moveAllTasks(ctx, tx, id, opts.MoveTasksTo, s.d.now()); err != nil {
+					return err
+				}
+			}
+			if err := tx.Queues().Delete(ctx, id); err != nil {
+				return fmt.Errorf("service: delete queue: %w", err)
+			}
+			deleted = q
+			return nil
+		})
+	}
+	var err error
+	if opts.MoveTasksTo == "" {
+		// Without moving, a queue that still has tasks cannot be deleted, so
+		// no task changes.
+		err = deleteTx()
+	} else {
+		// Moving rewrites the queue and position of every task of the queue:
+		// lock them all (in ID order); the transaction re-reads them.
+		var tasks []*domain.Task
+		if tasks, err = queueTasks(ctx, s.d.Store, id); err != nil {
+			return err
 		}
-		if err := tx.Queues().Delete(ctx, id); err != nil {
-			return fmt.Errorf("service: delete queue: %w", err)
+		ids := make([]string, len(tasks))
+		for i, t := range tasks {
+			ids[i] = t.ID
 		}
-		deleted = q
-		return nil
-	})
+		err = s.d.withTaskLocks(ctx, ids, deleteTx)
+	}
 	if err != nil {
-		return err //nolint:wrapcheck // wrapped inside the transaction
+		return err
 	}
 	if s.d.Limits != nil {
 		s.d.Limits.RemoveQueue(id)
@@ -244,7 +264,7 @@ func (s *QueueService) Stop(ctx context.Context, id string) (*domain.Queue, erro
 		return nil, err
 	}
 	for _, t := range active {
-		if _, err := stopTask(ctx, s.d, t.ID, ErrRequeued); err != nil {
+		if err := stopTask(ctx, s.d, t.ID, ErrRequeued); err != nil {
 			return nil, err
 		}
 	}

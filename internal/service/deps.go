@@ -44,6 +44,11 @@ type Deps struct {
 	NewID func() string
 	// Logger defaults to a discarding logger.
 	Logger *slog.Logger
+	// TaskLocks serialises read-modify-write cycles of each task. It must be
+	// the instance given to the Runner (RunnerDeps.TaskLocks) and shared by
+	// every service; nil gives this service a private instance, which only
+	// protects against itself.
+	TaskLocks *TaskLocks
 }
 
 func (d Deps) withDefaults() Deps {
@@ -65,7 +70,44 @@ func (d Deps) withDefaults() Deps {
 	if d.Resolves == nil {
 		d.Resolves = engine.NewResolveCache(engine.CacheOptions{Clock: d.Clock})
 	}
+	if d.TaskLocks == nil {
+		d.TaskLocks = NewTaskLocks()
+	}
 	return d
+}
+
+// withTaskLock runs fn while holding the lock of task id. fn must re-read
+// the task (inside a store transaction when it writes) rather than trust a
+// copy read before the lock was taken. See TaskLocks for the lock order.
+func (d Deps) withTaskLock(ctx context.Context, id string, fn func() error) error {
+	unlock, err := d.TaskLocks.Lock(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return fn()
+}
+
+// withTaskLocks runs fn while holding the locks of every task in ids. The
+// locks are taken in ascending ID order (duplicates once), which keeps
+// multi-task paths deadlock-free against each other; single-lock holders
+// never wait for a second lock.
+func (d Deps) withTaskLocks(ctx context.Context, ids []string, fn func() error) error {
+	sorted := slices.Compact(slices.Sorted(slices.Values(ids)))
+	unlocks := make([]func(), 0, len(sorted))
+	defer func() {
+		for _, unlock := range slices.Backward(unlocks) {
+			unlock()
+		}
+	}()
+	for _, id := range sorted {
+		unlock, err := d.TaskLocks.Lock(ctx, id)
+		if err != nil {
+			return err
+		}
+		unlocks = append(unlocks, unlock)
+	}
+	return fn()
 }
 
 func (d Deps) now() time.Time { return d.Clock().UTC() }
@@ -171,34 +213,63 @@ func stoppable(s domain.TaskStatus) bool {
 	return s == domain.StatusRunning || s == domain.StatusRefreshing
 }
 
+// stopAttempts bounds how often stopTask asks the scheduler to stop a task
+// that the store still reports as running.
+const stopAttempts = 3
+
 // stopTask stops a running or refreshing task through the scheduler with
-// cause (ErrPaused or ErrRequeued) and returns its persisted state. When the
-// scheduler reports the task as not running although the store still says
-// it is (a stale state, e.g. no scheduler is active), the task is moved to
-// the cause's target state directly so the request still takes effect.
-func stopTask(ctx context.Context, d Deps, id string, cause error) (*domain.Task, error) {
-	if err := d.Scheduler.Stop(ctx, id, cause); err != nil {
-		return nil, fmt.Errorf("service: stop task %q: %w", id, err)
+// cause (ErrPaused or ErrRequeued) until it no longer runs. No task
+// lock is held while Scheduler.Stop waits, because the runner needs the
+// lock to persist the final state. Afterwards the task is re-read under its
+// lock: when the store still says it is running, the scheduler may have
+// re-admitted it in between (a requeued task), so Stop is asked again; once
+// the attempts are used up the state is stale (no run holds the task, e.g.
+// no scheduler is active) and the task is moved to the cause's target state
+// directly so the request still takes effect.
+func stopTask(ctx context.Context, d Deps, id string, cause error) error {
+	for attempt := 1; ; attempt++ {
+		if err := d.Scheduler.Stop(ctx, id, cause); err != nil {
+			return fmt.Errorf("service: stop task %q: %w", id, err)
+		}
+		var (
+			t     *domain.Task
+			from  domain.TaskStatus
+			stale bool
+		)
+		err := d.withTaskLock(ctx, id, func() error {
+			err := d.Store.WithTx(ctx, func(tx storage.Store) error {
+				var err error
+				if t, err = tx.Tasks().Get(ctx, id); err != nil {
+					return fmt.Errorf("service: stop task %q: %w", id, err)
+				}
+				if !stoppable(t.Status) || attempt < stopAttempts {
+					return nil
+				}
+				to := domain.StatusQueued
+				if errors.Is(cause, ErrPaused) {
+					to = domain.StatusPaused
+				}
+				from, stale = t.Status, true
+				if err := t.TransitionTo(to, d.now()); err != nil {
+					return fmt.Errorf("service: stop task %q: %w", id, err)
+				}
+				if err := tx.Tasks().Update(ctx, t); err != nil {
+					return fmt.Errorf("service: stop task %q: %w", id, err)
+				}
+				return nil
+			})
+			if err == nil && stale {
+				// Published under the lock so status events of a task stay in order.
+				d.Logger.InfoContext(ctx, "stopped task without an active run", "task_id", id, "from", from, "to", t.Status)
+				d.publishStatus(t, from)
+			}
+			return err //nolint:wrapcheck // wrapped inside the transaction
+		})
+		if err != nil {
+			return err //nolint:wrapcheck // wrapped inside the transaction or by TaskLocks
+		}
+		if stale || !stoppable(t.Status) {
+			return nil
+		}
 	}
-	t, err := d.Store.Tasks().Get(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("service: stop task %q: %w", id, err)
-	}
-	if !stoppable(t.Status) {
-		return t, nil
-	}
-	to := domain.StatusQueued
-	if errors.Is(cause, ErrPaused) {
-		to = domain.StatusPaused
-	}
-	from := t.Status
-	if err := t.TransitionTo(to, d.now()); err != nil {
-		return nil, fmt.Errorf("service: stop task %q: %w", id, err)
-	}
-	if err := d.Store.Tasks().Update(ctx, t); err != nil {
-		return nil, fmt.Errorf("service: stop task %q: %w", id, err)
-	}
-	d.Logger.InfoContext(ctx, "stopped task without an active run", "task_id", id, "from", from, "to", to)
-	d.publishStatus(t, from)
-	return t, nil
 }

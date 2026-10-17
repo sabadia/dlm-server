@@ -439,12 +439,16 @@ func TestTaskServicePauseMatrix(t *testing.T) {
 			if got := f.get(t, task.ID); got.Status != tt.want {
 				t.Errorf("status = %s, want %s", got.Status, tt.want)
 			}
+			// A stale running state is retried a few times (the scheduler
+			// may have re-admitted the task) before it is forced.
 			calls := f.sched.stopCalls()[before:]
-			if tt.stopped != (len(calls) == 1) {
+			if tt.stopped != (len(calls) > 0) {
 				t.Fatalf("stop calls = %+v", calls)
 			}
-			if tt.stopped && !errors.Is(calls[0].Cause, ErrPaused) {
-				t.Errorf("stop cause = %v", calls[0].Cause)
+			for _, c := range calls {
+				if !errors.Is(c.Cause, ErrPaused) {
+					t.Errorf("stop cause = %v", c.Cause)
+				}
 			}
 		})
 	}
