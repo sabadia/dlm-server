@@ -79,16 +79,36 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		bus.Close()
 		return fmt.Errorf("daemon: %w", err)
 	}
-	// The runner is driven by the scheduler (Phase 3); it is built here so
-	// the wiring is complete and exercised at startup.
-	_ = service.NewRunner(service.RunnerDeps{
+	defaults := func() settings.Settings { return settings.Defaults(downloadDir) }
+	limits := ratelimit.NewManager(0)
+	resolves := engine.NewResolveCache(engine.CacheOptions{})
+	defer resolves.Close()
+	// The runner is driven by the scheduler (P3.2); until then the services
+	// use a NopScheduler and queued tasks wait.
+	runner := service.NewRunner(service.RunnerDeps{
 		Store:    store,
 		Engines:  engines,
-		Limits:   ratelimit.NewManager(0),
+		Limits:   limits,
 		Bus:      bus,
-		Defaults: func() settings.Settings { return settings.Defaults(downloadDir) },
+		Defaults: defaults,
 		Logger:   log,
 	})
+	services := NewServices(service.Deps{
+		Store:     store,
+		Engines:   engines,
+		Resolves:  resolves,
+		Scheduler: service.NopScheduler{},
+		Bus:       bus,
+		Limits:    limits,
+		Runner:    runner,
+		Defaults:  defaults,
+		Logger:    log,
+	})
+	if err := services.Settings.SyncLimits(ctx); err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
+	_ = services // the API registers its task, queue and settings operations on them in P3.4
 	srv, err := BuildServer(cfg, api.Deps{Logger: log, Version: version, Token: token})
 	if err != nil {
 		bus.Close()
@@ -111,10 +131,14 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return bus.Run(gctx) })
+	sweepCtx, stopSweep := context.WithCancel(gctx)
+	defer stopSweep()
+	g.Go(func() error { return resolves.Run(sweepCtx, time.Minute) })
 	g.Go(func() error {
 		// The bus outlives the server so in-flight requests can still
 		// publish; closing it also stops bus.Run.
 		defer bus.Close()
+		defer stopSweep()
 		return srv.Run(gctx)
 	})
 	if err := g.Wait(); err != nil {
@@ -125,7 +149,23 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	return nil
 }
 
-// buildServer constructs the API server and registers every operation. It
+// Services are the application use-cases the adapters (REST API, MCP) call.
+type Services struct {
+	Settings *service.SettingsService
+	Queues   *service.QueueService
+	Tasks    *service.TaskService
+}
+
+// NewServices builds every service on the same dependencies.
+func NewServices(d service.Deps) *Services {
+	return &Services{
+		Settings: service.NewSettingsService(d),
+		Queues:   service.NewQueueService(d),
+		Tasks:    service.NewTaskService(d),
+	}
+}
+
+// BuildServer constructs the API server and registers every operation. It
 // is shared by Run and the CLI parity test, so any operation
 // registered here is automatically checked for a matching CLI command.
 func BuildServer(cfg *config.Config, deps api.Deps) (*api.Server, error) {
