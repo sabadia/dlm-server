@@ -20,9 +20,11 @@ import (
 
 // Candidate is a download found while a page ran.
 type Candidate struct {
-	URL  string `json:"url"`
-	Kind Kind   `json:"kind"`
-	MIME string `json:"mime,omitempty"`
+	// Index is the position in a PageResult (set by Resolver).
+	Index int    `json:"index"`
+	URL   string `json:"url"`
+	Kind  Kind   `json:"kind"`
+	MIME  string `json:"mime,omitempty"`
 	// Size in bytes, -1 when unknown.
 	Size int64 `json:"size"`
 	// Filename is the name announced by the server or the browser.
@@ -31,7 +33,8 @@ type Candidate struct {
 	// browser started a download) or "blob" (a download of a blob: URL, which
 	// only exists inside the browser).
 	Source string `json:"source"`
-	// Page is the document that triggered the request.
+	// Page is the document that triggered the request (Resolver replaces it
+	// with the page that was opened).
 	Page string `json:"page,omitempty"`
 	// Headers are the request headers worth repeating when the URL is
 	// downloaded outside the browser (Referer, Origin).

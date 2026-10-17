@@ -34,6 +34,8 @@ type Config struct {
 	Server ServerConfig `koanf:"server"`
 	Paths  PathsConfig  `koanf:"paths"`
 	Log    LogConfig    `koanf:"log"`
+	// Browser configures the internal headless browser.
+	Browser BrowserConfig `koanf:"browser"`
 }
 
 // ServerConfig controls the HTTP listener.
@@ -72,6 +74,28 @@ type LogConfig struct {
 	MaxAgeDays int    `koanf:"max_age_days"`
 }
 
+// BrowserConfig configures the internal headless browser (see package
+// browser). It is started on demand, so these settings cost nothing until a
+// page is opened.
+type BrowserConfig struct {
+	// Path is the browser executable. Empty means: the first of Chrome,
+	// Chromium, Edge or Brave found on the machine, else a downloaded
+	// chrome-headless-shell.
+	Path string `koanf:"path"`
+	// AutoDownload lets dlm download chrome-headless-shell (from the Chrome
+	// for Testing endpoints, into the cache directory) when no browser is
+	// installed.
+	AutoDownload bool `koanf:"auto_download"`
+	// MaxBrowsers bounds the browser processes running at once; there is one
+	// per site group, each with its own profile.
+	MaxBrowsers int `koanf:"max_browsers"`
+	// IdleTimeout is how long a browser without open pages stays alive.
+	IdleTimeout time.Duration `koanf:"idle_timeout"`
+	// NoSandbox starts browsers with --no-sandbox, for containers that run as
+	// root.
+	NoSandbox bool `koanf:"no_sandbox"`
+}
+
 // Default returns the configuration used when nothing else is specified.
 func Default() Config {
 	return Config{
@@ -88,6 +112,7 @@ func Default() Config {
 			MaxBackups: 5,
 			MaxAgeDays: 30,
 		},
+		Browser: BrowserConfig{AutoDownload: true, MaxBrowsers: 2, IdleTimeout: 2 * time.Minute},
 	}
 }
 
@@ -96,6 +121,18 @@ func (c *Config) TokenFile() string { return filepath.Join(c.Paths.ConfigDir, "t
 
 // DatabaseFile is the path of the SQLite database.
 func (c *Config) DatabaseFile() string { return filepath.Join(c.Paths.DataDir, AppName+".db") }
+
+// BrowserProfilesDir holds the browser profiles (one per site group), which
+// keep the logins of the pages the browser opened.
+func (c *Config) BrowserProfilesDir() string {
+	return filepath.Join(c.Paths.DataDir, "browser-profiles")
+}
+
+// BrowserStagingDir holds the files the browser downloaded until they are
+// imported as tasks.
+func (c *Config) BrowserStagingDir() string {
+	return filepath.Join(c.Paths.CacheDir, "browser-staging")
+}
 
 // TLSEnabled reports whether the listener serves HTTPS.
 func (c *Config) TLSEnabled() bool { return c.Server.TLSCert != "" && c.Server.TLSKey != "" }
@@ -187,6 +224,12 @@ func (c *Config) Validate() error {
 	}
 	if !slices.Contains([]string{"json", "text"}, strings.ToLower(c.Log.Format)) {
 		errs = append(errs, fmt.Errorf("log.format %q: want json or text", c.Log.Format))
+	}
+	if c.Browser.MaxBrowsers < 1 {
+		errs = append(errs, errors.New("browser.max_browsers must be at least 1"))
+	}
+	if c.Browser.IdleTimeout <= 0 {
+		errs = append(errs, errors.New("browser.idle_timeout must be positive"))
 	}
 	if c.Log.MaxSizeMB < 1 || c.Log.MaxBackups < 0 || c.Log.MaxAgeDays < 0 {
 		errs = append(errs, errors.New("log rotation: max_size_mb must be >= 1, max_backups and max_age_days >= 0"))

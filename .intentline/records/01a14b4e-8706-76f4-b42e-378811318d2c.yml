@@ -1,0 +1,38 @@
+schema_version: 1
+id: 01a14b4e-8706-76f4-b42e-378811318d2c
+status: draft
+created_at: '2026-10-17T19:20:00Z'
+updated_at: '2026-10-17T19:20:00Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P6.3: Browser resolver engine + the page-reload refresh strategy; /v1/browser/* + CLI (resolve page, list candidates)'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/browser/resolver.go
+  start_line: null
+  end_line: null
+- path: internal/engine/browserx/browserx.go
+  start_line: null
+  end_line: null
+- path: internal/refresh/pagereload.go
+  start_line: null
+  end_line: null
+- path: internal/service/browser.go
+  start_line: null
+  end_line: null
+- path: internal/api/browser.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

@@ -149,6 +149,8 @@ func TestValidate(t *testing.T) {
 		{"bad format", func(c *Config) { c.Log.Format = "xml" }, "log.format"},
 		{"bad rotation", func(c *Config) { c.Log.MaxSizeMB = 0 }, "rotation"},
 		{"bad shutdown", func(c *Config) { c.Server.ShutdownTimeout = 0 }, "shutdown_timeout"},
+		{"no browsers", func(c *Config) { c.Browser.MaxBrowsers = 0 }, "browser.max_browsers"},
+		{"bad browser idle timeout", func(c *Config) { c.Browser.IdleTimeout = 0 }, "browser.idle_timeout"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -180,5 +182,28 @@ func TestEnsureDirs(t *testing.T) {
 		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 			t.Errorf("%s not created: %v", dir, err)
 		}
+	}
+}
+
+func TestBrowserConfig(t *testing.T) {
+	d := Default().Browser
+	if !d.AutoDownload || d.MaxBrowsers != 2 || d.IdleTimeout != 2*time.Minute || d.Path != "" || d.NoSandbox {
+		t.Errorf("default browser config = %+v", d)
+	}
+	cfg, err := Load(LoadOptions{Environ: func() []string {
+		return []string{"DLM_HOME=" + t.TempDir(), "DLM_BROWSER_PATH=/opt/chrome", "DLM_BROWSER_MAX_BROWSERS=4", "DLM_BROWSER_AUTO_DOWNLOAD=false", "DLM_BROWSER_IDLE_TIMEOUT=30s"}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := cfg.Browser
+	if b.Path != "/opt/chrome" || b.MaxBrowsers != 4 || b.AutoDownload || b.IdleTimeout != 30*time.Second {
+		t.Errorf("browser config from the environment = %+v", b)
+	}
+	if got, want := cfg.BrowserProfilesDir(), filepath.Join(cfg.Paths.DataDir, "browser-profiles"); got != want {
+		t.Errorf("BrowserProfilesDir = %q, want %q", got, want)
+	}
+	if got, want := cfg.BrowserStagingDir(), filepath.Join(cfg.Paths.CacheDir, "browser-staging"); got != want {
+		t.Errorf("BrowserStagingDir = %q, want %q", got, want)
 	}
 }
