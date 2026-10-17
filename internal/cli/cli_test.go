@@ -15,6 +15,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/api"
 	"github.com/sabadia/dlm-server/internal/client"
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/daemon"
 )
 
 const (
@@ -29,7 +30,7 @@ func startAPI(t *testing.T) string {
 	t.Helper()
 	cfg := config.Default()
 	cfg.Home = t.TempDir()
-	srv, err := buildServer(&cfg, api.Deps{Token: testToken, Version: testSrvVersion})
+	srv, err := daemon.BuildServer(&cfg, api.Deps{Token: testToken, Version: testSrvVersion})
 	if err != nil {
 		t.Fatal(err)
 	}

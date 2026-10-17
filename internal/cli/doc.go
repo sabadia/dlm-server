@@ -15,9 +15,9 @@
 //
 // Several operations served by one command are listed comma-separated
 // ("list-tasks,get-task"). TestCLIParity builds the API server exactly as
-// "dlm serve" does (via buildServer) and fails when an OpenAPI operationID
+// "dlm serve" does (via daemon.BuildServer) and fails when an OpenAPI operationID
 // has no annotated command, or when an annotation names an operation that
-// does not exist. Register new operations in buildServer so they are covered
+// does not exist. Register new operations in daemon.BuildServer so they are covered
 // automatically.
 //
 // # Global flags and exit codes

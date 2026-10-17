@@ -86,7 +86,8 @@ internal/
   postproc/             checksum, extract, move-by-category, run-command, AV scan, webhook
   api/                  huma operations, auth middleware, SSE, problem details
   client/               Go REST client (shared by CLI and tests)
-  cli/                  cobra commands (thin; call client)
+  cli/                  cobra commands (thin; call client; `serve` delegates to daemon)
+  daemon/               composition root: wires config, logging, storage, bus, services, API; runs until shutdown
   mcp/                  MCP tools mapped onto services
   nativehost/           Native Messaging shim + manifest installer (Chrome/Chromium/Edge/Brave/Firefox × OS)
   platform/             ONLY place for build-tagged OS code: prealloc, disk-free, sleep/shutdown, paths

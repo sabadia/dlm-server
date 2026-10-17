@@ -10,6 +10,7 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/api"
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/daemon"
 )
 
 // TestCLIParity enforces the REST + CLI parity rule: every OpenAPI operation
@@ -18,7 +19,7 @@ import (
 func TestCLIParity(t *testing.T) {
 	cfg := config.Default()
 	cfg.Home = t.TempDir()
-	srv, err := buildServer(&cfg, api.Deps{Token: "parity-token", Version: "parity"})
+	srv, err := daemon.BuildServer(&cfg, api.Deps{Token: "parity-token", Version: "parity"})
 	if err != nil {
 		t.Fatal(err)
 	}
