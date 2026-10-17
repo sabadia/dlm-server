@@ -98,6 +98,12 @@ func (c *Client) HasToken() bool { return c.token != "" }
 // do sends a request with an optional JSON body (in) and decodes a JSON
 // success response into out (if non-nil). Error responses become *APIError.
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
+	return c.doAs(ctx, method, path, "application/json", in, out)
+}
+
+// doAs is do with the media type of the request body (a JSON-based type
+// such as application/merge-patch+json).
+func (c *Client) doAs(ctx context.Context, method, path, contentType string, in, out any) error {
 	if c.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
@@ -118,7 +124,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	}
 	req.Header.Set("Accept", "application/json, application/problem+json")
 	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 	}
 
 	resp, err := c.http.Do(req)
