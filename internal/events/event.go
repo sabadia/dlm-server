@@ -1,0 +1,61 @@
+package events
+
+import (
+	"slices"
+	"time"
+)
+
+// Type identifies the kind of an Event. Values are lower-case dotted strings
+// and are part of the public API (SSE event names, filter values).
+type Type string
+
+// Event types emitted by the system. Add new types here; the bus treats every
+// type uniformly except TypeTaskProgress, which is coalesced per task.
+const (
+	TypeTaskCreated     Type = "task.created"
+	TypeTaskUpdated     Type = "task.updated"
+	TypeTaskStatus      Type = "task.status"
+	TypeTaskProgress    Type = "task.progress"
+	TypeTaskDeleted     Type = "task.deleted"
+	TypeQueueCreated    Type = "queue.created"
+	TypeQueueUpdated    Type = "queue.updated"
+	TypeQueueDeleted    Type = "queue.deleted"
+	TypeSettingsUpdated Type = "settings.updated"
+)
+
+// Event is a single notification published on the Bus.
+//
+// ID and Time are assigned by the bus when the event is delivered; values set
+// by the publisher are overwritten. Data is shared between all subscribers and
+// the replay buffer, so publishers must not mutate it after publishing.
+type Event struct {
+	ID      uint64    `json:"id"`
+	Type    Type      `json:"type"`
+	Time    time.Time `json:"time"`
+	TaskID  string    `json:"taskId,omitempty"`
+	QueueID string    `json:"queueId,omitempty"`
+	Data    any       `json:"data,omitempty"`
+}
+
+// Filter selects events. Zero-valued fields match everything, so the zero
+// Filter matches all events. Non-empty fields are combined with AND; Types is
+// a set combined with OR.
+type Filter struct {
+	Types   []Type
+	TaskID  string
+	QueueID string
+}
+
+// Match reports whether e satisfies the filter.
+func (f Filter) Match(e Event) bool {
+	if len(f.Types) > 0 && !slices.Contains(f.Types, e.Type) {
+		return false
+	}
+	if f.TaskID != "" && f.TaskID != e.TaskID {
+		return false
+	}
+	if f.QueueID != "" && f.QueueID != e.QueueID {
+		return false
+	}
+	return true
+}
