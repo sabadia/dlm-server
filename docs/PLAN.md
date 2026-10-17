@@ -257,11 +257,11 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P2.4 Retry policy (exponential backoff + jitter, Retry-After) and error classification (transient / fatal / link-expired)
 - [x] P2.5 Hierarchical rate limiter wired into the engines
 - [x] P2.6 Proxy (global/per-site/per-task, system), custom headers/UA/TLS options, optional TLS impersonation fallback
-- [ ] P2.7 Resume persistence (throttled segment writes) + startup auto-resume
+- [x] P2.7 Resume persistence (throttled segment writes), task runner, and startup recovery (interrupted tasks re-queued; the P3.2 scheduler auto-starts them)
 
 ### Phase 3: Queues & scheduler
 - [ ] P3.1 Queue service: CRUD for queues, built-in Main queue, move/reorder tasks
-- [ ] P3.2 Scheduler: per-queue + global slots, priority, correct pause/remove semantics
+- [ ] P3.2 Scheduler: per-queue + global slots, priority, correct pause/remove semantics; drives `service.Runner` and auto-starts queued tasks at startup (incl. recovered ones)
 - [ ] P3.3 Queue time windows, speed profiles, quotas, post-queue actions (platform sleep/shutdown)
 - [ ] P3.4 REST + CLI for tasks (resolve, create, batch, list/filter/paginate, get, patch, pause/resume/delete, bulk ops), queues and settings (global/queue/task + effective)
 - [ ] P3.5 SSE event stream + `dlm watch`
