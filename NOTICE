@@ -1,0 +1,9 @@
+dlm-server
+Copyright 2026 sabadia
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Clean-room statement: the design of this project was informed by studying the
+publicly available architecture of GopeedLab/gopeed (GPL-3.0). No source code
+from Gopeed has been copied or adapted into this repository; all code is
+original work. Third-party dependencies retain their own licenses.
