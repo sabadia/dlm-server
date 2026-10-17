@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a14966-ce3f-71c3-9477-ebdeff6eb557
+status: draft
+created_at: '2026-10-17T10:27:16Z'
+updated_at: '2026-10-17T10:27:16Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: Shared httpx.StatusError so P2.2 (HTTP probe) and P2.4 (error classification) can be implemented in parallel worktrees (user asked to build common code first).
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: internal/engine/httpx/status_test.go
+  exit_code: null
+links:
+- path: internal/engine/httpx/status.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/doc.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
