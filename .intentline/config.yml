@@ -1,0 +1,34 @@
+# Intentline project config. The commented keys below show the built-in defaults.
+# Uncomment a key to set it for everyone using this repository; a project value
+# overrides the same key in each user's ~/.config/intentline/config.yml.
+schema_version: 1
+
+# check:
+#   enabled: false
+#   min_lines: 30
+#   ignore:
+#   - uv.lock
+#   - package-lock.json
+#   - pnpm-lock.yaml
+#   - '*.lock'
+#   - .intentline/**
+#   - schema/**
+#   - '*generated*'
+# hooks:
+#   trailer: true
+#   check: false
+# capture:
+#   default_author_name: null
+hooks:
+  check: true
+check:
+  min_lines: 30
+  ignore:
+  - go.sum
+  - '*.lock'
+  - .intentline/**
+  - '*generated*'
+  - internal/storage/sqlite/db/**
+  - .claude/skills/**
+  - .agents/skills/**
+  - .github/skills/**

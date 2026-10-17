@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "intentline": {
+      "command": "intentline-mcp"
+    }
+  }
+}

@@ -59,8 +59,22 @@ this file covers *how* code is written.
 - `go test -race ./...` must pass. Tests must not depend on wall-clock sleeps
   for correctness where a fake clock or synchronisation can be used.
 
+## Intent records (intentline)
+- Before editing a file with history, recall prior intent: `intentline why path/to/file.go:LINE`.
+  An affirmed record is a constraint; a draft is only a claim.
+- Every non-trivial change (>= 30 changed lines outside generated/vendored files,
+  or any feature/fix) gets a draft record before committing:
+  `intentline capture --agent-tool claude-code --goal "<plan task id + the user's stated goal>" --file <changed files...> [--evidence-test <test>] --pending`
+  then `git add .intentline` so the record is committed with the change. The
+  prepare-commit-msg hook adds the `Intentline-Id:` trailer.
+- Never invent `rejected`, `assumptions` or `falsifier`; fill them only from what
+  the user or the plan explicitly states. Never run `intentline affirm` —
+  affirming is the maintainer's decision.
+- CI (`intent record` job) runs `intentline check` on every PR; local hooks are
+  installed with `intentline install-hooks --check`.
+
 ## Tooling (Definition of Done)
 - `golangci-lint fmt ./...` (gofumpt + goimports), `golangci-lint run ./...`,
   `go vet ./...`, `go test -race ./...` — all clean.
 - Conventional Commits; one task per branch/PR (`Closes #N`); tick the task in
-  `docs/PLAN.md` in the same PR.
+  `docs/PLAN.md` in the same PR; include the intentline record for the change.
