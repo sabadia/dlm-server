@@ -16,6 +16,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
@@ -57,10 +58,15 @@ func newOpsFixture(t *testing.T) *opsFixture {
 		Store: store, Engines: reg, Resolves: resolves,
 		Defaults: func() settings.Settings { return defaults },
 	}
+	cipher, err := cookies.NewCipher(bytes.Repeat([]byte{1}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Default()
 	s, err := New(&cfg, Deps{
 		Token: testToken, Version: testVersion,
 		Settings: service.NewSettingsService(d), Queues: service.NewQueueService(d), Tasks: service.NewTaskService(d),
+		Cookies: service.NewCookieService(cookies.NewStore(store.Cookies(), cipher, cookies.Options{})),
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -136,6 +136,39 @@ type EngineStateRepository interface {
 	Delete(ctx context.Context, taskID string) error
 }
 
+// CookieRecord represents the persisted cookie row with encrypted value.
+type CookieRecord struct {
+	ID           string
+	Domain       string
+	Name         string
+	Path         string
+	PartitionKey string
+	EncryptedVal []byte
+	Secure       bool
+	HTTPOnly     bool
+	SameSite     string
+	HostOnly     bool
+	ExpiresAt    *time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// CookieFilter selects cookies for CookieRepository.List.
+type CookieFilter struct {
+	Domain       string
+	Name         string
+	PartitionKey string
+}
+
+// CookieRepository persists encrypted cookies.
+type CookieRepository interface {
+	Upsert(ctx context.Context, c *CookieRecord) error
+	Get(ctx context.Context, id string) (*CookieRecord, error)
+	Delete(ctx context.Context, id string) error
+	DeleteExpired(ctx context.Context, now time.Time) (int64, error)
+	List(ctx context.Context, filter CookieFilter) ([]*CookieRecord, error)
+}
+
 // Store aggregates the repositories and provides transactions.
 type Store interface {
 	Settings() SettingsRepository
@@ -143,6 +176,7 @@ type Store interface {
 	Tasks() TaskRepository
 	Segments() SegmentRepository
 	EngineState() EngineStateRepository
+	Cookies() CookieRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

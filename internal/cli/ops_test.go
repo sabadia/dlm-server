@@ -8,12 +8,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/sabadia/dlm-server/internal/api"
 	"github.com/sabadia/dlm-server/internal/client"
+	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/daemon"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
@@ -48,6 +50,10 @@ func newE2E(t *testing.T) *e2e {
 	defaults.Proxy = settings.Some(settings.Proxy{Mode: settings.ProxyNone})
 	resolves := engine.NewResolveCache(engine.CacheOptions{})
 	t.Cleanup(resolves.Close)
+	cipher, err := cookies.NewCipher(bytes.Repeat([]byte{1}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
 	svc := daemon.NewServices(service.Deps{
 		Store: store, Engines: reg, Resolves: resolves,
 		Defaults: func() settings.Settings { return defaults },
@@ -55,6 +61,7 @@ func newE2E(t *testing.T) *e2e {
 	base := startAPIWith(t, api.Deps{
 		Token: testToken, Version: testSrvVersion,
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
+		Cookies: service.NewCookieService(cookies.NewStore(store.Cookies(), cipher, cookies.Options{})),
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -420,5 +427,80 @@ func TestSettingsDoc(t *testing.T) {
 	}
 	if raw, _ := (settingsDoc{}).raw(); raw != nil {
 		t.Errorf("empty doc = %s, want nil", raw)
+	}
+}
+
+func TestCookieCommandsEndToEnd(t *testing.T) {
+	e := newE2E(t)
+	jsonData := `[{"domain":"example.com","name":"sid","value":"top-secret","path":"/","secure":true,"httpOnly":true,"hostOnly":true},
+	  {"domain":".example.org","name":"pref","value":"dark","path":"/"}]`
+
+	// Import from stdin (format detected).
+	r := e.run(t, jsonData, "cookies", "import", "-", "-o", "json")
+	if r.code != ExitOK {
+		t.Fatalf("import: exit %d: %s", r.code, r.stderr)
+	}
+	var res client.ImportCookiesResult
+	if err := json.Unmarshal([]byte(r.stdout), &res); err != nil || res.Imported != 2 {
+		t.Fatalf("import result = %+v (%v)", res, err)
+	}
+
+	// List shows metadata, never values.
+	out := e.ok(t, nil, "cookies", "list")
+	if !strings.Contains(out, "example.com") || !strings.Contains(out, "sid") || strings.Contains(out, "top-secret") ||
+		!strings.HasPrefix(strings.Join(strings.Fields(out), " "), "ID DOMAIN PATH NAME SECURE HTTPONLY EXPIRES") {
+		t.Errorf("list table:\n%s", out)
+	}
+	var cs []client.Cookie
+	e.ok(t, &cs, "cookies", "list", "--domain", "example.org", "-o", "json")
+	if len(cs) != 1 || cs[0].Name != "pref" {
+		t.Fatalf("filtered list = %+v", cs)
+	}
+
+	// Export to stdout (bare file) and to a 0600 file.
+	out = e.ok(t, nil, "cookies", "export", "--format", "netscape", "--domain", "example.com")
+	if !strings.Contains(out, "#HttpOnly_example.com\tFALSE\t/\tTRUE\t0\tsid\ttop-secret\n") {
+		t.Errorf("netscape export:\n%s", out)
+	}
+	file := filepath.Join(t.TempDir(), "cookies.json")
+	out = e.ok(t, nil, "cookies", "export", "-f", file)
+	data, err := os.ReadFile(file)
+	if err != nil || !strings.Contains(string(data), "top-secret") || !strings.Contains(out, "exported 2 cookies") {
+		t.Errorf("file export: %q (%v), output %q", data, err, out)
+	}
+	if info, err := os.Stat(file); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
+		t.Errorf("export file mode: %v (%v)", info, err)
+	}
+
+	// The exported file imports back from a file argument.
+	if out = e.ok(t, nil, "cookies", "import", file, "--format", "json"); !strings.Contains(out, "imported 2, skipped 0 expired, rejected 0") {
+		t.Errorf("import output %q", out)
+	}
+	r = e.run(t, "", "cookies", "import", "-")
+	if r.code != ExitError || !strings.Contains(r.stderr, "Unprocessable") {
+		t.Errorf("import of empty input: exit %d stderr %s", r.code, r.stderr)
+	}
+	r = e.run(t, "nope", "cookies", "import", "-", "--format", "json")
+	if r.code != ExitError || !strings.Contains(r.stderr, "invalid JSON") {
+		t.Errorf("import of garbage: exit %d stderr %s", r.code, r.stderr)
+	}
+
+	// Delete one by ID, the rest by domain.
+	out = e.ok(t, nil, "cookies", "rm", cs[0].ID)
+	if strings.TrimSpace(out) != "deleted "+cs[0].ID {
+		t.Errorf("rm output %q", out)
+	}
+	if r := e.run(t, "", "cookies", "rm", cs[0].ID); r.code != ExitError || !strings.Contains(r.stderr, "Not Found") {
+		t.Errorf("rm again: exit %d stderr %s", r.code, r.stderr)
+	}
+	if r := e.run(t, "", "cookies", "clear"); r.code != ExitUsage || !strings.Contains(r.stderr, "--domain is required") {
+		t.Errorf("clear without domain: exit %d stderr %s", r.code, r.stderr)
+	}
+	out = e.ok(t, nil, "cookies", "clear", "--domain", "example.com")
+	if strings.TrimSpace(out) != "deleted 1 cookies of example.com" {
+		t.Errorf("clear output %q", out)
+	}
+	if out = e.ok(t, nil, "cookies", "list", "-o", "json"); strings.TrimSpace(out) != "[]" {
+		t.Errorf("list after clear = %q, want []", out)
 	}
 }

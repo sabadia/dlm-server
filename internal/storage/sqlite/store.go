@@ -220,6 +220,9 @@ func (s *Store) Segments() storage.SegmentRepository { return segmentRepo{s} }
 // EngineState returns the engine-state repository.
 func (s *Store) EngineState() storage.EngineStateRepository { return engineStateRepo{s} }
 
+// Cookies returns the cookie repository.
+func (s *Store) Cookies() storage.CookieRepository { return cookieRepo{s} }
+
 // WithTx implements storage.Store.
 func (s *Store) WithTx(ctx context.Context, fn func(tx storage.Store) error) error {
 	return s.inTx(ctx, func(tx *Store) error { return fn(tx) })

@@ -16,6 +16,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/api"
 	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/events"
@@ -68,7 +69,20 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	}
 
 	bus := events.New(events.Options{Logger: log})
-	clients := netclient.New(netclient.Options{Logger: log})
+	// Portable mode (--home) keeps the key beside the data instead of in the
+	// OS keyring.
+	cookieKey, err := cookies.LoadOrCreateKey(cookies.KeyOptions{Dir: cfg.Paths.ConfigDir, FileOnly: cfg.Home != "", Logger: log})
+	if err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
+	cookieCipher, err := cookies.NewCipher(cookieKey)
+	if err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
+	jar := cookies.NewStore(store.Cookies(), cookieCipher, cookies.Options{Logger: log})
+	clients := netclient.New(netclient.Options{Logger: log, CookieJar: jar})
 	defer func() { _ = clients.Close() }() // only releases idle connections
 	engines, err := engine.NewRegistry(httpx.New(engine.Env{Logger: log, Clock: time.Now, Clients: clients}))
 	if err != nil {
@@ -134,6 +148,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	srv, err := BuildServer(cfg, api.Deps{
 		Logger: log, Version: version, Token: token, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
+		Cookies: service.NewCookieService(jar),
 	})
 	if err != nil {
 		bus.Close()
@@ -159,6 +174,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	sweepCtx, stopSweep := context.WithCancel(gctx)
 	defer stopSweep()
 	g.Go(func() error { return resolves.Run(sweepCtx, time.Minute) })
+	g.Go(func() error { return jar.Run(sweepCtx, time.Hour) })
 	// The scheduler starts queued tasks, including the ones recovered
 	// above; on shutdown it requeues its running tasks and waits for them
 	// (the store stays open until g.Wait returns).

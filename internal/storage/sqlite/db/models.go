@@ -8,6 +8,22 @@ import (
 	"database/sql"
 )
 
+type Cookie struct {
+	ID           string
+	Domain       string
+	Name         string
+	Path         string
+	PartitionKey string
+	EncryptedVal []byte
+	Secure       int64
+	HttpOnly     int64
+	SameSite     string
+	HostOnly     int64
+	ExpiresAt    sql.NullInt64
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
 type EngineState struct {
 	TaskID    string
 	State     []byte

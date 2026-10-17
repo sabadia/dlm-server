@@ -270,7 +270,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P3.5 SSE event stream + `dlm watch`
 
 ### Phase 4: Cookies & extension contract
-- [ ] P4.1 Cookie store (encrypted, public suffix), jar used by engines; import/export endpoints + CLI
+- [x] P4.1 Cookie store (encrypted, public suffix), jar used by engines; import/export endpoints + CLI
 - [ ] P4.2 `/v1/capture` + CaptureService (creates the task with the full Source context)
 - [ ] P4.3 Native Messaging host + manifest installer for all browsers and OSes
 

@@ -384,10 +384,104 @@ func (r engineStateRepo) Delete(ctx context.Context, taskID string) error {
 	return nil
 }
 
+// ---- cookies ----
+
+type cookieRepo struct{ s *Store }
+
+func (r cookieRepo) Upsert(ctx context.Context, c *storage.CookieRecord) error {
+	err := r.s.write().UpsertCookie(ctx, db.UpsertCookieParams{
+		ID:           c.ID,
+		Domain:       c.Domain,
+		Name:         c.Name,
+		Path:         c.Path,
+		PartitionKey: c.PartitionKey,
+		EncryptedVal: c.EncryptedVal,
+		Secure:       boolToInt(c.Secure),
+		HttpOnly:     boolToInt(c.HTTPOnly),
+		SameSite:     c.SameSite,
+		HostOnly:     boolToInt(c.HostOnly),
+		ExpiresAt:    toNullMillis(c.ExpiresAt),
+		CreatedAt:    toMillis(c.CreatedAt),
+		UpdatedAt:    toMillis(c.UpdatedAt),
+	})
+	if err != nil {
+		return fmt.Errorf("storage: upsert cookie %q: %w", c.ID, err)
+	}
+	return nil
+}
+
+func (r cookieRepo) Get(ctx context.Context, id string) (*storage.CookieRecord, error) {
+	row, err := r.s.read().GetCookie(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.NotFound("cookie", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("storage: get cookie %q: %w", id, err)
+	}
+	return decodeCookie(row), nil
+}
+
+func (r cookieRepo) Delete(ctx context.Context, id string) error {
+	n, err := r.s.write().DeleteCookie(ctx, id)
+	if err != nil {
+		return fmt.Errorf("storage: delete cookie %q: %w", id, err)
+	}
+	if n == 0 {
+		return domain.NotFound("cookie", id)
+	}
+	return nil
+}
+
+func (r cookieRepo) DeleteExpired(ctx context.Context, now time.Time) (int64, error) {
+	n, err := r.s.write().DeleteExpiredCookies(ctx, sql.NullInt64{
+		Int64: toMillis(now),
+		Valid: true,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("storage: delete expired cookies: %w", err)
+	}
+	return n, nil
+}
+
+func (r cookieRepo) List(ctx context.Context, f storage.CookieFilter) ([]*storage.CookieRecord, error) {
+	rows, err := r.s.read().ListCookies(ctx, db.ListCookiesParams{
+		Domain:       f.Domain,
+		Name:         f.Name,
+		PartitionKey: f.PartitionKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("storage: list cookies: %w", err)
+	}
+	out := make([]*storage.CookieRecord, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, decodeCookie(row))
+	}
+	return out, nil
+}
+
+func decodeCookie(row db.Cookie) *storage.CookieRecord {
+	return &storage.CookieRecord{
+		ID:           row.ID,
+		Domain:       row.Domain,
+		Name:         row.Name,
+		Path:         row.Path,
+		PartitionKey: row.PartitionKey,
+		EncryptedVal: row.EncryptedVal,
+		Secure:       row.Secure != 0,
+		HTTPOnly:     row.HttpOnly != 0,
+		SameSite:     row.SameSite,
+		HostOnly:     row.HostOnly != 0,
+		ExpiresAt:    fromNullMillis(row.ExpiresAt),
+		CreatedAt:    fromMillis(row.CreatedAt),
+		UpdatedAt:    fromMillis(row.UpdatedAt),
+	}
+}
+
 var (
 	_ storage.SettingsRepository    = settingsRepo{}
 	_ storage.QueueRepository       = queueRepo{}
 	_ storage.TaskRepository        = taskRepo{}
 	_ storage.SegmentRepository     = segmentRepo{}
 	_ storage.EngineStateRepository = engineStateRepo{}
+	_ storage.CookieRepository      = cookieRepo{}
 )
