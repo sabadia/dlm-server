@@ -6,7 +6,8 @@ this file covers *how* code is written.
 ## Layout & dependencies
 - Dependency direction: `domain` / `settings` (pure, no I/O) ← `service` ← adapters
   (`api`, `cli`, `mcp`, `storage`, `engine/*`). Adapters never import each other,
-  except `cli` → `client`.
+  except `cli` → `client` and `cli` → `nativehost` (the Native Messaging shim run by
+  `dlm native-host`; it depends on nothing but `platform`).
 - `internal/daemon` is the only composition root: it may import everything and
   wires dependencies together. `cli` may import `daemon` (for `dlm serve`) but
   no other server-side package; tests are exempt.
