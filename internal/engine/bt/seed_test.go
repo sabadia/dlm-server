@@ -39,7 +39,7 @@ func leech(t *testing.T, sw *swarm, port int) {
 	t.Helper()
 	mi := *sw.mi
 	mi.Announce, mi.AnnounceList = "", nil
-	dir := t.TempDir()
+	dir := tempDir(t)
 	cc := testClientConfig(t, dir)
 	cl, err := torrent.NewClient(cc)
 	if err != nil {
@@ -95,7 +95,7 @@ func waitComplete(t *testing.T, rec *recorder) {
 
 func TestFinishedFilesAreWritable(t *testing.T) {
 	sw := newSwarm(t, "pack", multi, false)
-	dir := t.TempDir()
+	dir := tempDir(t)
 	if _, err := runWithin(t, newEngine(t, testConfig()), spec(dir, sw.dataURL(), "pack", testSettings(), nil), 30*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestFinishedFilesAreWritable(t *testing.T) {
 func TestNoSeedingWithoutRules(t *testing.T) {
 	sw := newSwarm(t, "single.bin", content{"": payload(200_000, 20)}, false)
 	start := time.Now()
-	if _, err := runWithin(t, newEngine(t, testConfig()), spec(t.TempDir(), sw.dataURL(), "single.bin", testSettings(), nil), 30*time.Second); err != nil {
+	if _, err := runWithin(t, newEngine(t, testConfig()), spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(), nil), 30*time.Second); err != nil {
 		t.Fatal(err)
 	}
 	if time.Since(start) > 10*time.Second {
@@ -126,7 +126,7 @@ func TestSeedsUntilTheRatioIsReached(t *testing.T) {
 	sw := newSwarm(t, "single.bin", content{"": data}, false)
 	e := newEngine(t, testConfig())
 	rec := &recorder{}
-	sp := spec(t.TempDir(), sw.dataURL(), "single.bin", testSettings(withSeeding(1.0, 0, false)), rec)
+	sp := spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(withSeeding(1.0, 0, false)), rec)
 	dl, err := e.NewDownload(sp)
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +154,7 @@ func TestSeedsForTheConfiguredTime(t *testing.T) {
 	sw := newSwarm(t, "single.bin", content{"": payload(100_000, 22)}, false)
 	e := newEngine(t, testConfig())
 	rec := &recorder{}
-	sp := spec(t.TempDir(), sw.dataURL(), "single.bin", testSettings(withSeeding(0, 800*time.Millisecond, false)), rec)
+	sp := spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(withSeeding(0, 800*time.Millisecond, false)), rec)
 	start := time.Now()
 	dl, err := e.NewDownload(sp)
 	if err != nil {
@@ -173,7 +173,7 @@ func TestKeepSeedingUntilPausedAndSeedTimeCarriesOver(t *testing.T) {
 	data := payload(100_000, 23)
 	sw := newSwarm(t, "single.bin", content{"": data}, false)
 	e := newEngine(t, testConfig())
-	dir := t.TempDir()
+	dir := tempDir(t)
 	rec := &recorder{}
 	keep := spec(dir, sw.dataURL(), "single.bin", testSettings(withSeeding(0, 0, true)), rec)
 	dl, err := e.NewDownload(keep)
@@ -226,7 +226,7 @@ func TestFinishedFilesAreTrustedOnResume(t *testing.T) {
 	data := payload(200_000, 24)
 	sw := newSwarm(t, "single.bin", content{"": data}, false)
 	e := newEngine(t, testConfig())
-	dir := t.TempDir()
+	dir := tempDir(t)
 	rec := &recorder{}
 	if _, err := runWithin(t, e, spec(dir, sw.dataURL(), "single.bin", testSettings(), rec), 30*time.Second); err != nil {
 		t.Fatal(err)
@@ -250,7 +250,7 @@ func TestResumeKeepsWhatWasDownloaded(t *testing.T) {
 	data := payload(1_200_000, 25)
 	sw := newSwarm(t, "single.bin", content{"": data}, false)
 	e := newEngine(t, testConfig())
-	dir := t.TempDir()
+	dir := tempDir(t)
 	rec := &recorder{}
 	first := spec(dir, sw.dataURL(), "single.bin", testSettings(), rec)
 	first.Limiter = ratelimit.NewBucket(250_000)
@@ -296,7 +296,7 @@ func TestResumeKeepsWhatWasDownloaded(t *testing.T) {
 
 func TestTheTaskLimiterSlowsTheDownload(t *testing.T) {
 	sw := newSwarm(t, "single.bin", content{"": payload(900_000, 26)}, false)
-	sp := spec(t.TempDir(), sw.dataURL(), "single.bin", testSettings(), nil)
+	sp := spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(), nil)
 	sp.Limiter = ratelimit.NewBucket(200_000)
 	start := time.Now()
 	if _, err := runWithin(t, newEngine(t, testConfig()), sp, 60*time.Second); err != nil {

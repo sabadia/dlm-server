@@ -166,7 +166,7 @@ func TestDownloadSingleFile(t *testing.T) {
 	data := payload(500_000, 5)
 	sw := newSwarm(t, "single.bin", content{"": data}, false)
 	e := newEngine(t, testConfig())
-	dir := t.TempDir()
+	dir := tempDir(t)
 	rec := &recorder{}
 	dl, err := runWithin(t, e, spec(dir, sw.dataURL(), "single.bin", testSettings(), rec), 30*time.Second)
 	if err != nil {
@@ -193,7 +193,7 @@ func TestDownloadSingleFile(t *testing.T) {
 func TestDownloadUnderAnotherName(t *testing.T) {
 	data := payload(100_000, 6)
 	sw := newSwarm(t, "torrent-name.bin", content{"": data}, false)
-	dir := t.TempDir()
+	dir := tempDir(t)
 	if _, err := runWithin(t, newEngine(t, testConfig()), spec(dir, sw.dataURL(), "my name.bin", testSettings(), nil), 30*time.Second); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestDownloadMultiFileFromAMagnetWithASelection(t *testing.T) {
 	for i := range res.Files {
 		res.Files[i].Selected = res.Files[i].Name != "a.bin" // skip the biggest
 	}
-	dir := t.TempDir()
+	dir := tempDir(t)
 	sp := spec(dir, sw.magnet(), "pack", testSettings(), nil)
 	sp.Resource = &res
 	sp.Probe = p
@@ -245,7 +245,7 @@ func TestNoFileSelected(t *testing.T) {
 	sw := newSwarm(t, "pack", multi, false)
 	e := newEngine(t, testConfig())
 	res := domain.Resource{Name: "pack", Files: []domain.File{{Index: 0}, {Index: 1}, {Index: 2}}}
-	sp := spec(t.TempDir(), sw.dataURL(), "pack", testSettings(), nil)
+	sp := spec(tempDir(t), sw.dataURL(), "pack", testSettings(), nil)
 	sp.Resource = &res
 	_, err := runWithin(t, e, sp, 10*time.Second)
 	wantKind(t, err, engine.KindFatal)
@@ -254,7 +254,7 @@ func TestNoFileSelected(t *testing.T) {
 func TestDestinationExists(t *testing.T) {
 	sw := newSwarm(t, "single.bin", content{"": payload(70_000, 7)}, false)
 	e := newEngine(t, testConfig())
-	dir := t.TempDir()
+	dir := tempDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "single.bin"), []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestDestinationExists(t *testing.T) {
 func TestDiskFullPrecheck(t *testing.T) {
 	sw := newSwarm(t, "single.bin", content{"": payload(70_000, 8)}, false)
 	e := newEngine(t, testConfig(), WithFreeSpace(func(string) (uint64, error) { return 100, nil }))
-	_, err := runWithin(t, e, spec(t.TempDir(), sw.dataURL(), "single.bin", testSettings(), nil), 10*time.Second)
+	_, err := runWithin(t, e, spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(), nil), 10*time.Second)
 	wantKind(t, err, engine.KindFatal)
 	var ee *engine.Error
 	if !errors.As(err, &ee) || ee.Code != domain.ErrorCodeDiskFull {
@@ -291,7 +291,7 @@ func TestOddFileNamesAreMadeValid(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the test seeder cannot create files with these names on Windows")
 	}
-	dir := t.TempDir()
+	dir := tempDir(t)
 	odd := newSwarm(t, "pack", content{"ok.txt": []byte("fine"), "we:ird*.txt": []byte("odd")}, false)
 	if _, err := runWithin(t, newEngine(t, testConfig()), spec(dir, odd.dataURL(), "pack", testSettings(), nil), 20*time.Second); err != nil {
 		t.Fatal(err)
@@ -317,7 +317,7 @@ func TestSecondDownloadOfTheSameTorrentIsRefused(t *testing.T) {
 	e := newEngine(t, testConfig())
 	// A limit keeps the first download busy.
 	slow := ratelimit.NewBucket(100_000)
-	sp := spec(t.TempDir(), sw.dataURL(), "single.bin", testSettings(), nil)
+	sp := spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(), nil)
 	sp.Limiter = slow
 	first, err := e.NewDownload(sp)
 	if err != nil {
@@ -333,7 +333,7 @@ func TestSecondDownloadOfTheSameTorrentIsRefused(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	_, err = runWithin(t, e, spec(t.TempDir(), sw.dataURL(), "other.bin", testSettings(), nil), 10*time.Second)
+	_, err = runWithin(t, e, spec(tempDir(t), sw.dataURL(), "other.bin", testSettings(), nil), 10*time.Second)
 	wantKind(t, err, engine.KindFatal)
 	cancel()
 	if err := <-done; err != nil {
@@ -357,7 +357,7 @@ func TestExtraTrackersExceptForPrivateTorrents(t *testing.T) {
 			s := testSettings(withSeeding(0, 1500*time.Millisecond, false), func(s *settings.Settings) {
 				s.Torrent.Trackers = settings.Some([]string{extra.URL + "/announce"})
 			})
-			if _, err := runWithin(t, newEngine(t, testConfig()), spec(t.TempDir(), sw.dataURL(), "single.bin", s, nil), 30*time.Second); err != nil {
+			if _, err := runWithin(t, newEngine(t, testConfig()), spec(tempDir(t), sw.dataURL(), "single.bin", s, nil), 30*time.Second); err != nil {
 				t.Fatal(err)
 			}
 			if got := hits.Load() > 0; got == private {
@@ -370,7 +370,7 @@ func TestExtraTrackersExceptForPrivateTorrents(t *testing.T) {
 func TestCloseStopsDownloads(t *testing.T) {
 	sw := newSwarm(t, "single.bin", content{"": payload(2_000_000, 11)}, false)
 	e := newEngine(t, testConfig())
-	sp := spec(t.TempDir(), sw.dataURL(), "single.bin", testSettings(), nil)
+	sp := spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(), nil)
 	sp.Limiter = ratelimit.NewBucket(100_000)
 	dl, err := e.NewDownload(sp)
 	if err != nil {
@@ -403,17 +403,17 @@ func TestCloseStopsDownloads(t *testing.T) {
 
 func TestBadSpecs(t *testing.T) {
 	e := newEngine(t, testConfig())
-	s := spec(t.TempDir(), "https://x/a.mp4", "x", testSettings(), nil)
+	s := spec(tempDir(t), "https://x/a.mp4", "x", testSettings(), nil)
 	if _, err := e.NewDownload(s); err == nil {
 		t.Error("want an error for a non-torrent URL")
 	}
-	s = spec(t.TempDir(), "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567", "x", testSettings(), nil)
+	s = spec(tempDir(t), "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567", "x", testSettings(), nil)
 	s.Path = "relative"
 	if _, err := e.NewDownload(s); err == nil {
 		t.Error("want an error for a relative path")
 	}
 	sw := newSwarm(t, "single.bin", content{"": payload(10_000, 12)}, false)
-	dl, err := e.NewDownload(spec(t.TempDir(), sw.dataURL(), "single.bin", testSettings(), nil))
+	dl, err := e.NewDownload(spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(), nil))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -82,7 +82,7 @@ func newSwarm(t *testing.T, name string, files content, private bool) *swarm {
 
 func newSwarmTweak(t *testing.T, tweak func(*torrent.ClientConfig), name string, files content, private bool) *swarm {
 	t.Helper()
-	seedDir := t.TempDir()
+	seedDir := tempDir(t)
 	root := filepath.Join(seedDir, name)
 	if len(files) == 1 && files[""] != nil {
 		if err := os.WriteFile(root, files[""], 0o644); err != nil {
@@ -272,3 +272,25 @@ func runWithin(t *testing.T, e *Engine, sp engine.Spec, d time.Duration) (engine
 
 func jsonOf(v any) ([]byte, error)      { return jsonMarshal(v) }
 func jsonMarshal(v any) ([]byte, error) { return json.Marshal(v) }
+
+// tempDir is t.TempDir for directories whose files torrent clients keep open
+// for a moment after they are closed: Windows refuses to delete them until
+// the handles are gone, so removal is retried (and a failure only logged).
+func tempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "bt-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		var err error
+		for range 50 {
+			if err = os.RemoveAll(dir); err == nil {
+				return
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		t.Logf("could not remove %s: %v", dir, err)
+	})
+	return dir
+}
