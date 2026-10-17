@@ -241,7 +241,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 
 ### Phase 1: Foundations
 - [x] P1.1 Boot config (koanf), data/config/cache dirs, slog logging with rotation
-- [ ] P1.2 Domain models + status FSM + typed errors (with unit tests)
+- [x] P1.2 Domain models + status FSM + typed errors (with unit tests)
 - [x] P1.3 `settings` package: `Optional[T]`, layered resolve + provenance, per-level validation
 - [ ] P1.4 SQLite storage: goose migrations, sqlc queries, repositories for settings/queues/tasks/segments
 - [x] P1.5 Event bus (multi-subscriber, non-blocking, coalescing)

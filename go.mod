@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	github.com/danielgtaylor/huma/v2 v2.39.1
+	github.com/google/uuid v1.6.0
 	github.com/knadh/koanf/parsers/yaml v1.1.1
 	github.com/knadh/koanf/providers/env/v2 v2.0.2
 	github.com/knadh/koanf/providers/file v1.2.1
