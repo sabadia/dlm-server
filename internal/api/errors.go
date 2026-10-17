@@ -10,6 +10,7 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
+	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 )
 
@@ -42,6 +43,7 @@ func newProblem(status int, detail string, details ...*huma.ErrorDetail) *huma.E
 //   - a failed origin probe (*engine.Error) → 502 Bad Gateway, with the
 //     engine error code in the detail;
 //   - a cancelled or timed-out request → 503 Service Unavailable;
+//   - service.ErrBrowserUnavailable (no headless browser) → 503 Service Unavailable;
 //   - domain.ErrNotFound → 404 Not Found;
 //   - domain.ErrInvalidArgument → 422 Unprocessable Content; settings
 //     validation failures list one error per invalid field, located at
@@ -61,6 +63,8 @@ func (s *Server) problemFor(ctx context.Context, op string, err error, settingsL
 			code = engErr.Kind.String()
 		}
 		return newProblem(http.StatusBadGateway, fmt.Sprintf("origin request failed [%s]: %v", code, err))
+	case errors.Is(err, service.ErrBrowserUnavailable):
+		return newProblem(http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, domain.ErrNotFound):
 		return newProblem(http.StatusNotFound, err.Error())
 	case errors.Is(err, domain.ErrInvalidArgument):

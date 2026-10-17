@@ -179,7 +179,7 @@ func TestCookiesSyncBothWays(t *testing.T) {
 	mux.HandleFunc("/whoami", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "<html><head><title>cookie:%s</title></head></html>", r.Header.Get("Cookie"))
 	})
-	mux.HandleFunc("/set", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/set", func(w http.ResponseWriter, _ *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "srv", Value: "from-server", Path: "/", MaxAge: 3600, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 		http.SetCookie(w, &http.Cookie{Name: "sess", Value: "session-only", Path: "/"})
 		fmt.Fprint(w, "<html><head><title>set</title></head></html>")

@@ -31,6 +31,8 @@ type e2e struct {
 	base   string
 	origin string
 	home   string
+	// browser is the fake headless browser behind `dlm browser`.
+	browser *fakeBrowser
 }
 
 func newE2E(t *testing.T) *e2e {
@@ -54,6 +56,7 @@ func newE2E(t *testing.T) *e2e {
 	if err != nil {
 		t.Fatal(err)
 	}
+	fb := &fakeBrowser{}
 	svc := daemon.NewServices(service.Deps{
 		Store: store, Engines: reg, Resolves: resolves,
 		Defaults: func() settings.Settings { return defaults },
@@ -62,14 +65,14 @@ func newE2E(t *testing.T) *e2e {
 	base := startAPIWith(t, api.Deps{
 		Token: testToken, Version: testSrvVersion,
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
-		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh,
+		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh, Browser: service.NewBrowserService(fb, svc.Tasks),
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "file.bin", time.Unix(1_700_000_000, 0), bytes.NewReader(content))
 	}))
 	t.Cleanup(origin.Close)
-	return &e2e{base: base, origin: origin.URL, home: t.TempDir()}
+	return &e2e{base: base, origin: origin.URL, home: t.TempDir(), browser: fb}
 }
 
 // run runs the CLI against the environment's server.

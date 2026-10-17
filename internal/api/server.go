@@ -65,6 +65,8 @@ type Deps struct {
 	Capture *service.CaptureService
 	// Refresh is the service behind the refresh operations; 503 while nil.
 	Refresh *service.RefreshService
+	// Browser is the service behind the /v1/browser operations; 503 while nil.
+	Browser *service.BrowserService
 }
 
 // Server is the REST API server.
@@ -87,6 +89,7 @@ type Server struct {
 	cookies  *service.CookieService
 	capture  *service.CaptureService
 	refresh  *service.RefreshService
+	browser  *service.BrowserService
 
 	mu     sync.RWMutex
 	public map[string]struct{} // mux patterns ("GET /v1/health") that need no token
@@ -140,6 +143,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		cookies:  deps.Cookies,
 		capture:  deps.Capture,
 		refresh:  deps.Refresh,
+		browser:  deps.Browser,
 	}
 	s.api = humago.New(s.mux, humaConfig(version))
 
@@ -158,6 +162,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerCookies()
 	s.registerCapture()
 	s.registerRefresh()
+	s.registerBrowser()
 	return s, nil
 }
 

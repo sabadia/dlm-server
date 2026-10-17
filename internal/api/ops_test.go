@@ -35,6 +35,8 @@ type opsFixture struct {
 	origin *httptest.Server
 	dir    string
 	store  storage.Store
+	// browser is the fake headless browser behind the /v1/browser operations.
+	browser *fakeBrowser
 }
 
 var fileContent = bytes.Repeat([]byte("0123456789abcdef"), 64) // 1 KiB
@@ -68,12 +70,14 @@ func newOpsFixture(t *testing.T) *opsFixture {
 	jar := cookies.NewStore(store.Cookies(), cipher, cookies.Options{})
 	tasks := service.NewTaskService(d)
 	refreshSvc := service.NewRefreshService(d, refresh.OriginRedirect{Engines: reg})
+	fb := &fakeBrowser{}
 	cfg := config.Default()
 	cfg.Server.AllowedOrigins = []string{testOrigin}
 	s, err := New(&cfg, Deps{
 		Token: testToken, Version: testVersion,
 		Settings: service.NewSettingsService(d), Queues: service.NewQueueService(d), Tasks: tasks,
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(tasks, jar, refreshSvc), Refresh: refreshSvc,
+		Browser: service.NewBrowserService(fb, tasks),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +91,7 @@ func newOpsFixture(t *testing.T) *opsFixture {
 	})
 	origin := httptest.NewServer(mux)
 	t.Cleanup(origin.Close)
-	return &opsFixture{s: s, origin: origin, dir: dir, store: store}
+	return &opsFixture{s: s, origin: origin, dir: dir, store: store, browser: fb}
 }
 
 // call sends an authenticated JSON request and decodes a 2xx body into out.

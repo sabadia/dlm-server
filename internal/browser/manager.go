@@ -501,18 +501,28 @@ func (m *Manager) DeleteProfile(group string) error {
 // (example.com for https://www.example.com/x), the host for IP addresses and
 // single-label hosts, and "default" when the URL has no host.
 func SiteGroup(rawURL string) string {
+	site := SiteOf(rawURL)
+	if site == "" {
+		return "default"
+	}
+	return sanitizeGroup(site)
+}
+
+// SiteOf returns the site of a URL: its registrable domain, or the host for IP
+// addresses and single-label hosts; "" when the URL has no host.
+func SiteOf(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Hostname() == "" {
-		return "default"
+		return ""
 	}
 	host := strings.ToLower(u.Hostname())
 	if net.ParseIP(host) != nil {
-		return sanitizeGroup(host)
+		return host
 	}
 	if etld1, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
-		return sanitizeGroup(etld1)
+		return etld1
 	}
-	return sanitizeGroup(host)
+	return host
 }
 
 // sanitizeGroup makes a group name safe to use as a directory name.

@@ -69,6 +69,8 @@ const (
 	ErrorCodeHTTPStatus = "http_status"
 	// ErrorCodeLinkExpired: the link no longer works; refresh may fix it.
 	ErrorCodeLinkExpired = "link_expired"
+	// ErrorCodeBrowser: the headless browser could not open a page.
+	ErrorCodeBrowser = "browser"
 	// ErrorCodeDiskFull: not enough free space at the destination.
 	ErrorCodeDiskFull = "disk_full"
 	// ErrorCodeChecksumMismatch: the downloaded file failed verification.
