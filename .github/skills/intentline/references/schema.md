@@ -1,6 +1,6 @@
 # Record fields (schema v1)
 
-A record is about twenty lines of YAML at `.intentline/records/<id>.yml`. The full contract is `docs/03-schema-cli-hooks.md` in the intentline repository. Do not add keys.
+A record is about twenty lines of YAML at `.intentline/records/<id>.yml`. The field guide is `docs/records.md` in the intentline repository. Do not add keys.
 
 | Field | What to put |
 |---|---|
