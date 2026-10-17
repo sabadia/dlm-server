@@ -237,7 +237,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P0.1 Create the GitHub repo, project board, labels and milestones; push `docs/PLAN.md`, LICENSE (Apache-2.0), README, NOTICE (clean-room statement)
 - [ ] P0.2 Go module `github.com/sabadia/dlm-server` (Go 1.27), directory skeleton, Makefile/Taskfile, `.golangci.yml` (v2), `.editorconfig`
 - [ ] P0.3 GitHub Actions: lint, test matrix (3 OS × amd64; `-race` on linux/macos), govulncheck, build of all 6 targets with CGO off; Dependabot
-- [ ] P0.4 Create issues for every task below and attach them to the board
+- [x] P0.4 Create issues for every task below and attach them to the board
 
 ### Phase 1: Foundations
 - [ ] P1.1 Boot config (koanf), data/config/cache dirs, slog logging with rotation
