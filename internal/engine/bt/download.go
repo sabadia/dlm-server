@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -209,13 +210,45 @@ func promote(path string) error {
 		return nil
 	}
 	var err error
-	for range 20 {
+	for range 10 {
 		if err = os.Rename(path+".part", path); err == nil {
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond) // a handle being released
 	}
-	return err //nolint:wrapcheck // wrapped with the path by the caller
+	// Something keeps the file open for good; reading is still possible, so
+	// the finished file is made by copying, and the .part file is left to be
+	// removed later.
+	if cerr := copyFile(path+".part", path); cerr != nil {
+		return errors.Join(err, cerr)
+	}
+	_ = os.Remove(path + ".part") // best effort: the copy is the file now
+	return nil
+}
+
+// copyFile copies src to dst, which must not exist.
+func copyFile(src, dst string) (err error) {
+	in, err := os.Open(src) //nolint:gosec // paths of the task's own files
+	if err != nil {
+		return err //nolint:wrapcheck // joined with the rename error by the caller
+	}
+	defer func() { _ = in.Close() }()                                      // read-only
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // paths of the task's own files
+	if err != nil {
+		return err //nolint:wrapcheck // joined with the rename error by the caller
+	}
+	defer func() {
+		if cerr := out.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			_ = os.Remove(dst) // never leave a partial file under the final name
+		}
+	}()
+	if _, err = io.Copy(out, in); err != nil {
+		return err //nolint:wrapcheck // joined with the rename error by the caller
+	}
+	return out.Sync() //nolint:wrapcheck // joined with the rename error by the caller
 }
 
 // makeWritable gives the owner write permission.

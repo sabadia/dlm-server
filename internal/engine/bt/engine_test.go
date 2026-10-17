@@ -445,3 +445,40 @@ func TestMetainfoRoundTripsThroughTheEngineState(t *testing.T) {
 		}
 	}
 }
+
+func TestPromoteAndCopyFile(t *testing.T) {
+	dir := tempDir(t)
+	final := filepath.Join(dir, "f.bin")
+	if err := os.WriteFile(final+".part", []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := promote(final); err != nil {
+		t.Fatal(err)
+	}
+	if string(readFile(t, final)) != "data" {
+		t.Error("the part file was not promoted")
+	}
+	if _, err := os.Stat(final + ".part"); !os.IsNotExist(err) {
+		t.Errorf(".part left: %v", err)
+	}
+	if err := promote(final); err != nil { // already there: nothing to do
+		t.Fatal(err)
+	}
+	if err := promote(filepath.Join(dir, "missing.bin")); err == nil {
+		t.Error("promoting a file that does not exist must fail")
+	}
+	// The fallback copies, and never overwrites.
+	if err := os.WriteFile(filepath.Join(dir, "src"), []byte("copy me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "dst")
+	if err := copyFile(filepath.Join(dir, "src"), dst); err != nil || string(readFile(t, dst)) != "copy me" {
+		t.Fatalf("copyFile: %v", err)
+	}
+	if err := copyFile(filepath.Join(dir, "src"), dst); err == nil {
+		t.Error("copyFile overwrote an existing file")
+	}
+	if string(readFile(t, dst)) != "copy me" {
+		t.Error("the existing file was damaged")
+	}
+}
