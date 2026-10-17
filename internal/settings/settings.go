@@ -1,0 +1,276 @@
+package settings
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+)
+
+// Level identifies where a setting value is defined. Higher levels override
+// lower ones: Task > Queue > Global > Default.
+type Level int
+
+// Settings levels, from lowest to highest precedence.
+const (
+	LevelDefault Level = iota
+	LevelGlobal
+	LevelQueue
+	LevelTask
+)
+
+var levelNames = [...]string{"default", "global", "queue", "task"}
+
+// String returns the lower-case level name.
+func (l Level) String() string {
+	if l < LevelDefault || l > LevelTask {
+		return fmt.Sprintf("level(%d)", int(l))
+	}
+	return levelNames[l]
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (l Level) MarshalText() ([]byte, error) { return []byte(l.String()), nil }
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (l *Level) UnmarshalText(text []byte) error {
+	i := slices.Index(levelNames[:], string(text))
+	if i < 0 {
+		return fmt.Errorf("settings: unknown level %q", text)
+	}
+	*l = Level(i)
+	return nil
+}
+
+// Settings is the layered download configuration. The same struct is used for
+// defaults, the global layer, each queue's overrides and each task's
+// overrides; unset fields inherit from the next lower level.
+//
+// The `levels` struct tag restricts which layers may set a field (defaults
+// may always set it). Fields without the tag are allowed at every level.
+type Settings struct {
+	// DownloadDir is the directory files are saved to.
+	DownloadDir Optional[string] `json:"downloadDir,omitzero"`
+	// FilenameTemplate overrides the generated file name (placeholders are
+	// expanded by the engine).
+	FilenameTemplate Optional[string] `json:"filenameTemplate,omitzero"`
+	// MaxConnections is the maximum number of parallel connections per task.
+	MaxConnections Optional[int] `json:"maxConnections,omitzero"`
+	// MaxConcurrentDownloads is the number of tasks a queue runs at once.
+	// At the global level it is the default for queues.
+	MaxConcurrentDownloads Optional[int] `json:"maxConcurrentDownloads,omitzero" levels:"global,queue"`
+	// MaxActiveDownloadsTotal caps running tasks across all queues; 0 means
+	// no global cap.
+	MaxActiveDownloadsTotal Optional[int] `json:"maxActiveDownloadsTotal,omitzero" levels:"global"`
+	// SpeedLimit is in bytes per second; 0 means unlimited. Limits nest:
+	// a task is bounded by its own, its queue's and the global limit.
+	SpeedLimit Optional[int64] `json:"speedLimit,omitzero"`
+
+	Retry RetrySettings `json:"retry,omitzero"`
+
+	Proxy     Optional[Proxy]  `json:"proxy,omitzero"`
+	UserAgent Optional[string] `json:"userAgent,omitzero"`
+	// Headers are extra request headers. The map is replaced as a whole by
+	// the nearest level that sets it, not merged key by key.
+	Headers   Optional[map[string]string] `json:"headers,omitzero"`
+	TLSVerify Optional[bool]              `json:"tlsVerify,omitzero"`
+
+	FileExistsPolicy Optional[FileExistsPolicy] `json:"fileExistsPolicy,omitzero"`
+	// Checksum is the expected file hash; it only makes sense per task.
+	Checksum Optional[Checksum] `json:"checksum,omitzero" levels:"task"`
+
+	Refresh RefreshSettings `json:"refresh,omitzero"`
+
+	BrowserUsage   Optional[BrowserUsage] `json:"browserUsage,omitzero"`
+	PostActions    Optional[[]PostAction] `json:"postActions,omitzero"`
+	AutoCategorize Optional[bool]         `json:"autoCategorize,omitzero"`
+
+	// Schedule defines when a queue runs; it only makes sense per queue.
+	Schedule Optional[Schedule] `json:"schedule,omitzero" levels:"queue"`
+}
+
+// RetrySettings controls retries of transient failures.
+type RetrySettings struct {
+	// MaxAttempts is the number of retries after the first failure.
+	MaxAttempts       Optional[int]      `json:"maxAttempts,omitzero"`
+	InitialBackoff    Optional[Duration] `json:"initialBackoff,omitzero"`
+	MaxBackoff        Optional[Duration] `json:"maxBackoff,omitzero"`
+	RespectRetryAfter Optional[bool]     `json:"respectRetryAfter,omitzero"`
+}
+
+// RefreshSettings controls download-link refresh.
+type RefreshSettings struct {
+	Auto        Optional[bool]              `json:"auto,omitzero"`
+	Strategies  Optional[[]RefreshStrategy] `json:"strategies,omitzero"`
+	MaxAttempts Optional[int]               `json:"maxAttempts,omitzero"`
+	// AwaitTimeout bounds the extension-capture wait.
+	AwaitTimeout Optional[Duration]       `json:"awaitTimeout,omitzero"`
+	OnMismatch   Optional[MismatchPolicy] `json:"onMismatch,omitzero"`
+}
+
+// ProxyMode selects how requests are proxied.
+type ProxyMode string
+
+// Proxy modes.
+const (
+	ProxyNone   ProxyMode = "none"
+	ProxySystem ProxyMode = "system"
+	ProxyCustom ProxyMode = "custom"
+)
+
+// Proxy configures the outbound proxy. URL is required for ProxyCustom and
+// may embed credentials (http, https, socks5, socks5h schemes).
+type Proxy struct {
+	Mode ProxyMode `json:"mode"`
+	URL  string    `json:"url,omitempty"`
+}
+
+// FileExistsPolicy decides what happens when the target file exists.
+type FileExistsPolicy string
+
+// File-exists policies.
+const (
+	FileExistsRename    FileExistsPolicy = "rename"
+	FileExistsOverwrite FileExistsPolicy = "overwrite"
+	FileExistsSkip      FileExistsPolicy = "skip"
+	FileExistsResume    FileExistsPolicy = "resume"
+	FileExistsAsk       FileExistsPolicy = "ask"
+)
+
+// ChecksumAlgorithm names a supported hash.
+type ChecksumAlgorithm string
+
+// Checksum algorithms.
+const (
+	ChecksumMD5    ChecksumAlgorithm = "md5"
+	ChecksumSHA1   ChecksumAlgorithm = "sha1"
+	ChecksumSHA256 ChecksumAlgorithm = "sha256"
+	ChecksumBLAKE3 ChecksumAlgorithm = "blake3"
+)
+
+// Checksum is an expected hash of the downloaded file (hex encoded).
+type Checksum struct {
+	Algorithm ChecksumAlgorithm `json:"algorithm"`
+	Expected  string            `json:"expected"`
+}
+
+// RefreshStrategy names a link-refresh strategy.
+type RefreshStrategy string
+
+// Refresh strategies, tried in the configured order.
+const (
+	RefreshOriginRedirect   RefreshStrategy = "origin-redirect"
+	RefreshPageReload       RefreshStrategy = "page-reload"
+	RefreshExtensionCapture RefreshStrategy = "extension-capture"
+	RefreshPlugin           RefreshStrategy = "plugin"
+	RefreshManual           RefreshStrategy = "manual"
+)
+
+// MismatchPolicy decides what happens when a refreshed link points to a
+// different file than the partial download.
+type MismatchPolicy string
+
+// Mismatch policies.
+const (
+	MismatchRestart MismatchPolicy = "restart"
+	MismatchFail    MismatchPolicy = "fail"
+	MismatchAsk     MismatchPolicy = "ask"
+)
+
+// BrowserUsage controls when the internal headless browser is used.
+type BrowserUsage string
+
+// Browser usage modes.
+const (
+	BrowserNever  BrowserUsage = "never"
+	BrowserAuto   BrowserUsage = "auto"
+	BrowserAlways BrowserUsage = "always"
+)
+
+// PostAction is an action run after a download completes. The available
+// kinds and their parameters are defined by the post-processing pipeline.
+type PostAction struct {
+	Kind   string            `json:"kind"`
+	Params map[string]string `json:"params,omitempty"`
+}
+
+// Schedule restricts when a queue runs to the given time windows.
+type Schedule struct {
+	// Timezone is an IANA zone name; empty means the local zone.
+	Timezone string       `json:"timezone,omitempty"`
+	Windows  []TimeWindow `json:"windows"`
+}
+
+// TimeWindow is a daily window on the given weekdays. Start and End are
+// "HH:MM" (24h). An End earlier than Start spans midnight.
+type TimeWindow struct {
+	Days  []Weekday `json:"days"`
+	Start string    `json:"start"`
+	End   string    `json:"end"`
+}
+
+// Weekday is a time.Weekday encoded as a three-letter lower-case name.
+type Weekday time.Weekday
+
+var weekdayNames = [...]string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}
+
+// String returns the three-letter weekday name.
+func (w Weekday) String() string {
+	if w < 0 || int(w) >= len(weekdayNames) {
+		return fmt.Sprintf("weekday(%d)", int(w))
+	}
+	return weekdayNames[w]
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (w Weekday) MarshalText() ([]byte, error) {
+	if w < 0 || int(w) >= len(weekdayNames) {
+		return nil, fmt.Errorf("settings: invalid weekday %d", int(w))
+	}
+	return []byte(w.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (w *Weekday) UnmarshalText(text []byte) error {
+	i := slices.Index(weekdayNames[:], strings.ToLower(string(text)))
+	if i < 0 {
+		return fmt.Errorf("settings: unknown weekday %q", text)
+	}
+	*w = Weekday(i)
+	return nil
+}
+
+// DefaultUserAgent is a mainstream browser user agent; many servers refuse
+// or throttle unknown clients.
+const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+
+// Defaults returns the built-in lowest settings layer. downloadDir is the
+// default download directory (normally the user's Downloads folder).
+func Defaults(downloadDir string) Settings {
+	return Settings{
+		DownloadDir:             Some(downloadDir),
+		MaxConnections:          Some(16),
+		MaxConcurrentDownloads:  Some(4),
+		MaxActiveDownloadsTotal: Some(0),
+		SpeedLimit:              Some[int64](0),
+		Retry: RetrySettings{
+			MaxAttempts:       Some(5),
+			InitialBackoff:    Some(Duration(time.Second)),
+			MaxBackoff:        Some(Duration(time.Minute)),
+			RespectRetryAfter: Some(true),
+		},
+		Proxy:            Some(Proxy{Mode: ProxySystem}),
+		UserAgent:        Some(DefaultUserAgent),
+		TLSVerify:        Some(true),
+		FileExistsPolicy: Some(FileExistsRename),
+		Refresh: RefreshSettings{
+			Auto:         Some(true),
+			Strategies:   Some([]RefreshStrategy{RefreshOriginRedirect, RefreshPageReload, RefreshExtensionCapture}),
+			MaxAttempts:  Some(3),
+			AwaitTimeout: Some(Duration(10 * time.Minute)),
+			OnMismatch:   Some(MismatchFail),
+		},
+		BrowserUsage:   Some(BrowserAuto),
+		AutoCategorize: Some(false),
+	}
+}
