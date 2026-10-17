@@ -51,6 +51,8 @@ this file covers *how* code is written.
 ## Testing
 - Standard `testing` package; table-driven tests with `t.Run`. `github.com/google/go-cmp`
   is allowed for diffs. No other assertion frameworks.
+- Never hard-code Unix absolute paths (`/tmp/x`) where an absolute path is
+  required; they are relative on Windows. Use `t.TempDir()` / `filepath.Join`.
 - Tests must be hermetic: no network access beyond `httptest`, temp dirs via
   `t.TempDir()`, configuration via `DLM_HOME`-style injection, never the real
   user directories.

@@ -88,7 +88,7 @@ func fullTask(t *testing.T, id string) *domain.Task {
 			},
 		},
 		Settings: settings.Settings{
-			DownloadDir:    settings.Some("/tmp/dl"),
+			DownloadDir:    settings.Some(filepath.Join(t.TempDir(), "dl")),
 			MaxConnections: settings.Some(8),
 			Headers:        settings.Some(map[string]string{"A": "b"}),
 			Checksum:       settings.Some(settings.Checksum{Algorithm: settings.ChecksumSHA256, Expected: strings.Repeat("ab", 32)}),
