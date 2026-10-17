@@ -18,6 +18,13 @@ func htmlPage(w http.ResponseWriter) {
 	_, _ = w.Write([]byte("<html><body>Please log in</body></html>"))
 }
 
+// The extension table comes from the OS (the Windows registry maps .zip to
+// application/x-zip-compressed), so those cases only assert the kind of type.
+const (
+	anyFile = "<a non-HTML type>"
+	anyHTML = "<an HTML type>"
+)
+
 func TestExpectedContentType(t *testing.T) {
 	tests := []struct {
 		name string
@@ -25,16 +32,28 @@ func TestExpectedContentType(t *testing.T) {
 		want string
 	}{
 		{"fingerprint wins", domain.Source{CurrentURL: "https://x/a.html", Fingerprint: domain.Fingerprint{ContentType: "application/zip"}}, "application/zip"},
-		{"extension", domain.Source{CurrentURL: "https://x/dir/a.ZIP?sig=1"}, "application/zip"},
-		{"redirect target preferred", domain.Source{CurrentURL: "https://x/get", RedirectURL: "https://cdn/f.pdf"}, "application/pdf"},
-		{"html extension", domain.Source{CurrentURL: "https://x/a.html"}, "text/html; charset=utf-8"},
+		{"extension", domain.Source{CurrentURL: "https://x/dir/a.ZIP?sig=1"}, anyFile},
+		{"redirect target preferred", domain.Source{CurrentURL: "https://x/get", RedirectURL: "https://cdn/f.pdf"}, anyFile},
+		{"html extension", domain.Source{CurrentURL: "https://x/a.html"}, anyHTML},
 		{"no extension", domain.Source{CurrentURL: "https://x/download"}, ""},
 		{"unknown extension", domain.Source{CurrentURL: "https://x/a.qzxw"}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := expectedContentType(tt.src); got != tt.want {
-				t.Errorf("expectedContentType = %q, want %q", got, tt.want)
+			got := expectedContentType(tt.src)
+			switch tt.want {
+			case anyFile:
+				if got == "" || isHTML(got) {
+					t.Errorf("expectedContentType = %q, want a non-HTML type", got)
+				}
+			case anyHTML:
+				if !isHTML(got) {
+					t.Errorf("expectedContentType = %q, want an HTML type", got)
+				}
+			default:
+				if got != tt.want {
+					t.Errorf("expectedContentType = %q, want %q", got, tt.want)
+				}
 			}
 		})
 	}
