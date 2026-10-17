@@ -674,6 +674,16 @@ func TestRefreshNow(t *testing.T) {
 			t.Errorf("AttachCapture after Refresh = %+v, %v; want the task queued", att, err)
 		}
 	})
+	t.Run("a paused task cannot wait: waiting strategies are skipped", func(t *testing.T) {
+		e := newRefreshEnv(t)
+		e.etag.Store(`"v2"`) // the origin link yields another file, so only the waiting strategy is left
+		task := e.task(t, domain.StatusPaused, 20000)
+		got, err := e.refresher.Refresh(t.Context(), task.ID)
+		if engine.Classify(err) != engine.KindLinkExpired || got.Status != domain.StatusPaused {
+			t.Fatalf("Refresh = %+v, %v; want a link-expired error and the task left paused", got, err)
+		}
+		wantHistory(t, e.history(t, task.ID), "origin-redirect:mismatch", "page-reload:skipped", "extension-capture:skipped")
+	})
 	t.Run("running tasks conflict", func(t *testing.T) {
 		e := newRefreshEnv(t)
 		task := e.task(t, domain.StatusRunning, 0)

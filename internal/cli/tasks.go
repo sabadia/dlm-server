@@ -195,6 +195,10 @@ func (a *app) newTaskCommand() *cobra.Command {
 		a.newTaskBulkCommand("pause", "Pause tasks", "pause-tasks", (*client.Client).PauseTasks),
 		a.newTaskBulkCommand("resume", "Resume paused or failed tasks", "resume-tasks", (*client.Client).ResumeTasks),
 		a.newTaskRestartCommand(),
+		a.newTaskRefreshCommand(),
+		a.newTaskAwaitLinkCommand(),
+		a.newTaskSetURLCommand(),
+		a.newTaskRefreshHistoryCommand(),
 		a.newTaskRemoveCommand(),
 		a.newTaskSettingsCommand(),
 	)

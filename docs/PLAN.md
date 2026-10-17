@@ -277,7 +277,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 ### Phase 5: Link refresh
 - [x] P5.1 Source model persistence, fingerprinting, expiry detection (incl. signed-URL params)
 - [x] P5.2 Refresh strategy chain (origin-redirect, extension-capture await, manual) + validation + history
-- [ ] P5.3 Refresh endpoints/CLI and per-level refresh settings
+- [x] P5.3 Refresh endpoints/CLI and per-level refresh settings
 
 ### Phase 6: Internal browser
 - [ ] P6.1 Browser discovery + chrome-headless-shell downloader, pool, profiles
