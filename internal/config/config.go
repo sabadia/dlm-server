@@ -38,6 +38,8 @@ type Config struct {
 	Browser BrowserConfig `koanf:"browser"`
 	// FFmpeg configures the ffmpeg the stream engines use.
 	FFmpeg FFmpegConfig `koanf:"ffmpeg"`
+	// Torrent configures the BitTorrent client shared by all torrent tasks.
+	Torrent TorrentConfig `koanf:"torrent"`
 }
 
 // ServerConfig controls the HTTP listener.
@@ -109,6 +111,36 @@ type FFmpegConfig struct {
 	AutoDownload bool `koanf:"auto_download"`
 }
 
+// TorrentConfig configures the one BitTorrent client the daemon runs for all
+// torrent tasks. The client starts when the first torrent is resolved or
+// downloaded. Per-task behaviour (seeding, extra trackers) is in the torrent
+// group of the settings.
+type TorrentConfig struct {
+	// Enabled turns the BitTorrent engine on; magnet links and .torrent
+	// files are refused when it is off.
+	Enabled bool `koanf:"enabled"`
+	// ListenPort is the port for incoming peer connections (TCP and uTP, and
+	// the DHT's UDP). 0 picks a random free port; set a fixed one to forward
+	// it on the router.
+	ListenPort int `koanf:"listen_port"`
+	// ListenHost binds the client to one local address; empty listens on all
+	// addresses.
+	ListenHost string `koanf:"listen_host"`
+	// DHT enables the distributed hash table for finding peers without a
+	// tracker; PEX enables peer exchange between connected peers.
+	DHT bool `koanf:"dht"`
+	PEX bool `koanf:"pex"`
+	// PortForwarding lets the client ask the router (UPnP, NAT-PMP) to
+	// forward the listen port.
+	PortForwarding bool `koanf:"port_forwarding"`
+	// UploadLimit caps the upload speed of all torrents together, in bytes
+	// per second; 0 means unlimited.
+	UploadLimit int64 `koanf:"upload_limit"`
+	// MetadataTimeout bounds how long a magnet link may take to deliver its
+	// torrent metadata.
+	MetadataTimeout time.Duration `koanf:"metadata_timeout"`
+}
+
 // Default returns the configuration used when nothing else is specified.
 func Default() Config {
 	return Config{
@@ -127,6 +159,10 @@ func Default() Config {
 		},
 		Browser: BrowserConfig{AutoDownload: true, MaxBrowsers: 2, IdleTimeout: 2 * time.Minute},
 		FFmpeg:  FFmpegConfig{AutoDownload: true},
+		Torrent: TorrentConfig{
+			Enabled: true, DHT: true, PEX: true, PortForwarding: true,
+			MetadataTimeout: 2 * time.Minute,
+		},
 	}
 }
 

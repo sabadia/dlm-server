@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -20,6 +21,7 @@ const (
 	MaxConcurrentDownloadsLimit = 100
 	MaxRetryAttemptsLimit       = 100
 	MaxRefreshAttemptsLimit     = 20
+	MaxSeedRatio                = 1000
 )
 
 // FieldError describes one invalid setting.
@@ -129,6 +131,20 @@ func (s *Settings) Validate(level Level) error {
 				v.add("refresh.strategies", fmt.Sprintf("duplicate strategy %q", st))
 			}
 			seen[st] = true
+		}
+	}
+
+	if r, ok := s.Torrent.SeedRatio.Get(); ok && (r < 0 || r > MaxSeedRatio || math.IsNaN(r)) {
+		v.add("torrent.seedRatio", fmt.Sprintf("must be between 0 and %d", MaxSeedRatio))
+	}
+	if d, ok := s.Torrent.SeedTime.Get(); ok && d < 0 {
+		v.add("torrent.seedTime", "must not be negative")
+	}
+	if trackers, ok := s.Torrent.Trackers.Get(); ok {
+		for _, raw := range trackers {
+			if u, err := url.Parse(raw); err != nil || u.Host == "" || !slices.Contains([]string{"http", "https", "udp", "wss"}, u.Scheme) {
+				v.add("torrent.trackers", fmt.Sprintf("%q is not an http, https, udp or wss tracker URL", raw))
+			}
 		}
 	}
 

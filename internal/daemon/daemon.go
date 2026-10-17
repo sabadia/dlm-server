@@ -20,6 +20,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/browserx"
+	"github.com/sabadia/dlm-server/internal/engine/bt"
 	"github.com/sabadia/dlm-server/internal/engine/dash"
 	"github.com/sabadia/dlm-server/internal/engine/ftp"
 	"github.com/sabadia/dlm-server/internal/engine/hls"
@@ -108,13 +109,26 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	env := engine.Env{Logger: log, Clock: time.Now, Clients: clients}
 	// Specific engines first: the first one that matches a source wins, and
 	// the HTTP engine matches every http(s) URL.
-	engines, err := engine.NewRegistry(
+	list := []engine.Engine{
 		browserx.New(resolver), // dlm-browser:// files
 		hls.New(env, ffmpegLocator),
 		dash.New(env, ffmpegLocator),
 		ftp.New(env),
-		httpx.New(env),
-	)
+	}
+	if cfg.Torrent.Enabled {
+		// The BitTorrent client is shared by all torrent tasks and starts when
+		// the first one needs it; closing it ends the downloads using it (the
+		// scheduler has stopped them by then).
+		torrents := bt.New(env, bt.Config{
+			ListenPort: cfg.Torrent.ListenPort, ListenHost: cfg.Torrent.ListenHost,
+			DisableDHT: !cfg.Torrent.DHT, DisablePEX: !cfg.Torrent.PEX, DisablePortForwarding: !cfg.Torrent.PortForwarding,
+			UploadLimit: cfg.Torrent.UploadLimit, MetadataTimeout: cfg.Torrent.MetadataTimeout,
+		})
+		defer func() { _ = torrents.Close() }()
+		list = append(list, torrents)
+	}
+	list = append(list, httpx.New(env))
+	engines, err := engine.NewRegistry(list...)
 	if err != nil {
 		bus.Close()
 		return fmt.Errorf("daemon: %w", err)

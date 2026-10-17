@@ -10,8 +10,8 @@ same API.
 
 ## Highlights (planned)
 
-- Multi-connection segmented HTTP(S) downloads with resume, plus FTP, HLS/DASH,
-  BitTorrent/magnet, ed2k and an optional yt-dlp engine
+- Multi-connection segmented HTTP(S) downloads with resume, plus FTP/FTPS, HLS/DASH,
+  BitTorrent/magnet (with seeding rules), ed2k and an optional yt-dlp engine
 - Multiple independent queues with Global → Queue → Task settings inheritance
 - Link refresh using the stored origin page, extension capture or a headless browser
 - Internal headless Chromium (chromedp) and an encrypted cookie store
