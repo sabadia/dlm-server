@@ -62,6 +62,9 @@ func (s *QueueService) List(ctx context.Context) ([]*domain.Queue, error) {
 
 // Get returns a queue or an error matching domain.ErrNotFound.
 func (s *QueueService) Get(ctx context.Context, id string) (*domain.Queue, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &id); err != nil {
+		return nil, err
+	}
 	q, err := s.d.Store.Queues().Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("service: get queue: %w", err)
@@ -106,6 +109,9 @@ func (s *QueueService) Create(ctx context.Context, in CreateQueueInput) (*domain
 // overrides (validated at the queue level). The queue speed limit is
 // applied immediately and the scheduler is woken.
 func (s *QueueService) Update(ctx context.Context, id string, in UpdateQueueInput) (*domain.Queue, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &id); err != nil {
+		return nil, err
+	}
 	if in.Settings != nil && in.SettingsPatch != nil {
 		return nil, domain.InvalidArgument("service: update queue %q: settings and settingsPatch are mutually exclusive", id)
 	}
@@ -157,6 +163,12 @@ func (s *QueueService) Update(ctx context.Context, id string, in UpdateQueueInpu
 // domain.ErrConflict unless opts.MoveTasksTo names another existing queue,
 // which then receives the tasks at its end in their current order.
 func (s *QueueService) Delete(ctx context.Context, id string, opts DeleteQueueOptions) error {
+	if err := resolveQueueRef(ctx, s.d.Store, &opts.MoveTasksTo); err != nil {
+		return err
+	}
+	if err := resolveQueueRef(ctx, s.d.Store, &id); err != nil {
+		return err
+	}
 	if opts.MoveTasksTo == id {
 		return domain.InvalidArgument("service: delete queue %q: cannot move its tasks to itself", id)
 	}
@@ -273,6 +285,9 @@ func (s *QueueService) Stop(ctx context.Context, id string) (*domain.Queue, erro
 }
 
 func (s *QueueService) setState(ctx context.Context, id string, state domain.QueueState) (*domain.Queue, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &id); err != nil {
+		return nil, err
+	}
 	var (
 		q       *domain.Queue
 		changed bool
@@ -311,6 +326,9 @@ func (s *QueueService) setState(ctx context.Context, id string, state domain.Que
 // queue can be reordered too. A negative position matches
 // domain.ErrInvalidArgument.
 func (s *QueueService) Reorder(ctx context.Context, id string, position int) (*domain.Queue, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &id); err != nil {
+		return nil, err
+	}
 	if position < 0 {
 		return nil, domain.InvalidArgument("service: reorder queue %q: position must be >= 0", id)
 	}

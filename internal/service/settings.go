@@ -95,6 +95,9 @@ func (s *SettingsService) EffectiveForTask(ctx context.Context, taskID string) (
 // EffectiveForQueue resolves Defaults ⊕ Global ⊕ Queue for a queue. An
 // unknown queue returns an error matching domain.ErrNotFound.
 func (s *SettingsService) EffectiveForQueue(ctx context.Context, queueID string) (settings.Effective, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &queueID); err != nil {
+		return settings.Effective{}, err
+	}
 	return effective(ctx, s.d, queueID, settings.Settings{})
 }
 

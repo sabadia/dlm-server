@@ -99,6 +99,9 @@ type DeleteOptions struct {
 // invalid settings, or a failed probe match domain.ErrInvalidArgument (a
 // probe failure also unwraps to the *engine.Error describing it).
 func (s *TaskService) Resolve(ctx context.Context, in ResolveInput) (*ResolveResult, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &in.QueueID); err != nil {
+		return nil, err
+	}
 	queueID := cmpOr(in.QueueID, domain.MainQueueID)
 	if err := in.Source.Validate(); err != nil {
 		return nil, fmt.Errorf("service: resolve: %w", err)
@@ -140,6 +143,9 @@ func (s *TaskService) Resolve(ctx context.Context, in ResolveInput) (*ResolveRes
 // supported by an engine. Invalid input matches domain.ErrInvalidArgument;
 // an unknown queue matches domain.ErrNotFound.
 func (s *TaskService) Create(ctx context.Context, in CreateTaskInput) (*domain.Task, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &in.QueueID); err != nil {
+		return nil, err
+	}
 	queueID := cmpOr(in.QueueID, domain.MainQueueID)
 	if err := validateName(in.Name); err != nil {
 		return nil, err
@@ -268,6 +274,9 @@ func (s *TaskService) Get(ctx context.Context, id string) (*domain.Task, error) 
 // List returns one page of tasks (see storage.TaskFilter). A malformed
 // cursor matches domain.ErrInvalidArgument.
 func (s *TaskService) List(ctx context.Context, f storage.TaskFilter) (storage.TaskPage, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &f.QueueID); err != nil {
+		return storage.TaskPage{}, err
+	}
 	page, err := s.d.Store.Tasks().List(ctx, f)
 	if err != nil {
 		return storage.TaskPage{}, fmt.Errorf("service: list tasks: %w", err)
@@ -359,6 +368,9 @@ func (s *TaskService) update(ctx context.Context, id string, in UpdateTaskInput,
 // Moving a task to its own queue is a no-op. An unknown task or queue
 // matches domain.ErrNotFound.
 func (s *TaskService) Move(ctx context.Context, id, queueID string) (*domain.Task, error) {
+	if err := resolveQueueRef(ctx, s.d.Store, &queueID); err != nil {
+		return nil, err
+	}
 	var (
 		t     *domain.Task
 		moved bool
