@@ -302,17 +302,13 @@ func TestOddFileNamesAreMadeValid(t *testing.T) {
 }
 
 func TestSafeComponent(t *testing.T) {
-	for in, want := range map[string]string{"plain.txt": "plain.txt", "we:ird*.txt": "we_ird_.txt", "a/b": "b", "..": "download", ".": "download", "": "download", "CON ": "CON"} {
-		got := safeComponent(in)
-		if in == "CON " {
-			if got == "" || got == in {
-				t.Errorf("safeComponent(%q) = %q", in, got)
-			}
-			continue
-		}
-		if got != want {
+	for in, want := range map[string]string{"plain.txt": "plain.txt", "we:ird*.txt": "we_ird_.txt", "a/b": "b", "..": "download", ".": "download", "": "download"} {
+		if got := safeComponent(in); got != want {
 			t.Errorf("safeComponent(%q) = %q, want %q", in, got, want)
 		}
+	}
+	if got := safeComponent("CON" + " "); got == "" || got == "CON"+" " {
+		t.Errorf("safeComponent(CON ) = %q", got)
 	}
 }
 
