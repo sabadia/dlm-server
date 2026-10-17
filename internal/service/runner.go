@@ -65,6 +65,9 @@ type RunnerDeps struct {
 // task runs (queues, slots, schedules) is the scheduler's job.
 type Runner struct {
 	d RunnerDeps
+
+	mu     sync.Mutex
+	probes map[string]*engine.Probe // attached resolve probes by task ID
 }
 
 // NewRunner creates a Runner.
@@ -81,7 +84,39 @@ func NewRunner(d RunnerDeps) *Runner {
 	if d.Defaults == nil {
 		d.Defaults = func() settings.Settings { return settings.Settings{} }
 	}
-	return &Runner{d: d}
+	return &Runner{d: d, probes: make(map[string]*engine.Probe)}
+}
+
+// AttachProbe hands a fresh resolve probe to the next Run of taskID, which
+// uses it instead of probing again (so one-time URLs keep working between
+// resolve and create) and clears it. The Runner takes ownership of p; a
+// probe already attached to the task is closed.
+func (r *Runner) AttachProbe(taskID string, p *engine.Probe) {
+	if p == nil {
+		return
+	}
+	r.mu.Lock()
+	prev := r.probes[taskID]
+	r.probes[taskID] = p
+	r.mu.Unlock()
+	if prev != nil && prev != p {
+		_ = prev.Close() // replaced probe is no longer reachable
+	}
+}
+
+// ReleaseProbe closes and forgets the probe attached to taskID, if any
+// (used when the task is deleted before it ran).
+func (r *Runner) ReleaseProbe(taskID string) {
+	_ = r.takeProbe(taskID).Close() // Close is nil-safe; nothing to report for an abandoned probe
+}
+
+// takeProbe removes and returns the probe attached to taskID, or nil.
+func (r *Runner) takeProbe(taskID string) *engine.Probe {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p := r.probes[taskID]
+	delete(r.probes, taskID)
+	return p
 }
 
 // Run executes the task until it completes, fails, or ctx is cancelled.
@@ -129,15 +164,20 @@ func (r *Runner) load(ctx context.Context, taskID string) (*domain.Task, setting
 // download prepares and runs the engine download. Its error is the
 // download outcome (nil on success).
 func (r *Runner) download(ctx context.Context, task *domain.Task, eff settings.Settings) error {
+	// A probe attached by TaskService.Create (resolve → create) is used
+	// instead of probing again.
+	probe := r.takeProbe(task.ID)
 	eng, err := r.engineFor(task)
 	if err != nil {
+		_ = probe.Close()
 		return err
 	}
-	var probe *engine.Probe
 	if task.Resource == nil || task.Name == "" {
-		probe, err = eng.Resolve(ctx, engine.Request{Source: task.Source, Settings: eff})
-		if err != nil {
-			return err //nolint:wrapcheck // engine errors are classified; kept intact
+		if probe == nil {
+			probe, err = eng.Resolve(ctx, engine.Request{Source: task.Source, Settings: eff})
+			if err != nil {
+				return err //nolint:wrapcheck // engine errors are classified; kept intact
+			}
 		}
 		applyProbe(task, probe)
 		if err := r.d.Store.Tasks().Update(ctx, task); err != nil {
@@ -232,9 +272,13 @@ func applyProbe(task *domain.Task, p *engine.Probe) {
 
 // finish records the run outcome. cause is the context cancellation cause.
 func (r *Runner) finish(ctx context.Context, task *domain.Task, runErr, cause error) error {
-	// Reload the counters the checkpointer persisted during the run.
+	// Reload the counters the checkpointer persisted during the run, and the
+	// fields services may change while the task runs (queue, order,
+	// priority, labels, settings) so the final write does not revert them.
 	if fresh, err := r.d.Store.Tasks().Get(ctx, task.ID); err == nil {
 		task.Downloaded, task.Size, task.Source = fresh.Downloaded, fresh.Size, fresh.Source
+		task.QueueID, task.Position, task.Priority = fresh.QueueID, fresh.Position, fresh.Priority
+		task.Labels, task.Settings = fresh.Labels, fresh.Settings
 	}
 	switch kind := engine.Classify(runErr); {
 	case runErr == nil:

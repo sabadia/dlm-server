@@ -83,6 +83,9 @@ func (c *ResolveCache) Put(p *Probe) string {
 	return id
 }
 
+// TTL returns how long an entry stays in the cache after Put.
+func (c *ResolveCache) TTL() time.Duration { return c.ttl }
+
 // Peek returns the probe for id without removing it, for showing resolve
 // results again. It returns an error matching domain.ErrNotFound when the
 // id is unknown or expired.
