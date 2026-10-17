@@ -71,8 +71,8 @@
 // ranges are no longer honoured, and settings.Refresh.OnMismatch decides:
 // "restart" switches to a fresh sequential download from 0 that streams
 // this 200 response (adopting its size and validators); "fail" and "ask"
-// fail with a fatal ErrRangeIgnored (code "fatal"; the Phase 5 refresh
-// layer refines this). Other statuses become *StatusError and are
+// fail with ErrRangeIgnored classified as link_expired (the content behind
+// the link changed, so the refresh layer may obtain the right link). Other statuses become *StatusError and are
 // classified by Classify (for example 403 is link_expired, 503 transient
 // with Retry-After).
 //

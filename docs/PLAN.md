@@ -275,7 +275,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P4.3 Native Messaging host + manifest installer for all browsers and OSes
 
 ### Phase 5: Link refresh
-- [ ] P5.1 Source model persistence, fingerprinting, expiry detection (incl. signed-URL params)
+- [x] P5.1 Source model persistence, fingerprinting, expiry detection (incl. signed-URL params)
 - [ ] P5.2 Refresh strategy chain (origin-redirect, extension-capture await, manual) + validation + history
 - [ ] P5.3 Refresh endpoints/CLI and per-level refresh settings
 

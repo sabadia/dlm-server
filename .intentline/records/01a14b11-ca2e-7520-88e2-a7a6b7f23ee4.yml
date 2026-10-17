@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a14b11-ca2e-7520-88e2-a7a6b7f23ee4
+status: draft
+created_at: '2026-10-17T18:13:39Z'
+updated_at: '2026-10-17T18:13:39Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P5.1: Source model persistence, fingerprinting, expiry detection (incl. signed-URL params)'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/refresh/expiry.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/classify.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/transfer.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

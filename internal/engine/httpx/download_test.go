@@ -452,7 +452,7 @@ func TestRangeIgnoredOnMismatch(t *testing.T) {
 		spec := h.specNoProbe(nil)
 		spec.Source.Fingerprint.ETag = `"v1"`
 		_, err := h.run(context.Background(), spec)
-		wantKind(t, err, engine.KindFatal)
+		wantKind(t, err, engine.KindLinkExpired)
 		if !errors.Is(err, ErrRangeIgnored) {
 			t.Errorf("err = %v, want ErrRangeIgnored", err)
 		}
