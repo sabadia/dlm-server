@@ -1,4 +1,4 @@
-package hls
+package segmented
 
 import (
 	"crypto/aes"
@@ -10,9 +10,9 @@ import (
 
 // ivFor returns the IV of a segment: the key's explicit IV, else the media
 // sequence number as a 128-bit big-endian integer (RFC 8216 §5.2).
-func ivFor(k *keyInfo, seq uint64) []byte {
-	if len(k.iv) == aes.BlockSize {
-		return k.iv
+func ivFor(k *Key, seq uint64) []byte {
+	if len(k.IV) == aes.BlockSize {
+		return k.IV
 	}
 	iv := make([]byte, aes.BlockSize)
 	binary.BigEndian.PutUint64(iv[8:], seq)

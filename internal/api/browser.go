@@ -55,7 +55,7 @@ func (s *Server) registerBrowser() {
 		Method:        http.MethodPost,
 		Path:          "/v1/browser/results/{id}/candidates/{index}/download",
 		Summary:       "Download a candidate found on a page",
-		Description:   "Creates a task for a candidate of a resolve-page result. Files the browser downloaded itself are imported; other candidates are downloaded from their URL. HLS playlists (.m3u8) are downloaded by the HLS engine; DASH is not supported yet (422).",
+		Description:   "Creates a task for a candidate of a resolve-page result. Files the browser downloaded itself are imported; other candidates are downloaded from their URL. HLS playlists (.m3u8) are downloaded by the HLS engine; DASH manifests (.mpd) by the DASH engine; a stream whose URL has no .m3u8/.mpd extension is refused (422).",
 		Tags:          []string{tagBrowser, tagTasks},
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusNotFound, http.StatusUnprocessableEntity, http.StatusServiceUnavailable},

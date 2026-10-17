@@ -81,8 +81,8 @@ type BrowserDownloadInput struct {
 // browser downloaded itself (a blob: download, an attachment) is imported
 // from its staging place; anything else is downloaded from its URL by the
 // engine that matches it, with the page as referrer and origin. HLS
-// playlists (URLs ending in .m3u8) go to the HLS engine; DASH is refused
-// until its engine exists.
+// playlists (URLs ending in .m3u8) go to the HLS engine and DASH manifests
+// (.mpd) to the DASH engine.
 func (s *BrowserService) Download(ctx context.Context, in BrowserDownloadInput) (*domain.Task, error) {
 	res, err := s.b.Candidate(in.ResultID, in.Index)
 	if err != nil {
@@ -117,7 +117,9 @@ func (s *BrowserService) sourceFor(in BrowserDownloadInput, c browser.Candidate)
 	}
 	switch c.Kind {
 	case browser.KindDASH:
-		return domain.Source{}, domain.InvalidArgument("service: DASH streams cannot be downloaded yet (the DASH engine arrives in a later release)")
+		if u, err := url.Parse(c.URL); err != nil || !strings.HasSuffix(strings.ToLower(u.Path), ".mpd") {
+			return domain.Source{}, domain.InvalidArgument("service: the DASH manifest %q has no .mpd extension, so no engine can tell it is one", c.URL)
+		}
 	case browser.KindHLS:
 		if u, err := url.Parse(c.URL); err != nil || !strings.HasSuffix(strings.ToLower(u.Path), ".m3u8") {
 			return domain.Source{}, domain.InvalidArgument("service: the HLS playlist %q has no .m3u8 extension, so no engine can tell it is one", c.URL)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net/http"
@@ -312,17 +313,6 @@ func TestDownloadMergesWithFFmpeg(t *testing.T) {
 	}
 }
 
-func TestContainerSelection(t *testing.T) {
-	for name, want := range map[string]string{"a.mp4": "mp4", "a.MKV": "matroska", "a.ts": "mpegts", "a.m4a": "ipod", "a.bin": "mp4"} {
-		if got, _ := containerFor(name); got != want {
-			t.Errorf("containerFor(%q) = %q, want %q", name, got, want)
-		}
-	}
-	if _, fast := containerFor("a.mkv"); fast {
-		t.Error("mkv needs no faststart")
-	}
-}
-
 func TestMissingFFmpegFailsBeforeDownloading(t *testing.T) {
 	o := newStream(t)
 	o.vod(3)
@@ -424,7 +414,7 @@ func TestEncryptedSegments(t *testing.T) {
 		case i < 2:
 			o.bytes(fmt.Sprintf("/e%d.ts", i), aesEncrypt(t, plain, key, explicitIV))
 		case i < 4:
-			o.bytes(fmt.Sprintf("/e%d.ts", i), aesEncrypt(t, plain, key, ivFor(&keyInfo{}, uint64(seq))))
+			o.bytes(fmt.Sprintf("/e%d.ts", i), aesEncrypt(t, plain, key, segmentedIV(uint64(seq))))
 		default:
 			o.bytes(fmt.Sprintf("/e%d.ts", i), plain)
 		}
@@ -879,8 +869,9 @@ func TestFFmpegFailureIsFatalAndLeavesNoOutput(t *testing.T) {
 	}
 }
 
-func TestRedact(t *testing.T) {
-	if got := redact("https://user:pw@cdn.example/a.ts?token=SECRET&x=1"); strings.Contains(got, "SECRET") || strings.Contains(got, "pw") {
-		t.Errorf("redact leaks: %q", got)
-	}
+// segmentedIV is the IV HLS derives from a segment's sequence number.
+func segmentedIV(seq uint64) []byte {
+	iv := make([]byte, 16)
+	binary.BigEndian.PutUint64(iv[8:], seq)
+	return iv
 }

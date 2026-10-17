@@ -1,4 +1,4 @@
-package hls
+package segmented
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"math"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -59,16 +58,17 @@ type trackJournal struct {
 
 // Download is one run of an HLS task. See Run.
 type Download struct {
-	e    *Engine
+	r    *Runner
+	fe   Frontend
 	spec engine.Spec
 
 	started atomic.Bool
-	work    string // directory of the segment files: <path>.hls
+	work    string // directory of the Segment files: <path>.hls
 	part    string // <path>.part: the merged file before it is renamed
 
-	client  *http.Client
+	client  Client
 	policy  retry.Policy
-	plan    *plan
+	plan    *Plan
 	log     *slog.Logger
 	workers int
 
@@ -87,13 +87,13 @@ type Download struct {
 	j   journal
 }
 
-func newDownload(e *Engine, spec engine.Spec) *Download {
-	log := e.env.Logger
+func newDownload(r *Runner, spec engine.Spec, fe Frontend) *Download {
+	log := r.env.Logger
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
 	d := &Download{
-		e: e, spec: spec, log: log, keys: map[string][]byte{}, inits: map[string]string{},
+		r: r, fe: fe, spec: spec, log: log, keys: map[string][]byte{}, inits: map[string]string{},
 		work: spec.Path + ".hls", part: spec.Path + ".part", policy: retry.FromSettings(spec.Settings.Retry),
 	}
 	d.workers = min(max(spec.Settings.MaxConnections.OrElse(defaultWorkers), 1), maxWorkers)
@@ -101,7 +101,7 @@ func newDownload(e *Engine, spec engine.Spec) *Download {
 }
 
 // Progress implements engine.Download. The size is an estimate while the
-// stream is downloading (the segment sizes are only known once fetched) and
+// stream is downloading (the Segment sizes are only known once fetched) and
 // unknown (-1) for a live stream.
 func (d *Download) Progress() engine.Progress {
 	got := d.downloaded.Load()
@@ -113,18 +113,18 @@ func (d *Download) Progress() engine.Progress {
 		if done := d.doneDurMs.Load(); done > 0 && got > 0 {
 			size = int64(float64(got) * float64(d.totalDurMs.Load()) / float64(done))
 		} else if d.plan != nil {
-			size = estimateSize(d.plan.bandwidth, float64(d.totalDurMs.Load())/1000)
+			size = estimateSize(d.plan.Bandwidth, float64(d.totalDurMs.Load())/1000)
 		}
 	}
 	return engine.Progress{Downloaded: got, Size: size, Connections: d.workers}
 }
 
-// Run downloads the stream: every segment of the chosen variant (and audio
+// Run downloads the stream: every Segment of the chosen variant (and audio
 // rendition) is fetched, decrypted and kept in <path>.hls; when all are there
 // ffmpeg merges them into <path>.part, which is renamed to <path>. A live
 // stream is recorded until the playlist ends or stops growing. The playlist
 // is read again on every run, so a resumed task works with refreshed links; a
-// segment whose link expired is retried with the URL of a reloaded playlist
+// Segment whose link expired is retried with the URL of a reloaded playlist
 // first. A final checkpoint is written before Run returns.
 func (d *Download) Run(ctx context.Context) error {
 	if !d.started.CompareAndSwap(false, true) {
@@ -135,12 +135,12 @@ func (d *Download) Run(ctx context.Context) error {
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return d.fileError("stat", d.spec.Path, err)
 	}
-	client, err := d.e.client(d.spec.Settings)
+	client, err := d.r.Client(d.spec.Source, d.spec.Settings)
 	if err != nil {
 		return err
 	}
 	d.client = client
-	p, err := d.e.buildPlan(ctx, client, d.spec.Source, d.spec.Settings)
+	p, err := d.fe.Build(ctx, client)
 	if err != nil {
 		return err
 	}
@@ -192,14 +192,14 @@ func (d *Download) Run(ctx context.Context) error {
 // different stream: refresh.onMismatch decides between starting over and
 // failing with a link-expired error (so the refresh layer can look for the
 // right link).
-func (d *Download) restore(p *plan) error {
-	d.j = journal{V: journalVersion, Tracks: make([]trackJournal, len(p.tracks))}
+func (d *Download) restore(p *Plan) error {
+	d.j = journal{V: journalVersion, Tracks: make([]trackJournal, len(p.Tracks))}
 	for i := range d.j.Tracks {
 		d.j.Tracks[i].Done = map[uint64]int64{}
 	}
 	if len(d.spec.EngineState) > 0 {
 		var old journal
-		if err := json.Unmarshal(d.spec.EngineState, &old); err == nil && old.V == journalVersion && len(old.Tracks) == len(p.tracks) {
+		if err := json.Unmarshal(d.spec.EngineState, &old); err == nil && old.V == journalVersion && len(old.Tracks) == len(p.Tracks) {
 			d.j = old
 			for i := range d.j.Tracks {
 				if d.j.Tracks[i].Done == nil {
@@ -208,7 +208,7 @@ func (d *Download) restore(p *plan) error {
 			}
 		}
 	}
-	for i, t := range p.tracks {
+	for i, t := range p.Tracks {
 		tj := &d.j.Tracks[i]
 		if tj.Count > 0 && t.isClosed() {
 			count, dur := len(t.snapshot()), t.totalDuration()
@@ -218,7 +218,7 @@ func (d *Download) restore(p *plan) error {
 				}
 				d.log.Info("hls: the stream changed; starting over", "task_id", d.spec.TaskID)
 				_ = os.RemoveAll(d.work) // best effort: stale pieces of another stream
-				d.j = journal{V: journalVersion, Tracks: make([]trackJournal, len(p.tracks))}
+				d.j = journal{V: journalVersion, Tracks: make([]trackJournal, len(p.Tracks))}
 				for k := range d.j.Tracks {
 					d.j.Tracks[k].Done = map[uint64]int64{}
 				}
@@ -226,7 +226,7 @@ func (d *Download) restore(p *plan) error {
 			}
 		}
 	}
-	for i, t := range p.tracks {
+	for i, t := range p.Tracks {
 		if t.isClosed() {
 			d.j.Tracks[i].Count, d.j.Tracks[i].Duration = len(t.snapshot()), t.totalDuration()
 		}
@@ -236,34 +236,34 @@ func (d *Download) restore(p *plan) error {
 
 // verifyDone drops journal entries whose file is missing or has another size,
 // and counts what is on disk.
-func (d *Download) verifyDone(p *plan) {
+func (d *Download) verifyDone(p *Plan) {
 	d.jmu.Lock()
 	defer d.jmu.Unlock()
 	var bytes, durMs int64
-	for i, t := range p.tracks {
+	for i, t := range p.Tracks {
 		done := d.j.Tracks[i].Done
 		for _, seq := range sortedSeqs(done) {
-			info, err := os.Stat(d.segPath(t.idx, seq))
+			info, err := os.Stat(d.segPath(t.Index, seq))
 			s, known := t.get(seq)
 			if err != nil || info.Size() != done[seq] || !known {
 				delete(done, seq)
 				continue
 			}
 			bytes += done[seq]
-			durMs += int64(s.duration * 1000)
+			durMs += int64(s.Duration * 1000)
 		}
 	}
 	d.downloaded.Store(bytes)
 	d.doneDurMs.Store(durMs)
 	var total float64
 	live := false
-	for _, t := range p.tracks {
+	for _, t := range p.Tracks {
 		if !t.isClosed() {
 			live = true
 		}
 	}
-	if !live && len(p.tracks) > 0 {
-		total = p.tracks[0].totalDuration()
+	if !live && len(p.Tracks) > 0 {
+		total = p.Tracks[0].totalDuration()
 		d.totalDurMs.Store(int64(total * 1000))
 	}
 }
@@ -294,7 +294,7 @@ func (d *Download) markDone(idx int, seq uint64, size int64) {
 // ---- checkpoints ----
 
 func (d *Download) checkpointLoop(ctx context.Context) {
-	t := time.NewTicker(d.e.opts.ckptIntv)
+	t := time.NewTicker(d.r.opts.ckptIntv)
 	defer t.Stop()
 	for {
 		select {
@@ -323,14 +323,14 @@ func (d *Download) checkpoint(ctx context.Context) {
 // ---- downloading ----
 
 type job struct {
-	t   *track
-	seq uint64
+	t   *Track
+	Seq uint64
 }
 
-// downloadAll fetches every segment of the plan; for a live stream it keeps
+// downloadAll fetches every Segment of the plan; for a live stream it keeps
 // following the playlist until it ends or stalls.
-func (d *Download) downloadAll(ctx context.Context, p *plan) error {
-	lastNew := d.e.env.Clock()
+func (d *Download) downloadAll(ctx context.Context, p *Plan) error {
+	lastNew := d.r.env.Clock()
 	failures := 0
 	for {
 		if err := d.runJobs(ctx, d.pending(p)); err != nil {
@@ -341,11 +341,11 @@ func (d *Download) downloadAll(ctx context.Context, p *plan) error {
 		}
 		// A live stream: wait a little, then see what the playlist added.
 		wait := d.liveWait(p)
-		if err := d.e.opts.sleep(ctx, wait); err != nil {
+		if err := d.r.opts.sleep(ctx, wait); err != nil {
 			return err //nolint:wrapcheck // cancellation is reported as is
 		}
 		added := 0
-		for _, t := range p.tracks {
+		for _, t := range p.Tracks {
 			if t.isClosed() {
 				continue
 			}
@@ -362,7 +362,7 @@ func (d *Download) downloadAll(ctx context.Context, p *plan) error {
 			failures = 0
 			added += n
 		}
-		now := d.e.env.Clock()
+		now := d.r.env.Clock()
 		if added > 0 {
 			lastNew = now
 		} else if stall := d.stallLimit(p); now.Sub(lastNew) > stall && p.live() {
@@ -372,14 +372,14 @@ func (d *Download) downloadAll(ctx context.Context, p *plan) error {
 	}
 }
 
-func (d *Download) liveWait(p *plan) time.Duration {
+func (d *Download) liveWait(p *Plan) time.Duration {
 	var target time.Duration
-	for _, t := range p.tracks {
+	for _, t := range p.Tracks {
 		if td := t.targetDuration(); td > target {
 			target = td
 		}
 	}
-	if f := d.e.opts.liveWait; f != nil {
+	if f := d.r.opts.liveWait; f != nil {
 		return f(target)
 	}
 	return max(target/2, minLiveReload)
@@ -387,23 +387,23 @@ func (d *Download) liveWait(p *plan) time.Duration {
 
 // stallLimit is how long a live stream may add nothing before it counts as
 // over: three target durations, at least 30 seconds.
-func (d *Download) stallLimit(p *plan) time.Duration {
+func (d *Download) stallLimit(p *Plan) time.Duration {
 	var target time.Duration
-	for _, t := range p.tracks {
+	for _, t := range p.Tracks {
 		target = max(target, t.targetDuration())
 	}
-	if f := d.e.opts.liveWait; f != nil {
+	if f := d.r.opts.liveWait; f != nil {
 		return 3 * f(target)
 	}
 	return max(3*target, 30*time.Second)
 }
 
-func (d *Download) pending(p *plan) []job {
+func (d *Download) pending(p *Plan) []job {
 	var jobs []job
-	for _, t := range p.tracks {
+	for _, t := range p.Tracks {
 		for _, s := range t.snapshot() {
-			if !d.isDone(t.idx, s.seq) {
-				jobs = append(jobs, job{t: t, seq: s.seq})
+			if !d.isDone(t.Index, s.Seq) {
+				jobs = append(jobs, job{t: t, Seq: s.Seq})
 			}
 		}
 	}
@@ -426,20 +426,20 @@ func (d *Download) runJobs(ctx context.Context, jobs []job) error {
 	if ctx.Err() != nil {
 		return ctx.Err() //nolint:wrapcheck // cancellation is reported as is
 	}
-	return err //nolint:wrapcheck // the segment errors are classified and returned as they are
+	return err //nolint:wrapcheck // the Segment errors are classified and returned as they are
 }
 
 func (d *Download) doSegment(ctx context.Context, j job) error {
-	seg, ok := j.t.get(j.seq)
+	seg, ok := j.t.get(j.Seq)
 	if !ok {
 		return nil
 	}
 	size, err := d.fetchSegment(ctx, j.t, seg)
 	if engine.Classify(err) == engine.KindLinkExpired {
-		// The URL (or key) of the segment no longer works: the playlist may
+		// The URL (or key) of the Segment no longer works: the playlist may
 		// hand out a fresh one.
 		if ok, _, rerr := d.reload(ctx, j.t, false); ok && rerr == nil {
-			if fresh, found := j.t.get(j.seq); found {
+			if fresh, found := j.t.get(j.Seq); found {
 				size, err = d.fetchSegment(ctx, j.t, fresh)
 			}
 		}
@@ -447,72 +447,72 @@ func (d *Download) doSegment(ctx context.Context, j job) error {
 	if err != nil {
 		return err
 	}
-	d.markDone(j.t.idx, j.seq, size)
+	d.markDone(j.t.Index, j.Seq, size)
 	d.downloaded.Add(size)
-	d.doneDurMs.Add(int64(seg.duration * 1000))
+	d.doneDurMs.Add(int64(seg.Duration * 1000))
 	return nil
 }
 
-// fetchSegment gets one segment (retrying transient failures), decrypts it
+// fetchSegment gets one Segment (retrying transient failures), decrypts it
 // and stores it. It returns the stored size.
-func (d *Download) fetchSegment(ctx context.Context, t *track, seg segment) (int64, error) {
-	if seg.init != nil {
-		if err := d.ensureInit(ctx, *seg.init); err != nil {
+func (d *Download) fetchSegment(ctx context.Context, t *Track, seg Segment) (int64, error) {
+	if seg.Init != nil {
+		if err := d.ensureInit(ctx, *seg.Init); err != nil {
 			return 0, err
 		}
 	}
 	var size int64
 	err := retry.Do(ctx, d.policy, func(ctx context.Context, _ int) error {
-		data, _, err := fetch(ctx, d.client, d.spec.Source, d.spec.Settings, seg.ref.url, seg.ref.rng, maxSegmentBytes,
+		data, _, err := fetch(ctx, d.client, seg.Ref.URL, seg.Ref.Range, maxSegmentBytes,
 			func(r io.Reader) io.Reader { return ratelimit.Reader(ctx, r, d.spec.Limiter) })
 		if err != nil {
 			return err
 		}
-		if seg.key != nil {
-			key, err := d.key(ctx, seg.key)
+		if seg.Key != nil {
+			key, err := d.key(ctx, seg.Key)
 			if err != nil {
 				return err
 			}
-			if data, err = decryptAES128(data, key, ivFor(seg.key, seg.seq)); err != nil {
+			if data, err = decryptAES128(data, key, ivFor(seg.Key, seg.Seq)); err != nil {
 				return engine.Fatal(domain.ErrorCodeFatal, err)
 			}
 		}
-		if err := d.writeFile(d.segPath(t.idx, seg.seq), data); err != nil {
+		if err := d.writeFile(d.segPath(t.Index, seg.Seq), data); err != nil {
 			return err
 		}
 		size = int64(len(data))
 		return nil
-	}, retry.WithSleeper(d.e.opts.sleep), retry.OnRetry(func(attempt int, delay time.Duration, err error) {
-		d.log.Warn("hls: retrying a segment", "task_id", d.spec.TaskID, "seq", seg.seq, "attempt", attempt, "delay", delay, "error", err)
+	}, retry.WithSleeper(d.r.opts.sleep), retry.OnRetry(func(attempt int, delay time.Duration, err error) {
+		d.log.Warn("hls: retrying a segment", "task_id", d.spec.TaskID, "seq", seg.Seq, "attempt", attempt, "delay", delay, "error", err)
 	}))
 	return size, err
 }
 
-// key returns the decryption key at k.url, fetching it once.
-func (d *Download) key(ctx context.Context, k *keyInfo) ([]byte, error) {
+// key returns the decryption key at k.URL, fetching it once.
+func (d *Download) key(ctx context.Context, k *Key) ([]byte, error) {
 	d.keyMu.Lock()
 	defer d.keyMu.Unlock()
-	if key, ok := d.keys[k.url]; ok {
+	if key, ok := d.keys[k.URL]; ok {
 		return key, nil
 	}
 	var key []byte
 	err := retry.Do(ctx, d.policy, func(ctx context.Context, _ int) error {
-		data, _, err := fetch(ctx, d.client, d.spec.Source, d.spec.Settings, k.url, nil, maxKeyBytes, nil)
+		data, _, err := fetch(ctx, d.client, k.URL, nil, maxKeyBytes, nil)
 		key = data
 		return err
-	}, retry.WithSleeper(d.e.opts.sleep))
+	}, retry.WithSleeper(d.r.opts.sleep))
 	if err != nil {
 		return nil, err
 	}
 	if len(key) != 16 {
-		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("hls: the AES-128 key at %s is %d bytes, want 16", redact(k.url), len(key)))
+		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("hls: the AES-128 key at %s is %d bytes, want 16", Redact(k.URL), len(key)))
 	}
-	d.keys[k.url] = key
+	d.keys[k.URL] = key
 	return key, nil
 }
 
 // ensureInit fetches an fMP4 initialisation section once and returns its file.
-func (d *Download) ensureInit(ctx context.Context, ref fileRef) error {
+func (d *Download) ensureInit(ctx context.Context, ref FileRef) error {
 	id := initID(ref)
 	d.initMu.Lock()
 	defer d.initMu.Unlock()
@@ -527,9 +527,9 @@ func (d *Download) ensureInit(ctx context.Context, ref fileRef) error {
 	var data []byte
 	err := retry.Do(ctx, d.policy, func(ctx context.Context, _ int) error {
 		var err error
-		data, _, err = fetch(ctx, d.client, d.spec.Source, d.spec.Settings, ref.url, ref.rng, maxSegmentBytes, nil)
+		data, _, err = fetch(ctx, d.client, ref.URL, ref.Range, maxSegmentBytes, nil)
 		return err
-	}, retry.WithSleeper(d.e.opts.sleep))
+	}, retry.WithSleeper(d.r.opts.sleep))
 	if err != nil {
 		return err
 	}
@@ -540,10 +540,10 @@ func (d *Download) ensureInit(ctx context.Context, ref fileRef) error {
 	return nil
 }
 
-func initID(ref fileRef) string {
-	key := ref.url
-	if ref.rng != nil {
-		key += "#" + strconv.FormatInt(ref.rng.offset, 10) + "+" + strconv.FormatInt(ref.rng.length, 10)
+func initID(ref FileRef) string {
+	key := ref.URL
+	if ref.Range != nil {
+		key += "#" + strconv.FormatInt(ref.Range.Offset, 10) + "+" + strconv.FormatInt(ref.Range.Length, 10)
 	}
 	sum := sha1.Sum([]byte(key)) //nolint:gosec // a file name, not security
 	return hex.EncodeToString(sum[:6])
@@ -554,7 +554,7 @@ func (d *Download) segPath(trackIdx int, seq uint64) string {
 }
 
 // writeFile stores data at path through a temporary file, so a half-written
-// segment is never mistaken for a finished one.
+// Segment is never mistaken for a finished one.
 func (d *Download) writeFile(path string, data []byte) error {
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // user-visible download pieces
@@ -572,4 +572,13 @@ func (d *Download) fileError(op, path string, err error) error {
 		return engine.Fatal(domain.ErrorCodeDiskFull, err)
 	}
 	return engine.Fatal(domain.ErrorCodeFatal, err)
+}
+
+// estimateSize guesses the output size from the bandwidth and the duration;
+// it is only used to show progress.
+func estimateSize(bandwidth int64, seconds float64) int64 {
+	if bandwidth <= 0 || seconds <= 0 || math.IsInf(seconds, 0) {
+		return -1
+	}
+	return int64(float64(bandwidth) / 8 * seconds)
 }

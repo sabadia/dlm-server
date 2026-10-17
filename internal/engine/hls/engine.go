@@ -5,87 +5,51 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
-	"github.com/sabadia/dlm-server/internal/engine/httpx"
-	"github.com/sabadia/dlm-server/internal/engine/retry"
-	"github.com/sabadia/dlm-server/internal/ffmpeg"
-	"github.com/sabadia/dlm-server/internal/settings"
+	"github.com/sabadia/dlm-server/internal/engine/segmented"
 )
 
 // EngineName is the name of the HLS engine, stored on tasks.
 const EngineName = "hls"
 
-const (
-	// maxPlaylistBytes bounds a playlist; maxKeyBytes a decryption key.
-	maxPlaylistBytes = 8 << 20
-	maxKeyBytes      = 4 << 10
-	// maxSegmentBytes bounds one segment held in memory for decryption.
-	maxSegmentBytes = 256 << 20
-
-	defaultWorkers            = 8
-	maxWorkers                = 16
-	defaultCheckpointInterval = time.Second
-	minLiveReload             = time.Second
+// Aliases of the shared downloader's types, so the engine's users and tests
+// need not import it.
+type (
+	// FFmpeg provides the ffmpeg executable (ffmpeg.Locator).
+	FFmpeg = segmented.FFmpeg
+	// Exec runs an external program to completion.
+	Exec = segmented.Exec
+	// Option configures an Engine.
+	Option = segmented.Option
 )
 
-// FFmpeg provides the ffmpeg executable (ffmpeg.Locator).
-type FFmpeg interface {
-	Locate(ctx context.Context) (ffmpeg.Binary, error)
-}
+// Errors of the shared downloader, as returned by this engine.
+var (
+	ErrDestinationExists = segmented.ErrDestinationExists
+	ErrContentChanged    = segmented.ErrContentChanged
+	ErrFFmpeg            = segmented.ErrFFmpeg
+	ErrNoSegments        = segmented.ErrNoSegments
+)
 
-// Exec runs an external program to completion; it returns an error carrying
-// the program's complaint when it fails.
-type Exec func(ctx context.Context, bin string, args []string) error
-
-type options struct {
-	exec     Exec
-	sleep    retry.Sleeper
-	ckptIntv time.Duration
-	// liveWait overrides how long a live download waits before reloading the
-	// playlist (tests).
-	liveWait func(target time.Duration) time.Duration
-}
-
-// Option configures an Engine.
-type Option func(*options)
-
-// WithExec replaces the way ffmpeg is run (tests).
-func WithExec(e Exec) Option { return func(o *options) { o.exec = e } }
-
-// WithRetrySleeper replaces the retry back-off sleeper (tests).
-func WithRetrySleeper(s retry.Sleeper) Option { return func(o *options) { o.sleep = s } }
-
-// WithCheckpointInterval sets how often progress is checkpointed (default 1s).
-func WithCheckpointInterval(d time.Duration) Option {
-	return func(o *options) {
-		if d > 0 {
-			o.ckptIntv = d
-		}
-	}
-}
-
-// WithLiveWait overrides the wait before a live playlist is reloaded
-// (default: half the target duration, at least a second).
-func WithLiveWait(f func(target time.Duration) time.Duration) Option {
-	return func(o *options) { o.liveWait = f }
-}
+// Options of the shared downloader.
+var (
+	WithExec               = segmented.WithExec
+	WithRetrySleeper       = segmented.WithRetrySleeper
+	WithCheckpointInterval = segmented.WithCheckpointInterval
+	WithLiveWait           = segmented.WithLiveWait
+)
 
 // Engine downloads HLS streams: it picks a variant, fetches every segment
 // (decrypting AES-128), and merges them with ffmpeg into one file.
 type Engine struct {
-	env  engine.Env
-	ff   FFmpeg
-	opts options
+	r  *segmented.Runner
+	fe frontend
 }
 
 var _ engine.Engine = (*Engine)(nil)
@@ -93,14 +57,7 @@ var _ engine.Engine = (*Engine)(nil)
 // New returns an HLS engine. ff may be nil, which only allows MPEG-TS
 // streams saved as .ts (they are concatenated without ffmpeg).
 func New(env engine.Env, ff FFmpeg, opts ...Option) *Engine {
-	o := options{exec: runExec, sleep: retry.Sleep, ckptIntv: defaultCheckpointInterval}
-	for _, opt := range opts {
-		opt(&o)
-	}
-	if env.Clock == nil {
-		env.Clock = time.Now
-	}
-	return &Engine{env: env, ff: ff, opts: o}
+	return &Engine{r: segmented.NewRunner(env, ff, opts...)}
 }
 
 // Name implements engine.Engine.
@@ -119,17 +76,12 @@ func (*Engine) Match(src domain.Source) bool {
 // Resolve implements engine.Engine: it reads the playlist(s), selects the
 // variant (Source.MediaHint) and describes the result.
 func (e *Engine) Resolve(ctx context.Context, req engine.Request) (*engine.Probe, error) {
-	client, err := e.client(req.Settings)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := e.buildPlan(ctx, client, req.Source, req.Settings); err != nil {
-		return nil, err
+	if _, err := e.r.Resolve(ctx, e.fe, req.Source, req.Settings); err != nil {
+		return nil, err //nolint:wrapcheck // engine errors are classified; kept intact
 	}
 	name := suggestName(req.Source.CurrentURL)
-	src := req.Source
 	return &engine.Probe{
-		Engine: EngineName, Source: src, Suggested: name,
+		Engine: EngineName, Source: req.Source, Suggested: name,
 		Resource: domain.Resource{Name: name, Size: -1, Files: []domain.File{{Index: 0, Name: name, Size: -1, Selected: true}}},
 	}, nil
 }
@@ -143,134 +95,90 @@ func (e *Engine) NewDownload(spec engine.Spec) (engine.Download, error) {
 	if !e.Match(spec.Source) {
 		return nil, engine.Fatal(domain.ErrorCodeFatal, domain.InvalidArgument("hls: %q is not an HLS playlist URL", spec.Source.CurrentURL))
 	}
-	return newDownload(e, spec), nil
+	return e.r.NewDownload(spec, e.fe), nil
 }
 
-func (e *Engine) client(s settings.Settings) (*http.Client, error) {
-	if e.env.Clients == nil {
-		return nil, engine.Fatal(domain.ErrorCodeFatal, errors.New("hls: no client factory"))
-	}
-	c, err := e.env.Clients.Client(s)
-	if err != nil {
-		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("hls: client: %w", err))
-	}
-	return c, nil
-}
+// frontend reads HLS playlists for the shared downloader.
+type frontend struct{}
 
-// newRequest builds a request with the headers every request of the task
-// carries: the source's and the settings' headers, User-Agent and Referer.
-func newRequest(ctx context.Context, src domain.Source, s settings.Settings, rawURL string, rng *byteRange) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+var _ segmented.Frontend = frontend{}
+
+// Build implements segmented.Frontend: the playlist at the source URL. A master
+// playlist is resolved to one variant (Source.MediaHint) and, when that variant
+// plays with a separate audio rendition, to its audio playlist too.
+func (frontend) Build(ctx context.Context, c segmented.Client) (*segmented.Plan, error) {
+	src := c.Source
+	first, err := loadPlaylist(ctx, c, src.CurrentURL)
 	if err != nil {
-		return nil, fmt.Errorf("hls: build request: %w", err)
+		return nil, err
 	}
-	for k, v := range src.Headers {
-		req.Header.Set(k, v)
+	p := &segmented.Plan{}
+	load := func(idx int, kind, rawURL string, m *segmented.Media) error {
+		if m == nil {
+			pl, err := loadPlaylist(ctx, c, rawURL)
+			if err != nil {
+				return err
+			}
+			if pl.media == nil {
+				return engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("hls: %s is a master playlist where a media playlist was expected", segmented.Redact(rawURL)))
+			}
+			m = pl.media
+		}
+		if len(m.Segments) == 0 {
+			return engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w (%s)", ErrNoSegments, segmented.Redact(rawURL)))
+		}
+		p.Tracks = append(p.Tracks, segmented.NewTrack(idx, kind, rawURL, m))
+		return nil
 	}
-	if h, ok := s.Headers.Get(); ok {
-		for k, v := range h {
-			req.Header.Set(k, v)
+	if first.media != nil {
+		return p, load(0, "video", src.CurrentURL, first.media)
+	}
+	v, err := selectVariant(first.master.variants, src.MediaHint)
+	if err != nil {
+		return nil, engine.Fatal(domain.ErrorCodeFatal, err)
+	}
+	p.Bandwidth = v.bandwidth
+	if err := load(0, "video", v.url, nil); err != nil {
+		return nil, err
+	}
+	if a, ok := pickAudio(first.master, v); ok {
+		if err := load(1, "audio", a.url, nil); err != nil {
+			return nil, err
 		}
 	}
-	if ua := src.UserAgent; ua != "" {
-		req.Header.Set("User-Agent", ua)
-	} else if ua, ok := s.UserAgent.Get(); ok && ua != "" {
-		req.Header.Set("User-Agent", ua)
-	}
-	if ref := src.Referrer; ref != "" {
-		req.Header.Set("Referer", ref)
-	} else if src.PageURL != "" {
-		req.Header.Set("Referer", src.PageURL)
-	}
-	req.Header.Set("Accept-Encoding", "identity")
-	req.Header.Del("Range")
-	if rng != nil {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", rng.offset, rng.offset+rng.length-1))
-	}
-	return req, nil
+	return p, nil
 }
 
-// meta is what a response tells besides its body.
-type meta struct {
-	url         *url.URL // the final URL after redirects
-	contentType string
-	status      int
-}
-
-// fetch GETs rawURL (the part rng of it, when set) and returns its body, at
-// most limit bytes, reading through rd (a rate limiter wrapper; nil reads
-// directly). Errors are classified.
-func fetch(ctx context.Context, client *http.Client, src domain.Source, s settings.Settings, rawURL string, rng *byteRange,
-	limit int64, wrap func(io.Reader) io.Reader,
-) ([]byte, meta, error) {
-	req, err := newRequest(ctx, src, s, rawURL, rng)
+// Reload implements segmented.Frontend: the track's media playlist again.
+func (frontend) Reload(ctx context.Context, c segmented.Client, t *segmented.Track) (*segmented.Media, error) {
+	pl, err := loadPlaylist(ctx, c, t.URL)
 	if err != nil {
-		return nil, meta{}, engine.Fatal(domain.ErrorCodeFatal, err)
+		return nil, err
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, meta{}, httpx.Classify(fmt.Errorf("hls: GET %s: %w", redact(rawURL), err))
+	if pl.media == nil {
+		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("hls: %s no longer is a media playlist", segmented.Redact(t.URL)))
 	}
-	defer func() { _ = resp.Body.Close() }() // fully read below
-	m := meta{url: resp.Request.URL, contentType: resp.Header.Get("Content-Type"), status: resp.StatusCode}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, m, httpx.Classify(httpx.NewStatusError(resp))
-	}
-	var body io.Reader = resp.Body
-	if rng != nil && resp.StatusCode == http.StatusOK {
-		// The server ignored the range and sent the whole resource.
-		if _, err := io.CopyN(io.Discard, body, rng.offset); err != nil {
-			return nil, m, httpx.Classify(fmt.Errorf("hls: skip to the byte range of %s: %w", redact(rawURL), err))
-		}
-		body = io.LimitReader(body, rng.length)
-	}
-	if wrap != nil {
-		body = wrap(body)
-	}
-	data, err := io.ReadAll(io.LimitReader(body, limit+1))
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, m, ctx.Err() //nolint:wrapcheck // cancellation is reported as is
-		}
-		return nil, m, httpx.Classify(fmt.Errorf("hls: read %s: %w", redact(rawURL), err))
-	}
-	if int64(len(data)) > limit {
-		return nil, m, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("hls: %s is larger than %d bytes", redact(rawURL), limit))
-	}
-	return data, m, nil
-}
-
-// redact hides the query of a URL in error messages (it often carries tokens).
-func redact(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "(unparsable URL)"
-	}
-	if u.RawQuery != "" {
-		u.RawQuery = "…"
-	}
-	u.User = nil
-	return u.String()
+	return pl.media, nil
 }
 
 // loadPlaylist fetches and parses a playlist. A page of HTML where a playlist
 // was expected is an expired link.
-func loadPlaylist(ctx context.Context, client *http.Client, src domain.Source, s settings.Settings, rawURL string) (*playlist, error) {
-	data, m, err := fetch(ctx, client, src, s, rawURL, nil, maxPlaylistBytes, nil)
+func loadPlaylist(ctx context.Context, c segmented.Client, rawURL string) (*playlist, error) {
+	data, m, err := c.Fetch(ctx, rawURL, nil, segmented.MaxDocumentBytes)
 	if err != nil {
-		return nil, err
+		return nil, err //nolint:wrapcheck // classified by Fetch
 	}
-	p, err := parse(data, m.url)
+	p, err := parse(data, m.URL)
 	if err != nil {
 		if errors.Is(err, errSampleAES) {
 			return nil, engine.Fatal(domain.ErrorCodeFatal, err)
 		}
-		if strings.Contains(strings.ToLower(m.contentType), "text/html") || bytes.HasPrefix(bytes.TrimSpace(data), []byte("<")) {
-			e := engine.LinkExpired(fmt.Errorf("hls: %s is an HTML page, not a playlist", redact(rawURL)))
-			e.StatusCode = m.status
+		if strings.Contains(strings.ToLower(m.ContentType), "text/html") || bytes.HasPrefix(bytes.TrimSpace(data), []byte("<")) {
+			e := engine.LinkExpired(fmt.Errorf("hls: %s is an HTML page, not a playlist", segmented.Redact(rawURL)))
+			e.StatusCode = m.Status
 			return nil, e
 		}
-		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w (%s)", err, redact(rawURL)))
+		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w (%s)", err, segmented.Redact(rawURL)))
 	}
 	return p, nil
 }
@@ -311,35 +219,4 @@ func sanitizeName(s string) string {
 		}
 	}
 	return strings.Trim(strings.TrimSpace(b.String()), ".")
-}
-
-// runExec runs a program and returns its error with the tail of its stderr.
-func runExec(ctx context.Context, bin string, args []string) error {
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // the user's or our own ffmpeg with arguments built here
-	cmd.Stderr = &limitedBuffer{buf: &stderr, max: 8 << 10}
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err() //nolint:wrapcheck // cancellation is reported as is
-		}
-		msg := strings.TrimSpace(stderr.String())
-		if i := strings.LastIndex(msg, "\n"); i >= 0 && len(msg) > 400 {
-			msg = msg[i+1:]
-		}
-		return fmt.Errorf("%s: %w: %s", filepath.Base(bin), err, msg)
-	}
-	return nil
-}
-
-// limitedBuffer keeps the first max bytes written and discards the rest.
-type limitedBuffer struct {
-	buf *bytes.Buffer
-	max int
-}
-
-func (l *limitedBuffer) Write(p []byte) (int, error) {
-	if room := l.max - l.buf.Len(); room > 0 {
-		l.buf.Write(p[:min(len(p), room)])
-	}
-	return len(p), nil
 }
