@@ -4,12 +4,18 @@ BINARY  ?= dlm
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: all build fmt lint vet test race vuln tidy cross clean
+.PHONY: all build generate generate-check fmt lint vet test race vuln tidy cross clean
 
 all: fmt lint test build
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/$(BINARY) ./cmd/dlm
+
+generate:
+	go generate ./...
+
+generate-check:
+	sqlc diff -f internal/storage/sqlite/sqlc.yaml
 
 fmt:
 	golangci-lint fmt ./...

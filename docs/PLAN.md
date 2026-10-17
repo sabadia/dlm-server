@@ -211,9 +211,9 @@ internal/
 
 | Table | Columns |
 |---|---|
-| `settings_global` | single row, JSON settings + version |
-| `queues` | id, name, is_default, position, state, schedule_json, settings_json |
-| `tasks` | id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source_json, resource_json, settings_json, error_code, error_msg, created_at/updated_at/done_at |
+| `settings_global` | single row: JSON settings, updated_at |
+| `queues` | id, name (unique, case-insensitive), is_default, position, state, settings (JSON, schedule lives inside), created_at/updated_at |
+| `tasks` | id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error (JSON TEXT columns), created_at/updated_at/started_at/completed_at |
 | `task_segments` | task_id, idx, start, end, done (writes throttled about every 2 s + on pause/exit) |
 | `engine_state` | task_id, blob (per-engine resume data) |
 | `refresh_history` | per-attempt record of refreshes |
@@ -244,7 +244,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P1.1 Boot config (koanf), data/config/cache dirs, slog logging with rotation
 - [x] P1.2 Domain models + status FSM + typed errors (with unit tests)
 - [x] P1.3 `settings` package: `Optional[T]`, layered resolve + provenance, per-level validation
-- [ ] P1.4 SQLite storage: goose migrations, sqlc queries, repositories for settings/queues/tasks/segments
+- [x] P1.4 SQLite storage: goose migrations, sqlc queries, repositories for settings/queues/tasks/segments
 - [x] P1.5 Event bus (multi-subscriber, non-blocking, coalescing)
 - [x] P1.6 API server skeleton: huma, auth token, CORS/origin check, problem details, `/v1/health`, `/openapi.json`, graceful shutdown
 - [x] P1.7 CLI skeleton: cobra root, `serve`, client package, output formats, parity-test harness

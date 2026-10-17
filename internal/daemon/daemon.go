@@ -17,6 +17,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/config"
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/logging"
+	"github.com/sabadia/dlm-server/internal/storage/sqlite"
 )
 
 // Run starts the daemon and blocks until ctx is cancelled. It returns nil
@@ -42,6 +43,16 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		return fmt.Errorf("daemon: %w", err)
 	}
 
+	store, err := sqlite.Open(ctx, cfg.DatabaseFile(), sqlite.Options{Logger: log})
+	if err != nil {
+		return fmt.Errorf("daemon: %w", err)
+	}
+	defer func() {
+		if cerr := store.Close(); cerr != nil {
+			err = errors.Join(err, fmt.Errorf("daemon: close store: %w", cerr))
+		}
+	}()
+
 	bus := events.New(events.Options{Logger: log})
 	srv, err := BuildServer(cfg, api.Deps{Logger: log, Version: version, Token: token})
 	if err != nil {
@@ -57,6 +68,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		"data_dir", cfg.Paths.DataDir,
 		"cache_dir", cfg.Paths.CacheDir,
 		"log_dir", cfg.Paths.LogDir,
+		"database", cfg.DatabaseFile(),
 		"token_file", cfg.TokenFile(),
 	)
 

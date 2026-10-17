@@ -1,0 +1,155 @@
+package storage
+
+import (
+	"context"
+	"time"
+
+	"github.com/sabadia/dlm-server/internal/domain"
+	"github.com/sabadia/dlm-server/internal/settings"
+)
+
+// Error contract shared by every repository:
+//   - a missing entity returns an error matching domain.ErrNotFound;
+//   - a uniqueness violation (duplicate ID, duplicate queue name) returns an
+//     error matching domain.ErrAlreadyExists;
+//   - an operation refused by a referential constraint (for example deleting
+//     a queue that still has tasks) returns an error matching
+//     domain.ErrConflict;
+//   - invalid caller input (for example a malformed pagination cursor)
+//     returns an error matching domain.ErrInvalidArgument.
+//
+// Timestamps are persisted with millisecond precision in UTC; values read
+// back are truncated to the millisecond and are in UTC.
+
+// SettingsRepository persists the global settings layer.
+type SettingsRepository interface {
+	// GetGlobal returns the stored global settings, or empty Settings (every
+	// field unset) when they were never saved.
+	GetGlobal(ctx context.Context) (settings.Settings, error)
+	// SaveGlobal replaces the stored global settings.
+	SaveGlobal(ctx context.Context, s settings.Settings) error
+}
+
+// QueueRepository persists queues.
+type QueueRepository interface {
+	Create(ctx context.Context, q *domain.Queue) error
+	Get(ctx context.Context, id string) (*domain.Queue, error)
+	// List returns every queue ordered by position, then creation time.
+	List(ctx context.Context) ([]*domain.Queue, error)
+	// Update replaces every mutable column of the queue (all but ID and
+	// CreatedAt).
+	Update(ctx context.Context, q *domain.Queue) error
+	// Delete removes the queue. It fails with domain.ErrConflict while tasks
+	// still reference it. It does not enforce domain rules such as
+	// Queue.CanDelete; that is the service layer's job.
+	Delete(ctx context.Context, id string) error
+	// NextPosition returns one past the highest queue position (0 when there
+	// are no queues).
+	NextPosition(ctx context.Context) (int64, error)
+}
+
+// TaskSort selects the order of a task listing.
+type TaskSort string
+
+// Task sort orders.
+const (
+	// TaskSortPosition is queue order: priority descending, then position
+	// and creation time ascending. It is the default.
+	TaskSortPosition TaskSort = "position"
+	// TaskSortCreated is newest first.
+	TaskSortCreated TaskSort = "created"
+)
+
+// Task listing page-size limits.
+const (
+	DefaultTaskLimit = 50
+	MaxTaskLimit     = 500
+)
+
+// TaskFilter selects and orders tasks for TaskRepository.List. Zero values
+// mean "no filter" / defaults.
+type TaskFilter struct {
+	// QueueID restricts the listing to one queue.
+	QueueID string
+	// Statuses restricts the listing to tasks in any of these states.
+	Statuses []domain.TaskStatus
+	// Search matches, case-insensitively, a substring of the task name or of
+	// its current URL. Case folding covers ASCII letters only.
+	Search string
+	// Sort defaults to TaskSortPosition.
+	Sort TaskSort
+	// Limit is the page size: <= 0 means DefaultTaskLimit; values above
+	// MaxTaskLimit are clamped.
+	Limit int
+	// Cursor is the opaque TaskPage.NextCursor of the previous page; empty
+	// starts at the beginning. A cursor is only valid with the same Sort.
+	Cursor string
+}
+
+// TaskPage is one page of a task listing.
+type TaskPage struct {
+	Tasks []*domain.Task
+	// NextCursor is empty when there are no more tasks.
+	NextCursor string
+}
+
+// TaskRepository persists tasks.
+type TaskRepository interface {
+	// Create inserts the task. A missing queue returns domain.ErrNotFound.
+	Create(ctx context.Context, t *domain.Task) error
+	Get(ctx context.Context, id string) (*domain.Task, error)
+	// Update replaces every mutable column of the task (all but ID and
+	// CreatedAt).
+	Update(ctx context.Context, t *domain.Task) error
+	// UpdateProgress is the cheap hot-path write of the transfer counters.
+	UpdateProgress(ctx context.Context, id string, downloaded, size int64, updatedAt time.Time) error
+	// Delete removes the task together with its segments and engine state.
+	Delete(ctx context.Context, id string) error
+	// List returns one page of tasks using keyset pagination.
+	List(ctx context.Context, f TaskFilter) (TaskPage, error)
+	// NextPosition returns one past the highest task position in the queue
+	// (0 for an empty queue).
+	NextPosition(ctx context.Context, queueID string) (int64, error)
+	// CountByStatus counts the tasks of a queue per status; an empty queueID
+	// counts across all queues. Statuses without tasks are absent.
+	CountByStatus(ctx context.Context, queueID string) (map[domain.TaskStatus]int, error)
+}
+
+// SegmentRepository persists a task's download segments.
+type SegmentRepository interface {
+	// Replace atomically replaces all segments of the task. A missing task
+	// returns domain.ErrNotFound.
+	Replace(ctx context.Context, taskID string, segs []domain.Segment) error
+	// List returns the task's segments ordered by index (empty when none).
+	List(ctx context.Context, taskID string) ([]domain.Segment, error)
+}
+
+// EngineStateRepository persists opaque per-engine resume data.
+type EngineStateRepository interface {
+	// Get returns the stored state or an error matching domain.ErrNotFound.
+	Get(ctx context.Context, taskID string) ([]byte, error)
+	// Put stores (inserts or replaces) the state. A missing task returns
+	// domain.ErrNotFound.
+	Put(ctx context.Context, taskID string, state []byte) error
+	// Delete removes the state. It is idempotent: deleting absent state is
+	// not an error.
+	Delete(ctx context.Context, taskID string) error
+}
+
+// Store aggregates the repositories and provides transactions.
+type Store interface {
+	Settings() SettingsRepository
+	Queues() QueueRepository
+	Tasks() TaskRepository
+	Segments() SegmentRepository
+	EngineState() EngineStateRepository
+	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
+	// transaction; it is committed when fn returns nil and rolled back when
+	// fn returns an error or panics. Calling WithTx on the transaction-bound
+	// Store reuses the same transaction. fn must use only the Store it is
+	// given: using the outer Store from inside fn may block until the
+	// transaction ends.
+	WithTx(ctx context.Context, fn func(tx Store) error) error
+	// Close releases the underlying resources.
+	Close() error
+}
