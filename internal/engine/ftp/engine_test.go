@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -275,7 +276,9 @@ func TestRetryResumesWithREST(t *testing.T) {
 			offset, _ = strconv.Atoi(n) //nolint:errcheck // the server logs what the client sent
 		}
 	}
-	if offset <= 0 || offset > 120_000 {
+	// (After a reset Windows may deliver none of the bytes already sent, so
+	// the second RETR may start at 0 there.)
+	if offset < 0 || offset > 120_000 || (offset == 0 && runtime.GOOS != "windows") {
 		t.Errorf("REST offset = %d, want within (0, 120000]; commands = %v", offset, srv.commands())
 	}
 }

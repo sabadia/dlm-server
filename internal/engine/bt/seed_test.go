@@ -286,7 +286,22 @@ func TestResumeKeepsWhatWasDownloaded(t *testing.T) {
 	before := sw.uploaded()
 	second := spec(dir, sw.dataURL(), "single.bin", testSettings(), nil)
 	second.EngineState = blob
-	if _, err := runWithin(t, newEngine(t, testConfig()), second, 60*time.Second); err != nil {
+	e2 := newEngine(t, testConfig())
+	if _, err := runWithin(t, e2, second, 60*time.Second); err != nil {
+		e2.mu.Lock()
+		cl := e2.client
+		e2.mu.Unlock()
+		if cl != nil {
+			var buf bytes.Buffer
+			cl.WriteStatus(&buf)
+			t.Logf("client status of the resumed run:\n%s", buf.String())
+		}
+		if ents, derr := os.ReadDir(dir); derr == nil {
+			for _, en := range ents {
+				fi, _ := en.Info()
+				t.Logf("dir entry %s size %d", en.Name(), fi.Size())
+			}
+		}
 		t.Fatal(err)
 	}
 	if !bytes.Equal(readFile(t, filepath.Join(dir, "single.bin")), data) {

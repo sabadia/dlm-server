@@ -1,0 +1,29 @@
+schema_version: 1
+id: 01a14c20-d82d-719d-882a-d64bd3249a3d
+status: draft
+created_at: '2026-10-17T23:09:43Z'
+updated_at: '2026-10-17T23:09:43Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: Diagnose the Windows-only resume stall of the BitTorrent test and tolerate TCP reset semantics in the FTP test
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/engine/bt/seed_test.go
+  start_line: null
+  end_line: null
+- path: internal/engine/ftp/engine_test.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
