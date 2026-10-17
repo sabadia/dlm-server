@@ -77,6 +77,18 @@ jobs:
       - name: go build
         run: go build -trimpath -o /dev/null ./cmd/dlm
 
+  intent:
+    name: intent record
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10
+      - name: intentline check
+        run: uvx intentline==0.1.0 check --range "origin/${{ github.base_ref }}..HEAD"
+
   vuln:
     name: govulncheck
     runs-on: ubuntu-latest
