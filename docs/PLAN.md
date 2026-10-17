@@ -246,7 +246,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [ ] P1.4 SQLite storage: goose migrations, sqlc queries, repositories for settings/queues/tasks/segments
 - [x] P1.5 Event bus (multi-subscriber, non-blocking, coalescing)
 - [x] P1.6 API server skeleton: huma, auth token, CORS/origin check, problem details, `/v1/health`, `/openapi.json`, graceful shutdown
-- [ ] P1.7 CLI skeleton: cobra root, `serve`, client package, output formats, parity-test harness
+- [x] P1.7 CLI skeleton: cobra root, `serve`, client package, output formats, parity-test harness
 
 ### Phase 2: HTTP engine
 - [ ] P2.1 Engine interface + registry; resolve cache
