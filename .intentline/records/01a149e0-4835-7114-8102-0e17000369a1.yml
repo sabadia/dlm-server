@@ -1,0 +1,41 @@
+schema_version: 1
+id: 01a149e0-4835-7114-8102-0e17000369a1
+status: draft
+created_at: '2026-10-17T12:39:57Z'
+updated_at: '2026-10-17T12:39:57Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P2.7: resume persistence via a storage-backed checkpointer, a task Runner executing one task end to end, and startup recovery of interrupted tasks (auto-start left to the P3.2 scheduler) per docs/PLAN.md.'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: internal/service/runner_test.go
+  exit_code: null
+links:
+- path: internal/service/checkpoint.go
+  start_line: null
+  end_line: null
+- path: internal/service/runner.go
+  start_line: null
+  end_line: null
+- path: internal/service/recover.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

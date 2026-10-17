@@ -9,14 +9,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sabadia/dlm-server/internal/api"
 	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/engine"
+	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/logging"
+	"github.com/sabadia/dlm-server/internal/netclient"
+	"github.com/sabadia/dlm-server/internal/platform"
+	"github.com/sabadia/dlm-server/internal/ratelimit"
+	"github.com/sabadia/dlm-server/internal/service"
+	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage/sqlite"
 )
 
@@ -53,7 +61,34 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		}
 	}()
 
+	recovered, err := service.RecoverInterrupted(ctx, store, time.Now, log)
+	if err != nil {
+		return fmt.Errorf("daemon: %w", err)
+	}
+
 	bus := events.New(events.Options{Logger: log})
+	clients := netclient.New(netclient.Options{Logger: log})
+	defer func() { _ = clients.Close() }() // only releases idle connections
+	engines, err := engine.NewRegistry(httpx.New(engine.Env{Logger: log, Clock: time.Now, Clients: clients}))
+	if err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
+	downloadDir, err := platform.UserDownloadsDir()
+	if err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
+	// The runner is driven by the scheduler (Phase 3); it is built here so
+	// the wiring is complete and exercised at startup.
+	_ = service.NewRunner(service.RunnerDeps{
+		Store:    store,
+		Engines:  engines,
+		Limits:   ratelimit.NewManager(0),
+		Bus:      bus,
+		Defaults: func() settings.Settings { return settings.Defaults(downloadDir) },
+		Logger:   log,
+	})
 	srv, err := BuildServer(cfg, api.Deps{Logger: log, Version: version, Token: token})
 	if err != nil {
 		bus.Close()
@@ -70,6 +105,8 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		"log_dir", cfg.Paths.LogDir,
 		"database", cfg.DatabaseFile(),
 		"token_file", cfg.TokenFile(),
+		"recovered_tasks", recovered,
+		"engines", engines.Names(),
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
