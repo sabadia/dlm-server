@@ -250,7 +250,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P1.7 CLI skeleton: cobra root, `serve`, client package, output formats, parity-test harness
 
 ### Phase 2: HTTP engine
-- [ ] P2.1 Engine interface + registry; resolve cache
+- [x] P2.1 Engine interface + registry; resolve cache
 - [ ] P2.2 HTTP probe (keeps the response open), filename detection, If-Range validator capture
 - [ ] P2.3 Segmented downloader: slow-start, work stealing, strict range validation, sequential fallback, `.part` + rename, preallocation, disk precheck
 - [ ] P2.4 Retry policy (exponential backoff + jitter, Retry-After) and error classification (transient / fatal / link-expired)

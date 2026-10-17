@@ -1,0 +1,38 @@
+schema_version: 1
+id: 01a14963-6d06-7c76-b241-b4a7f591fb46
+status: draft
+created_at: '2026-10-17T10:23:35Z'
+updated_at: '2026-10-17T10:23:35Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P2.1: engine interface + registry + resolve cache, the shared contract all protocol engines implement (Phase 2 HTTP engine per docs/PLAN.md).'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: internal/engine/engine_test.go
+  exit_code: null
+links:
+- path: internal/engine/engine.go
+  start_line: null
+  end_line: null
+- path: internal/engine/errors.go
+  start_line: null
+  end_line: null
+- path: internal/engine/registry.go
+  start_line: null
+  end_line: null
+- path: internal/engine/cache.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
