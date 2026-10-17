@@ -1,0 +1,56 @@
+schema_version: 1
+id: 01a14976-1941-7ff3-ac3d-b37328dac881
+status: draft
+created_at: '2026-10-17T10:43:58Z'
+updated_at: '2026-10-17T10:43:58Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P2.6: shared HTTP client factory with cached transports, proxy modes (none/system/custom), TLS options and default headers per docs/PLAN.md'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: internal/platform/proxy_test.go
+  exit_code: null
+links:
+- path: internal/netclient/doc.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/factory.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/headers.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/proxy.go
+  start_line: null
+  end_line: null
+- path: internal/platform/proxy.go
+  start_line: null
+  end_line: null
+- path: internal/platform/proxy_darwin.go
+  start_line: null
+  end_line: null
+- path: internal/platform/proxy_other.go
+  start_line: null
+  end_line: null
+- path: internal/platform/proxy_windows.go
+  start_line: null
+  end_line: null
+- path: go.mod
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
