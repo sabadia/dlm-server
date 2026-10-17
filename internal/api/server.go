@@ -16,6 +16,7 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/config"
 	"github.com/sabadia/dlm-server/internal/events"
+	"github.com/sabadia/dlm-server/internal/service"
 )
 
 const (
@@ -50,6 +51,13 @@ type Deps struct {
 	// EventsHeartbeat is the interval between SSE keep-alive comments. Zero
 	// selects DefaultEventsHeartbeat.
 	EventsHeartbeat time.Duration
+
+	// Settings, Queues and Tasks are the services behind the settings, queue
+	// and task operations. The operations are always registered (OpenAPI
+	// document, CLI parity); while a service is nil they answer 503.
+	Settings *service.SettingsService
+	Queues   *service.QueueService
+	Tasks    *service.TaskService
 }
 
 // Server is the REST API server.
@@ -65,6 +73,10 @@ type Server struct {
 	bus       *events.Bus
 	bootID    string
 	heartbeat time.Duration
+
+	settings *service.SettingsService
+	queues   *service.QueueService
+	tasks    *service.TaskService
 
 	mu     sync.RWMutex
 	public map[string]struct{} // mux patterns ("GET /v1/health") that need no token
@@ -111,6 +123,10 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		bus:       deps.Bus,
 		bootID:    bootID,
 		heartbeat: heartbeat,
+
+		settings: deps.Settings,
+		queues:   deps.Queues,
+		tasks:    deps.Tasks,
 	}
 	s.api = humago.New(s.mux, humaConfig(version))
 
@@ -120,8 +136,12 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	}
 	s.handler = handler
 
+	registerSettingsSchemas(s.api.OpenAPI().Components.Schemas)
 	s.registerHealth()
 	s.registerEvents()
+	s.registerTasks()
+	s.registerQueues()
+	s.registerSettings()
 	return s, nil
 }
 

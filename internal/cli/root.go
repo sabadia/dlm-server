@@ -37,6 +37,12 @@ func WithIO(stdout, stderr io.Writer) Option {
 	return func(a *app) { a.stdout, a.stderr = stdout, stderr }
 }
 
+// WithStdin sets the standard input (default os.Stdin), read by commands
+// that accept "-" as a file name.
+func WithStdin(stdin io.Reader) Option {
+	return func(a *app) { a.stdin = stdin }
+}
+
 // WithEnviron sets the environment used for configuration (default
 // os.Environ).
 func WithEnviron(environ func() []string) Option {
@@ -46,6 +52,7 @@ func WithEnviron(environ func() []string) Option {
 // app holds the state shared by the commands of one invocation.
 type app struct {
 	version string
+	stdin   io.Reader
 	stdout  io.Writer
 	stderr  io.Writer
 	environ func() []string
@@ -88,6 +95,7 @@ func run(ctx context.Context, version string, args []string, opts ...Option) int
 func newApp(version string, opts ...Option) *app {
 	a := &app{
 		version: version,
+		stdin:   os.Stdin,
 		stdout:  os.Stdout,
 		stderr:  os.Stderr,
 		environ: os.Environ,
@@ -106,6 +114,7 @@ func newApp(version string, opts ...Option) *app {
 		SilenceUsage:      true,
 		PersistentPreRunE: a.preRun,
 	}
+	root.SetIn(a.stdin)
 	root.SetOut(a.stdout)
 	root.SetErr(a.stderr)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return &usageError{err: err} })
@@ -125,6 +134,10 @@ func newApp(version string, opts ...Option) *app {
 		a.newVersionCommand(),
 		a.newTokenCommand(),
 		a.newWatchCommand(),
+		a.newResolveCommand(),
+		a.newTaskCommand(),
+		a.newQueueCommand(),
+		a.newSettingsCommand(),
 	)
 	a.root = root
 	return a
