@@ -29,6 +29,7 @@ linters:
       enable-all: true
       disable:
         - fieldalignment
+        - shadow
     exhaustive:
       default-signifies-exhaustive: true
     wrapcheck:

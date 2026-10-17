@@ -1,0 +1,214 @@
+// Package config loads the daemon's boot configuration (listen address,
+// directories, logging) from defaults, an optional YAML file, environment
+// variables and command-line flags, in increasing order of precedence.
+//
+// Runtime download settings (queues, speed limits, ...) are not part of the
+// boot configuration; they live in the database and are managed through the
+// settings package.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"net"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/sabadia/dlm-server/internal/platform"
+)
+
+// AppName is used for directory names, the environment prefix and logs.
+const AppName = "dlm"
+
+// DefaultAddress is the loopback address the daemon listens on by default.
+const DefaultAddress = "127.0.0.1:17171"
+
+// Config is the boot configuration of the daemon.
+type Config struct {
+	// Home, when set, places every directory below it (portable mode).
+	Home   string       `koanf:"home"`
+	Server ServerConfig `koanf:"server"`
+	Paths  PathsConfig  `koanf:"paths"`
+	Log    LogConfig    `koanf:"log"`
+}
+
+// ServerConfig controls the HTTP listener.
+type ServerConfig struct {
+	// Address is the host:port to listen on.
+	Address string `koanf:"address"`
+	// AllowRemote must be true to bind a non-loopback address. Remote mode
+	// additionally requires TLSCert and TLSKey.
+	AllowRemote bool   `koanf:"allow_remote"`
+	TLSCert     string `koanf:"tls_cert"`
+	TLSKey      string `koanf:"tls_key"`
+	// AllowedOrigins lists browser origins (e.g. extension origins such as
+	// chrome-extension://<id>) permitted to call the API cross-origin.
+	AllowedOrigins []string `koanf:"allowed_origins"`
+	// ShutdownTimeout bounds graceful shutdown.
+	ShutdownTimeout time.Duration `koanf:"shutdown_timeout"`
+}
+
+// PathsConfig holds the directories used by the daemon. Empty values are
+// filled with OS-appropriate defaults by Load.
+type PathsConfig struct {
+	ConfigDir string `koanf:"config_dir"`
+	DataDir   string `koanf:"data_dir"`
+	CacheDir  string `koanf:"cache_dir"`
+	LogDir    string `koanf:"log_dir"`
+}
+
+// LogConfig controls structured logging.
+type LogConfig struct {
+	Level      string `koanf:"level"`  // debug, info, warn, error
+	Format     string `koanf:"format"` // json, text
+	Stderr     bool   `koanf:"stderr"` // also log to stderr
+	File       bool   `koanf:"file"`   // log to a rotating file in Paths.LogDir
+	MaxSizeMB  int    `koanf:"max_size_mb"`
+	MaxBackups int    `koanf:"max_backups"`
+	MaxAgeDays int    `koanf:"max_age_days"`
+}
+
+// Default returns the configuration used when nothing else is specified.
+func Default() Config {
+	return Config{
+		Server: ServerConfig{
+			Address:         DefaultAddress,
+			ShutdownTimeout: 10 * time.Second,
+		},
+		Log: LogConfig{
+			Level:      "info",
+			Format:     "json",
+			Stderr:     false,
+			File:       true,
+			MaxSizeMB:  20,
+			MaxBackups: 5,
+			MaxAgeDays: 30,
+		},
+	}
+}
+
+// TokenFile is the path of the API bearer-token file.
+func (c *Config) TokenFile() string { return filepath.Join(c.Paths.ConfigDir, "token") }
+
+// DatabaseFile is the path of the SQLite database.
+func (c *Config) DatabaseFile() string { return filepath.Join(c.Paths.DataDir, AppName+".db") }
+
+// TLSEnabled reports whether the listener serves HTTPS.
+func (c *Config) TLSEnabled() bool { return c.Server.TLSCert != "" && c.Server.TLSKey != "" }
+
+// resolvePaths fills empty directories with defaults derived from Home or the
+// OS conventions, and makes every path absolute.
+func (c *Config) resolvePaths() error {
+	p := &c.Paths
+	if c.Home != "" {
+		home, err := filepath.Abs(c.Home)
+		if err != nil {
+			return fmt.Errorf("config: resolve home: %w", err)
+		}
+		c.Home = home
+		setIfEmpty(&p.ConfigDir, filepath.Join(home, "config"))
+		setIfEmpty(&p.DataDir, filepath.Join(home, "data"))
+		setIfEmpty(&p.CacheDir, filepath.Join(home, "cache"))
+	}
+	if p.ConfigDir == "" {
+		dir, err := os.UserConfigDir()
+		if err != nil {
+			return fmt.Errorf("config: user config dir: %w", err)
+		}
+		p.ConfigDir = filepath.Join(dir, AppName)
+	}
+	if p.DataDir == "" {
+		dir, err := platform.UserDataDir()
+		if err != nil {
+			return fmt.Errorf("config: user data dir: %w", err)
+		}
+		p.DataDir = filepath.Join(dir, AppName)
+	}
+	if p.CacheDir == "" {
+		dir, err := os.UserCacheDir()
+		if err != nil {
+			return fmt.Errorf("config: user cache dir: %w", err)
+		}
+		p.CacheDir = filepath.Join(dir, AppName)
+	}
+	setIfEmpty(&p.LogDir, filepath.Join(p.DataDir, "logs"))
+
+	for _, dir := range []*string{&p.ConfigDir, &p.DataDir, &p.CacheDir, &p.LogDir} {
+		abs, err := filepath.Abs(*dir)
+		if err != nil {
+			return fmt.Errorf("config: resolve %q: %w", *dir, err)
+		}
+		*dir = abs
+	}
+	return nil
+}
+
+// EnsureDirs creates the configured directories with owner-only permissions.
+func (c *Config) EnsureDirs() error {
+	for _, dir := range []string{c.Paths.ConfigDir, c.Paths.DataDir, c.Paths.CacheDir, c.Paths.LogDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return fmt.Errorf("config: create %q: %w", dir, err)
+		}
+	}
+	return nil
+}
+
+// Validate checks the configuration for consistency and safe defaults.
+func (c *Config) Validate() error {
+	var errs []error
+
+	host, port, err := net.SplitHostPort(c.Server.Address)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("server.address %q: %w", c.Server.Address, err))
+	} else {
+		if port == "" {
+			errs = append(errs, fmt.Errorf("server.address %q: missing port", c.Server.Address))
+		}
+		if !isLoopbackHost(host) {
+			if !c.Server.AllowRemote {
+				errs = append(errs, fmt.Errorf("server.address %q is not a loopback address; set server.allow_remote to bind it", c.Server.Address))
+			} else if !c.TLSEnabled() {
+				errs = append(errs, errors.New("server.allow_remote requires server.tls_cert and server.tls_key"))
+			}
+		}
+	}
+	if (c.Server.TLSCert == "") != (c.Server.TLSKey == "") {
+		errs = append(errs, errors.New("server.tls_cert and server.tls_key must be set together"))
+	}
+	if c.Server.ShutdownTimeout <= 0 {
+		errs = append(errs, errors.New("server.shutdown_timeout must be positive"))
+	}
+	if !slices.Contains([]string{"debug", "info", "warn", "error"}, strings.ToLower(c.Log.Level)) {
+		errs = append(errs, fmt.Errorf("log.level %q: want debug, info, warn or error", c.Log.Level))
+	}
+	if !slices.Contains([]string{"json", "text"}, strings.ToLower(c.Log.Format)) {
+		errs = append(errs, fmt.Errorf("log.format %q: want json or text", c.Log.Format))
+	}
+	if c.Log.MaxSizeMB < 1 || c.Log.MaxBackups < 0 || c.Log.MaxAgeDays < 0 {
+		errs = append(errs, errors.New("log rotation: max_size_mb must be >= 1, max_backups and max_age_days >= 0"))
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("config: invalid configuration: %w", err)
+	}
+	return nil
+}
+
+// isLoopbackHost reports whether host is "localhost" or a loopback IP.
+// An empty host (all interfaces) is not loopback.
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.IsLoopback()
+}
+
+func setIfEmpty(dst *string, v string) {
+	if *dst == "" {
+		*dst = v
+	}
+}
