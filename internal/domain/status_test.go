@@ -22,7 +22,7 @@ var expected = map[TaskStatus]map[TaskStatus]bool{
 	StatusAwaitingLink:   {StatusQueued: true, StatusRefreshing: true, StatusPaused: true, StatusError: true},
 	StatusPostprocessing: {StatusCompleted: true, StatusError: true},
 	StatusPaused:         {StatusQueued: true},
-	StatusError:          {StatusQueued: true, StatusPaused: true},
+	StatusError:          {StatusQueued: true, StatusPaused: true, StatusAwaitingLink: true},
 	StatusCompleted:      {StatusQueued: true},
 }
 

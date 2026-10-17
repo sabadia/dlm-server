@@ -12,11 +12,14 @@ type Type string
 // Event types emitted by the system. Add new types here; the bus treats every
 // type uniformly except TypeTaskProgress, which is coalesced per task.
 const (
-	TypeTaskCreated     Type = "task.created"
-	TypeTaskUpdated     Type = "task.updated"
-	TypeTaskStatus      Type = "task.status"
-	TypeTaskProgress    Type = "task.progress"
-	TypeTaskDeleted     Type = "task.deleted"
+	TypeTaskCreated  Type = "task.created"
+	TypeTaskUpdated  Type = "task.updated"
+	TypeTaskStatus   Type = "task.status"
+	TypeTaskProgress Type = "task.progress"
+	TypeTaskDeleted  Type = "task.deleted"
+	// TypeTaskRefresh: a link-refresh step happened (a strategy ran or was
+	// skipped, a wait started or ended); Data is the domain.RefreshAttempt.
+	TypeTaskRefresh     Type = "task.refresh"
 	TypeQueueCreated    Type = "queue.created"
 	TypeQueueUpdated    Type = "queue.updated"
 	TypeQueueDeleted    Type = "queue.deleted"

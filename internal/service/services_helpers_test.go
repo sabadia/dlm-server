@@ -15,6 +15,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/ratelimit"
+	"github.com/sabadia/dlm-server/internal/refresh"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage"
 	"github.com/sabadia/dlm-server/internal/storage/sqlite"
@@ -140,6 +141,10 @@ type svcFixture struct {
 	settings *SettingsService
 	queues   *QueueService
 	tasks    *TaskService
+	// refresher is wired into the runner only after autoRefresh is set, so
+	// the other service tests keep seeing link-expired failures as errors.
+	refresher   *RefreshService
+	autoRefresh *atomic.Bool
 }
 
 func newSvcFixture(t *testing.T) *svcFixture {
@@ -167,9 +172,17 @@ func newSvcFixture(t *testing.T) *svcFixture {
 	defaultsFn := func() settings.Settings { return defaults }
 	limits := ratelimit.NewManager(0)
 	locks := NewTaskLocks()
+	var refresher *RefreshService // assigned below
+	autoRefresh := &atomic.Bool{}
 	runner := NewRunner(RunnerDeps{
 		Store: store, Engines: reg, Limits: limits, Bus: bus, Defaults: defaultsFn,
 		ProgressInterval: 10 * time.Millisecond, TaskLocks: locks,
+		LinkExpired: func(ctx context.Context, taskID string, cause error) error {
+			if !autoRefresh.Load() {
+				return ErrRefreshDisabled
+			}
+			return refresher.HandleExpired(ctx, taskID, cause)
+		},
 	})
 	sched := newFakeScheduler()
 	sched.runner = runner
@@ -180,9 +193,13 @@ func newSvcFixture(t *testing.T) *svcFixture {
 		Store: store, Engines: reg, Resolves: resolves, Scheduler: sched, Bus: bus,
 		Limits: limits, Runner: runner, Defaults: defaultsFn, TaskLocks: locks,
 	}
+	rd := d
+	rd.Clock = clk.Now
+	refresher = NewRefreshService(rd, refresh.OriginRedirect{Engines: reg})
 	return &svcFixture{
 		store: store, bus: bus, limits: limits, runner: runner, sched: sched, clock: clk, dir: dir,
 		settings: NewSettingsService(d), queues: NewQueueService(d), tasks: NewTaskService(d),
+		refresher: refresher, autoRefresh: autoRefresh,
 	}
 }
 

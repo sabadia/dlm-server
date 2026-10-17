@@ -136,6 +136,25 @@ type EngineStateRepository interface {
 	Delete(ctx context.Context, taskID string) error
 }
 
+// RefreshHistoryRepository persists the per-attempt record of link
+// refreshes. Entries are append-only and are removed with their task.
+type RefreshHistoryRepository interface {
+	// Add inserts an entry. A missing task returns domain.ErrNotFound.
+	Add(ctx context.Context, a *domain.RefreshAttempt) error
+	// List returns the task's entries, oldest first.
+	List(ctx context.Context, taskID string) ([]*domain.RefreshAttempt, error)
+	// Latest returns the task's newest entry, or an error matching
+	// domain.ErrNotFound when it has none.
+	Latest(ctx context.Context, taskID string) (*domain.RefreshAttempt, error)
+	// CountAt returns how many strategy attempts (success, failure,
+	// mismatch, restart; not waits or skips) were made while the task had
+	// downloaded exactly this many bytes, that is, without progress since.
+	CountAt(ctx context.Context, taskID string, downloaded int64) (int, error)
+	// PendingAwaits returns, for every awaiting_link task whose newest entry
+	// is a wait with a deadline, that entry, ordered by deadline.
+	PendingAwaits(ctx context.Context) ([]*domain.RefreshAttempt, error)
+}
+
 // CookieRecord represents the persisted cookie row with encrypted value.
 type CookieRecord struct {
 	ID           string
@@ -177,6 +196,7 @@ type Store interface {
 	Segments() SegmentRepository
 	EngineState() EngineStateRepository
 	Cookies() CookieRepository
+	RefreshHistory() RefreshHistoryRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

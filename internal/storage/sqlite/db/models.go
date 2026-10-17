@@ -41,6 +41,20 @@ type Queue struct {
 	UpdatedAt int64
 }
 
+type RefreshHistory struct {
+	ID         string
+	TaskID     string
+	Strategy   string
+	Cause      string
+	Outcome    string
+	Error      string
+	OldUrl     string
+	NewUrl     string
+	Downloaded int64
+	Deadline   sql.NullInt64
+	CreatedAt  int64
+}
+
 type SettingsGlobal struct {
 	ID        int64
 	Data      string

@@ -62,7 +62,7 @@ func newE2E(t *testing.T) *e2e {
 	base := startAPIWith(t, api.Deps{
 		Token: testToken, Version: testSrvVersion,
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
-		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar),
+		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh),
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
