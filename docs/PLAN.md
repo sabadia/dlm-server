@@ -121,6 +121,7 @@ internal/
   - speed limit
   - retry policy (attempts, backoff, Retry-After)
   - proxy, user-agent, headers, TLS-verify
+  - per-host proxy rules (global only; ignored when a queue or task sets its own proxy)
   - file-exists policy (rename/overwrite/skip/resume/ask)
   - checksum
   - refresh policy
@@ -255,7 +256,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [ ] P2.3 Segmented downloader: slow-start, work stealing, strict range validation, sequential fallback, `.part` + rename, preallocation, disk precheck
 - [x] P2.4 Retry policy (exponential backoff + jitter, Retry-After) and error classification (transient / fatal / link-expired)
 - [ ] P2.5 Hierarchical rate limiter wired into the engines
-- [ ] P2.6 Proxy (global/per-site/per-task, system), custom headers/UA/TLS options, optional TLS impersonation fallback
+- [x] P2.6 Proxy (global/per-site/per-task, system), custom headers/UA/TLS options, optional TLS impersonation fallback
 - [ ] P2.7 Resume persistence (throttled segment writes) + startup auto-resume
 
 ### Phase 3: Queues & scheduler

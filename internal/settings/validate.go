@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -79,7 +80,21 @@ func (s *Settings) Validate(level Level) error {
 	}
 
 	if p, ok := s.Proxy.Get(); ok {
-		v.proxy(p)
+		v.proxy("proxy", p)
+	}
+	if rules, ok := s.ProxyRules.Get(); ok {
+		for i, r := range rules {
+			prefix := fmt.Sprintf("proxyRules[%d]", i)
+			if len(r.Hosts) == 0 {
+				v.add(prefix+".hosts", "at least one host pattern is required")
+			}
+			for _, h := range r.Hosts {
+				if _, err := path.Match(h, ""); err != nil || strings.TrimSpace(h) == "" || strings.ContainsAny(h, "/ ") {
+					v.add(prefix+".hosts", fmt.Sprintf("invalid host pattern %q", h))
+				}
+			}
+			v.proxy(prefix+".proxy", r.Proxy)
+		}
 	}
 	if ua, ok := s.UserAgent.Get(); ok && strings.ContainsAny(ua, "\r\n") {
 		v.add("userAgent", "must not contain line breaks")
@@ -153,19 +168,19 @@ func (v *validator) positiveDuration(path string, o Optional[Duration]) {
 	}
 }
 
-func (v *validator) proxy(p Proxy) {
+func (v *validator) proxy(path string, p Proxy) {
 	switch p.Mode {
 	case ProxyNone, ProxySystem:
 		if p.URL != "" {
-			v.add("proxy.url", fmt.Sprintf("must be empty for mode %q", p.Mode))
+			v.add(path+".url", fmt.Sprintf("must be empty for mode %q", p.Mode))
 		}
 	case ProxyCustom:
 		u, err := url.Parse(p.URL)
 		if err != nil || u.Host == "" || !slices.Contains([]string{"http", "https", "socks5", "socks5h"}, u.Scheme) {
-			v.add("proxy.url", "must be an http, https, socks5 or socks5h URL with a host")
+			v.add(path+".url", "must be an http, https, socks5 or socks5h URL with a host")
 		}
 	default:
-		v.add("proxy.mode", fmt.Sprintf("unknown mode %q", p.Mode))
+		v.add(path+".mode", fmt.Sprintf("unknown mode %q", p.Mode))
 	}
 }
 

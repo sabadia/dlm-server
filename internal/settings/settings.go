@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -68,8 +69,13 @@ type Settings struct {
 
 	Retry RetrySettings `json:"retry,omitzero"`
 
-	Proxy     Optional[Proxy]  `json:"proxy,omitzero"`
-	UserAgent Optional[string] `json:"userAgent,omitzero"`
+	Proxy Optional[Proxy] `json:"proxy,omitzero"`
+	// ProxyRules route requests to matching hosts through a specific proxy.
+	// They are global-only and apply only when neither the queue nor the
+	// task sets Proxy explicitly (see Resolve); the first matching rule
+	// wins, otherwise Proxy applies.
+	ProxyRules Optional[[]ProxyRule] `json:"proxyRules,omitzero" levels:"global"`
+	UserAgent  Optional[string]      `json:"userAgent,omitzero"`
 	// Headers are extra request headers. The map is replaced as a whole by
 	// the nearest level that sets it, not merged key by key.
 	Headers   Optional[map[string]string] `json:"headers,omitzero"`
@@ -123,6 +129,35 @@ const (
 type Proxy struct {
 	Mode ProxyMode `json:"mode"`
 	URL  string    `json:"url,omitempty"`
+}
+
+// ProxyRule sends requests whose host matches any of Hosts through Proxy.
+// Host patterns are case-insensitive globs ("*.example.com", "10.*",
+// "files.example.org"); see MatchHost.
+type ProxyRule struct {
+	Hosts []string `json:"hosts"`
+	Proxy Proxy    `json:"proxy"`
+}
+
+// MatchHost reports whether host matches the glob pattern ("*" matches any
+// sequence of characters including dots, "?" one character),
+// case-insensitively. A malformed pattern never matches.
+func MatchHost(pattern, host string) bool {
+	ok, err := path.Match(strings.ToLower(pattern), strings.ToLower(host))
+	return err == nil && ok
+}
+
+// ProxyFor returns the proxy for host: the first matching ProxyRule, else
+// Proxy, else the system proxy.
+func (s *Settings) ProxyFor(host string) Proxy {
+	for _, r := range s.ProxyRules.Value() {
+		for _, p := range r.Hosts {
+			if MatchHost(p, host) {
+				return r.Proxy
+			}
+		}
+	}
+	return s.Proxy.OrElse(Proxy{Mode: ProxySystem})
 }
 
 // FileExistsPolicy decides what happens when the target file exists.
