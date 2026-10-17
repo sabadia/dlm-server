@@ -22,7 +22,7 @@ func newCaptureFixture(t *testing.T) (*CaptureService, *cookies.Store, *svcFixtu
 		t.Fatal(err)
 	}
 	jar := cookies.NewStore(f.store.Cookies(), cipher, cookies.Options{})
-	return NewCaptureService(f.tasks, jar), jar, f
+	return NewCaptureService(f.tasks, jar, nil), jar, f
 }
 
 func TestCaptureBuildsFullSource(t *testing.T) {

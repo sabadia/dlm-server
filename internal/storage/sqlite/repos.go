@@ -477,11 +477,82 @@ func decodeCookie(row db.Cookie) *storage.CookieRecord {
 	}
 }
 
+// ---- refresh history ----
+
+type refreshRepo struct{ s *Store }
+
+func (r refreshRepo) Add(ctx context.Context, a *domain.RefreshAttempt) error {
+	err := r.s.write().InsertRefreshAttempt(ctx, db.InsertRefreshAttemptParams{
+		ID: a.ID, TaskID: a.TaskID, Strategy: a.Strategy, Cause: a.Cause, Outcome: string(a.Outcome),
+		Error: a.Error, OldUrl: a.OldURL, NewUrl: a.NewURL, Downloaded: a.Downloaded,
+		Deadline: toNullMillis(a.Deadline), CreatedAt: toMillis(a.CreatedAt),
+	})
+	switch {
+	case isForeignKeyViolation(err):
+		return domain.NotFound("task", a.TaskID)
+	case err != nil:
+		return fmt.Errorf("storage: add refresh attempt of task %q: %w", a.TaskID, err)
+	}
+	return nil
+}
+
+func (r refreshRepo) List(ctx context.Context, taskID string) ([]*domain.RefreshAttempt, error) {
+	rows, err := r.s.read().ListRefreshAttempts(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("storage: list refresh attempts of task %q: %w", taskID, err)
+	}
+	return decodeRefreshAttempts(rows), nil
+}
+
+func (r refreshRepo) Latest(ctx context.Context, taskID string) (*domain.RefreshAttempt, error) {
+	row, err := r.s.read().LatestRefreshAttempt(ctx, taskID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.NotFound("refresh attempt of task", taskID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("storage: latest refresh attempt of task %q: %w", taskID, err)
+	}
+	return decodeRefreshAttempt(row), nil
+}
+
+func (r refreshRepo) CountAt(ctx context.Context, taskID string, downloaded int64) (int, error) {
+	n, err := r.s.read().CountRefreshAttemptsAt(ctx, db.CountRefreshAttemptsAtParams{TaskID: taskID, Downloaded: downloaded})
+	if err != nil {
+		return 0, fmt.Errorf("storage: count refresh attempts of task %q: %w", taskID, err)
+	}
+	return int(n), nil
+}
+
+func (r refreshRepo) PendingAwaits(ctx context.Context) ([]*domain.RefreshAttempt, error) {
+	rows, err := r.s.read().ListPendingAwaits(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("storage: list pending awaits: %w", err)
+	}
+	return decodeRefreshAttempts(rows), nil
+}
+
+func decodeRefreshAttempts(rows []db.RefreshHistory) []*domain.RefreshAttempt {
+	out := make([]*domain.RefreshAttempt, len(rows))
+	for i, row := range rows {
+		out[i] = decodeRefreshAttempt(row)
+	}
+	return out
+}
+
+func decodeRefreshAttempt(row db.RefreshHistory) *domain.RefreshAttempt {
+	return &domain.RefreshAttempt{
+		ID: row.ID, TaskID: row.TaskID, Strategy: row.Strategy, Cause: row.Cause,
+		Outcome: domain.RefreshOutcome(row.Outcome), Error: row.Error, OldURL: row.OldUrl, NewURL: row.NewUrl,
+		Downloaded: row.Downloaded, Deadline: fromNullMillis(row.Deadline), CreatedAt: fromMillis(row.CreatedAt),
+	}
+}
+
 var (
-	_ storage.SettingsRepository    = settingsRepo{}
-	_ storage.QueueRepository       = queueRepo{}
-	_ storage.TaskRepository        = taskRepo{}
-	_ storage.SegmentRepository     = segmentRepo{}
-	_ storage.EngineStateRepository = engineStateRepo{}
-	_ storage.CookieRepository      = cookieRepo{}
+	_ storage.SettingsRepository       = settingsRepo{}
+	_ storage.QueueRepository          = queueRepo{}
+	_ storage.TaskRepository           = taskRepo{}
+	_ storage.SegmentRepository        = segmentRepo{}
+	_ storage.EngineStateRepository    = engineStateRepo{}
+	_ storage.CookieRepository         = cookieRepo{}
+	_ storage.RefreshHistoryRepository = refreshRepo{}
 )

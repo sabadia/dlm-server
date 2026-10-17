@@ -70,7 +70,10 @@ type CaptureBody struct {
 
 // CaptureOutput is the response of capture-download.
 type CaptureOutput struct {
-	Task *domain.Task `json:"task" doc:"The created task."`
+	Task *domain.Task `json:"task" doc:"The created task, or the existing task that received the captured link."`
+	// Refreshed is true when no task was created: the capture matched a task waiting for a new link
+	// (refresh strategy extension-capture) and replaced its link; the task is queued again.
+	Refreshed bool `json:"refreshed" doc:"True when the capture matched a task that was waiting for a new link and gave it the link instead of creating a task."`
 	// Cookies describes what happened to the request's cookies.
 	Cookies ImportCookiesResult `json:"cookies" doc:"Result of storing the request's cookies."`
 }
@@ -117,7 +120,7 @@ func (s *Server) captureDownload(ctx context.Context, in *struct{ Body CaptureBo
 		return nil, s.fail(ctx, "capture-download", err, locBodySettings)
 	}
 	return &struct{ Body CaptureOutput }{Body: CaptureOutput{
-		Task: res.Task,
+		Task: res.Task, Refreshed: res.Refreshed,
 		Cookies: ImportCookiesResult{
 			Imported: res.Cookies.Imported, Skipped: res.Cookies.Skipped, Errors: res.Cookies.Errors,
 		},

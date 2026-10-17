@@ -123,6 +123,9 @@ func (a *app) newCaptureCommand() *cobra.Command {
 			for _, e := range res.Cookies.Errors {
 				writeErr(cmd.ErrOrStderr(), "cookie rejected: "+e)
 			}
+			if res.Refreshed {
+				writeErr(cmd.ErrOrStderr(), "note: the task was waiting for a new link and received it")
+			}
 			return a.printTask(cmd, res.Task)
 		},
 	}

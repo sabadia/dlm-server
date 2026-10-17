@@ -54,8 +54,9 @@ type CaptureRequest struct {
 
 // CaptureResult is the response of capture-download.
 type CaptureResult struct {
-	Task    *Task               `json:"task"`
-	Cookies ImportCookiesResult `json:"cookies"`
+	Task      *Task               `json:"task"`
+	Refreshed bool                `json:"refreshed"`
+	Cookies   ImportCookiesResult `json:"cookies"`
 }
 
 // CaptureDownload calls capture-download (POST /v1/capture).

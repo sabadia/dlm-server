@@ -24,6 +24,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/platform"
 	"github.com/sabadia/dlm-server/internal/ratelimit"
+	"github.com/sabadia/dlm-server/internal/refresh"
 	"github.com/sabadia/dlm-server/internal/scheduler"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
@@ -104,6 +105,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	// The runner reports downloaded bytes to the scheduler's quota meter.
 	locks := service.NewTaskLocks()
 	quotas := scheduler.NewQuotaMeter(time.Now)
+	var services *Services // assigned below, before the scheduler runs
 	runner := service.NewRunner(service.RunnerDeps{
 		Store:     store,
 		Engines:   engines,
@@ -113,8 +115,12 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Logger:    log,
 		TaskLocks: locks,
 		Bytes:     quotas,
+		// The refresh service needs the scheduler, which needs the runner:
+		// the hook reaches it through services, assigned below.
+		LinkExpired: func(ctx context.Context, taskID string, cause error) error {
+			return services.Refresh.HandleExpired(ctx, taskID, cause)
+		},
 	})
-	var services *Services // assigned below, before the scheduler runs
 	sched := scheduler.New(scheduler.Options{
 		Store:    store,
 		Runner:   runner,
@@ -149,7 +155,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Logger: log, Version: version, Token: token, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
 		Cookies: service.NewCookieService(jar),
-		Capture: service.NewCaptureService(services.Tasks, jar),
+		Capture: service.NewCaptureService(services.Tasks, jar, services.Refresh),
 	})
 	if err != nil {
 		bus.Close()
@@ -176,6 +182,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	defer stopSweep()
 	g.Go(func() error { return resolves.Run(sweepCtx, time.Minute) })
 	g.Go(func() error { return jar.Run(sweepCtx, time.Hour) })
+	g.Go(func() error { return services.Refresh.Run(sweepCtx) })
 	// The scheduler starts queued tasks, including the ones recovered
 	// above; on shutdown it requeues its running tasks and waits for them
 	// (the store stays open until g.Wait returns).
@@ -200,6 +207,7 @@ type Services struct {
 	Settings *service.SettingsService
 	Queues   *service.QueueService
 	Tasks    *service.TaskService
+	Refresh  *service.RefreshService
 }
 
 // NewServices builds every service on the same dependencies.
@@ -208,6 +216,7 @@ func NewServices(d service.Deps) *Services {
 		Settings: service.NewSettingsService(d),
 		Queues:   service.NewQueueService(d),
 		Tasks:    service.NewTaskService(d),
+		Refresh:  service.NewRefreshService(d, refresh.OriginRedirect{Engines: d.Engines}),
 	}
 }
 

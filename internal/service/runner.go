@@ -70,6 +70,13 @@ type RunnerDeps struct {
 	// services; it must be the instance in their Deps.TaskLocks. Nil creates
 	// a private instance.
 	TaskLocks *TaskLocks
+	// LinkExpired, when set, is called when a download failed with an
+	// expired link (engine.KindLinkExpired) and the run was not cancelled.
+	// It decides what happens next (RefreshService.HandleExpired): it moves
+	// the task to refreshing and then to queued, awaiting_link or error, and
+	// returns nil. ErrRefreshDisabled makes the Runner record the failure
+	// itself; a context error is treated like any cancellation.
+	LinkExpired func(ctx context.Context, taskID string, cause error) error
 }
 
 // Runner executes one task end to end: it resolves the effective settings,
@@ -156,7 +163,7 @@ func (r *Runner) Run(ctx context.Context, taskID string) error {
 		return err
 	}
 	runErr := r.download(ctx, task, eff)
-	return r.finish(context.WithoutCancel(ctx), task, runErr, context.Cause(ctx))
+	return r.finish(ctx, task, runErr)
 }
 
 // start re-reads the task under its lock and moves it from queued to
@@ -334,12 +341,32 @@ func applyProbe(task *domain.Task, p *engine.Probe) {
 	}
 }
 
-// finish records the run outcome. cause is the context cancellation cause.
-// Each transition re-reads the task, so the counters the checkpointer
-// persisted and the fields services changed during the run (queue, order,
-// priority, labels, settings) are kept.
-func (r *Runner) finish(ctx context.Context, task *domain.Task, runErr, cause error) error {
-	switch kind := engine.Classify(runErr); {
+// finish records the run outcome. runCtx is the run's own context: its
+// cancellation cause says whether the task was paused or requeued. Each
+// transition re-reads the task, so the counters the checkpointer persisted
+// and the fields services changed during the run (queue, order, priority,
+// labels, settings) are kept.
+func (r *Runner) finish(runCtx context.Context, task *domain.Task, runErr error) error {
+	ctx := context.WithoutCancel(runCtx) // the outcome is recorded even when the run was stopped
+	cause := context.Cause(runCtx)
+	kind := engine.Classify(runErr)
+	if kind == engine.KindLinkExpired && cause == nil && r.d.LinkExpired != nil {
+		err := r.d.LinkExpired(runCtx, task.ID, runErr)
+		switch {
+		case err == nil:
+			return nil
+		case errors.Is(err, ErrRefreshDisabled):
+			// Refresh is off for this task: fail it like any other error.
+		case runCtx.Err() != nil:
+			// Stopped while refreshing: settle like a stopped download.
+			return r.settleStopped(ctx, task, context.Cause(runCtx))
+		default:
+			// The refresh machinery itself failed (storage, conflict): fail
+			// the task with the download error rather than leave it refreshing.
+			r.d.Logger.WarnContext(ctx, "link refresh failed", "task_id", task.ID, "error", err)
+		}
+	}
+	switch {
 	case runErr == nil:
 		if err := r.transition(ctx, task, domain.StatusPostprocessing, nil); err != nil {
 			return err
@@ -347,16 +374,21 @@ func (r *Runner) finish(ctx context.Context, task *domain.Task, runErr, cause er
 		// Post-download actions arrive in Phase 9; completion is immediate.
 		return r.transition(ctx, task, domain.StatusCompleted, nil)
 	case kind == engine.KindCanceled || cause != nil:
-		to := domain.StatusQueued
-		if errors.Is(cause, ErrPaused) {
-			to = domain.StatusPaused
-		}
-		return r.transition(ctx, task, to, nil)
+		return r.settleStopped(ctx, task, cause)
 	default:
 		te := engine.TaskError(runErr, r.d.Clock())
 		r.d.Logger.WarnContext(ctx, "task failed", "task_id", task.ID, "code", te.Code, "error", runErr)
 		return r.transition(ctx, task, domain.StatusError, &te)
 	}
+}
+
+// settleStopped leaves a stopped task paused (cause ErrPaused) or queued.
+func (r *Runner) settleStopped(ctx context.Context, task *domain.Task, cause error) error {
+	to := domain.StatusQueued
+	if errors.Is(cause, ErrPaused) {
+		to = domain.StatusPaused
+	}
+	return r.transition(ctx, task, to, nil)
 }
 
 // transition changes the task status under the task's lock: it re-reads

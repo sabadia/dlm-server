@@ -69,7 +69,7 @@ func newOpsFixture(t *testing.T) *opsFixture {
 	s, err := New(&cfg, Deps{
 		Token: testToken, Version: testVersion,
 		Settings: service.NewSettingsService(d), Queues: service.NewQueueService(d), Tasks: tasks,
-		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(tasks, jar),
+		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(tasks, jar, nil),
 	})
 	if err != nil {
 		t.Fatal(err)

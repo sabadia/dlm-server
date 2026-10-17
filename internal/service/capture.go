@@ -81,6 +81,10 @@ type CaptureResult struct {
 	Task *domain.Task
 	// Cookies reports the import of CaptureInput.Cookies.
 	Cookies cookies.ImportResult
+	// Refreshed is true when Task is an existing task that was waiting for a
+	// new link (refresh strategy extension-capture) and received the
+	// captured one instead of a new task being created.
+	Refreshed bool
 }
 
 // CaptureService creates tasks from downloads captured by the browser
@@ -88,14 +92,18 @@ type CaptureResult struct {
 type CaptureService struct {
 	tasks   *TaskService
 	cookies *cookies.Store
+	refresh *RefreshService
 }
 
-// NewCaptureService creates a CaptureService.
-func NewCaptureService(tasks *TaskService, store *cookies.Store) *CaptureService {
-	return &CaptureService{tasks: tasks, cookies: store}
+// NewCaptureService creates a CaptureService. refresh may be nil, which
+// disables attaching captures to tasks that wait for a new link.
+func NewCaptureService(tasks *TaskService, store *cookies.Store, refresh *RefreshService) *CaptureService {
+	return &CaptureService{tasks: tasks, cookies: store, refresh: refresh}
 }
 
-// Capture stores the captured cookies and creates a task whose Source holds
+// Capture stores the captured cookies and either gives the captured link to a
+// matching task that waits for one (see RefreshService.AttachCapture) or
+// creates a task whose Source holds
 // the full capture context (original and final URL, page, referrer, headers,
 // user agent, cookie domains, media hint, fingerprint seed). Invalid input is
 // rejected (domain.ErrInvalidArgument) before anything is stored. Cookies
@@ -110,6 +118,17 @@ func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (*Capture
 		return nil, fmt.Errorf("service: capture: %w", err)
 	}
 	src.CookieDomains = cookieDomains(in.Cookies, src.CurrentURL)
+	if s.refresh != nil {
+		// A task waiting for a new link (extension-capture) that this
+		// capture matches gets the link instead of a duplicate being created.
+		waiting, err := s.refresh.AttachCapture(ctx, src)
+		if err != nil {
+			return nil, err
+		}
+		if waiting != nil {
+			return &CaptureResult{Task: waiting, Cookies: res, Refreshed: true}, nil
+		}
+	}
 	t, err := s.tasks.Create(ctx, CreateTaskInput{
 		Source: src, QueueID: in.QueueID, Name: captureName(in.Filename), Dir: in.Dir,
 		Settings: in.Settings, Priority: in.Priority, Labels: in.Labels, Paused: in.Paused,

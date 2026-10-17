@@ -18,7 +18,8 @@ const (
 	// StatusPaused: stopped by the user; never started automatically.
 	StatusPaused TaskStatus = "paused"
 	// StatusAwaitingLink: the link expired and the task waits for a new one
-	// (extension capture or a manual URL update).
+	// (extension capture or a manual URL update). A failed task can also be
+	// put here to wait for a new link.
 	StatusAwaitingLink TaskStatus = "awaiting_link"
 	// StatusRefreshing: a refresh strategy is obtaining a new link.
 	StatusRefreshing TaskStatus = "refreshing"
@@ -39,7 +40,7 @@ var transitions = map[TaskStatus][]TaskStatus{
 	StatusAwaitingLink:   {StatusQueued, StatusRefreshing, StatusPaused, StatusError},
 	StatusPostprocessing: {StatusCompleted, StatusError},
 	StatusPaused:         {StatusQueued},
-	StatusError:          {StatusQueued, StatusPaused},
+	StatusError:          {StatusQueued, StatusPaused, StatusAwaitingLink},
 	StatusCompleted:      {StatusQueued},
 }
 
