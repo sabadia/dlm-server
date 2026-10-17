@@ -64,7 +64,7 @@ func testClientConfig(t *testing.T, dir string) *torrent.ClientConfig {
 	cc.DisablePEX = true
 	cc.NoDefaultPortForwarding = true
 	cc.Seed = true
-	cc.DefaultStorage = storage.NewFileOpts(storage.NewFileClientOpts{ClientBaseDir: dir, UsePartFiles: boolOpt(false)})
+	cc.DefaultStorage = plainStorage(dir)
 	return cc
 }
 
@@ -138,6 +138,13 @@ func newSwarmTweak(t *testing.T, tweak func(*torrent.ClientConfig), name string,
 	s.peers = append(net.ParseIP(loopback).To4(), byte(port>>8), byte(port))
 	s.trkMu.Unlock()
 	return s
+}
+
+// plainStorage stores files at their final names, with the piece completion in
+// memory (the default would keep a database file open that Windows refuses to
+// delete with the directory).
+func plainStorage(dir string) storage.ClientImpl {
+	return storage.NewFileOpts(storage.NewFileClientOpts{ClientBaseDir: dir, UsePartFiles: boolOpt(false), PieceCompletion: storage.NewMapPieceCompletion()})
 }
 
 func boolPtr(b bool) *bool { return &b }

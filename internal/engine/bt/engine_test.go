@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -286,22 +287,32 @@ func TestDiskFullPrecheck(t *testing.T) {
 	}
 }
 
-func TestHostileFileNamesStayInside(t *testing.T) {
-	// A torrent whose paths try to leave the directory and to use names
-	// that are not valid on Windows.
+func TestOddFileNamesAreMadeValid(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the test seeder cannot create files with these names on Windows")
+	}
 	dir := t.TempDir()
-	hostile := newSwarm(t, "pack", content{"ok.txt": []byte("fine"), "we:ird*.txt": []byte("odd")}, false)
-	if _, err := runWithin(t, newEngine(t, testConfig()), spec(dir, hostile.dataURL(), "pack", testSettings(), nil), 20*time.Second); err != nil {
+	odd := newSwarm(t, "pack", content{"ok.txt": []byte("fine"), "we:ird*.txt": []byte("odd")}, false)
+	if _, err := runWithin(t, newEngine(t, testConfig()), spec(dir, odd.dataURL(), "pack", testSettings(), nil), 20*time.Second); err != nil {
 		t.Fatal(err)
 	}
 	if string(readFile(t, filepath.Join(dir, "pack", "ok.txt"))) != "fine" || string(readFile(t, filepath.Join(dir, "pack", "we_ird_.txt"))) != "odd" {
 		t.Error("files are not where expected")
 	}
-	if got := safeComponent(".."); got == ".." || got == "" {
-		t.Errorf("safeComponent(..) = %q", got)
-	}
-	if got := safeComponent("a/b"); got == "a/b" {
-		t.Errorf("safeComponent(a/b) = %q", got)
+}
+
+func TestSafeComponent(t *testing.T) {
+	for in, want := range map[string]string{"plain.txt": "plain.txt", "we:ird*.txt": "we_ird_.txt", "a/b": "b", "..": "download", ".": "download", "": "download", "CON ": "CON"} {
+		got := safeComponent(in)
+		if in == "CON " {
+			if got == "" || got == in {
+				t.Errorf("safeComponent(%q) = %q", in, got)
+			}
+			continue
+		}
+		if got != want {
+			t.Errorf("safeComponent(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
