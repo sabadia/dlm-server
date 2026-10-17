@@ -1,11 +1,9 @@
 package httpx
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"mime"
 	"net/http"
 	"strconv"
@@ -129,41 +127,12 @@ func doProbe(ctx context.Context, client *http.Client, src domain.Source, s sett
 }
 
 func newProbeRequest(ctx context.Context, src domain.Source, s settings.Settings, withRange bool) (*http.Request, error) {
-	method := src.Method
-	if method == "" {
-		method = http.MethodGet
-	}
-	var body io.Reader
-	if len(src.Body) > 0 {
-		body = bytes.NewReader(src.Body) // NewRequest also sets GetBody for redirects
-	}
-	req, err := http.NewRequestWithContext(ctx, method, src.CurrentURL, body)
+	req, err := newRequest(ctx, src, s, src.CurrentURL)
 	if err != nil {
-		return nil, fmt.Errorf("httpx: probe: build request: %w", err)
+		return nil, fmt.Errorf("httpx: probe: %w", err)
 	}
-	for k, v := range src.Headers {
-		req.Header.Set(k, v)
-	}
-	if h, ok := s.Headers.Get(); ok {
-		for k, v := range h {
-			req.Header.Set(k, v)
-		}
-	}
-	if ua := src.UserAgent; ua != "" {
-		req.Header.Set("User-Agent", ua)
-	} else if ua, ok := s.UserAgent.Get(); ok && ua != "" {
-		req.Header.Set("User-Agent", ua)
-	}
-	if ref := src.Referrer; ref != "" {
-		req.Header.Set("Referer", ref)
-	} else if src.PageURL != "" {
-		req.Header.Set("Referer", src.PageURL)
-	}
-	req.Header.Set("Accept-Encoding", "identity")
 	if withRange {
 		req.Header.Set("Range", "bytes=0-")
-	} else {
-		req.Header.Del("Range")
 	}
 	return req, nil
 }
@@ -223,31 +192,42 @@ func sizeAndRange(resp *http.Response) (int64, bool) {
 // returns TOTAL, or -1 for "*". The start must be 0 because Probe asked for
 // "bytes=0-", and END must be below TOTAL.
 func parseContentRange(v string) (int64, bool) {
-	unit, rest, ok := strings.Cut(strings.TrimSpace(v), " ")
-	if !ok || !strings.EqualFold(unit, "bytes") {
-		return 0, false
-	}
-	rng, totalStr, ok := strings.Cut(strings.TrimSpace(rest), "/")
-	if !ok {
-		return 0, false
-	}
-	startStr, endStr, ok := strings.Cut(rng, "-")
-	if !ok {
-		return 0, false
-	}
-	start, err1 := parseNonNeg(startStr)
-	end, err2 := parseNonNeg(endStr)
-	if err1 != nil || err2 != nil || start != 0 || end < start {
-		return 0, false
-	}
-	if totalStr == "*" {
-		return -1, true
-	}
-	total, err := parseNonNeg(totalStr)
-	if err != nil || end >= total {
+	start, _, total, ok := parseByteRange(v)
+	if !ok || start != 0 {
 		return 0, false
 	}
 	return total, true
+}
+
+// parseByteRange parses a single-range Content-Range value
+// "bytes START-END/TOTAL" (END inclusive; TOTAL may be "*", returned as -1).
+// It requires START <= END and, when TOTAL is known, END < TOTAL.
+func parseByteRange(v string) (start, end, total int64, ok bool) {
+	unit, rest, ok := strings.Cut(strings.TrimSpace(v), " ")
+	if !ok || !strings.EqualFold(unit, "bytes") {
+		return 0, 0, 0, false
+	}
+	rng, totalStr, ok := strings.Cut(strings.TrimSpace(rest), "/")
+	if !ok {
+		return 0, 0, 0, false
+	}
+	startStr, endStr, ok := strings.Cut(rng, "-")
+	if !ok {
+		return 0, 0, 0, false
+	}
+	start, err1 := parseNonNeg(startStr)
+	end, err2 := parseNonNeg(endStr)
+	if err1 != nil || err2 != nil || end < start {
+		return 0, 0, 0, false
+	}
+	if totalStr == "*" {
+		return start, end, -1, true
+	}
+	total, err := parseNonNeg(totalStr)
+	if err != nil || end >= total {
+		return 0, 0, 0, false
+	}
+	return start, end, total, true
 }
 
 func parseNonNeg(s string) (int64, error) {

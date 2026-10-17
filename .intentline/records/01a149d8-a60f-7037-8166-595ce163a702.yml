@@ -1,0 +1,74 @@
+schema_version: 1
+id: 01a149d8-a60f-7037-8166-595ce163a702
+status: draft
+created_at: '2026-10-17T12:31:37Z'
+updated_at: '2026-10-17T12:31:37Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P2.3: segmented multi-connection HTTP downloader (probe reuse, slow-start, work stealing, strict range validation, sequential fallback, bounded retries, stall detection, rate limiting, checkpoints, .part + atomic rename, disk precheck/preallocation) per docs/PLAN.md'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: internal/platform/freespace_test.go
+  exit_code: null
+links:
+- path: internal/engine/httpx/doc.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/probe.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/request.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/engine.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/download.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/transfer.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/ranged.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/segments.go
+  start_line: null
+  end_line: null
+- path: internal/platform/freespace.go
+  start_line: null
+  end_line: null
+- path: internal/platform/freespace_statfs.go
+  start_line: null
+  end_line: null
+- path: internal/platform/freespace_windows.go
+  start_line: null
+  end_line: null
+- path: internal/platform/freespace_other.go
+  start_line: null
+  end_line: null
+- path: internal/platform/prealloc_linux.go
+  start_line: null
+  end_line: null
+- path: internal/platform/prealloc_darwin.go
+  start_line: null
+  end_line: null
+- path: internal/platform/prealloc_other.go
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
