@@ -1,0 +1,26 @@
+schema_version: 1
+id: 01a14c35-fd0d-7c42-9c38-2fe5db61cf88
+status: draft
+created_at: '2026-10-17T23:32:49Z'
+updated_at: '2026-10-17T23:32:49Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: Finish promoting .part files ourselves when the storage could not rename them (Windows after an interrupted run)
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/engine/bt/download.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

@@ -180,6 +180,9 @@ func (d *Download) run(ctx context.Context) error {
 	// The storage makes finished files read-only to protect them while they
 	// are seeded; the user gets files they can edit.
 	for _, p := range finalFiles(d.spec.Path, &info, selected) {
+		if err := promote(p); err != nil {
+			return d.fileError("finish "+p, err)
+		}
 		if err := makeWritable(p); err != nil {
 			d.log.WarnContext(ctx, "bt: cannot make a finished file writable", "path", p, "error", err)
 		}
@@ -196,6 +199,23 @@ func finalFiles(path string, info *metainfo.Info, selected map[int]bool) []strin
 		}
 	}
 	return out
+}
+
+// promote renames a finished file from its .part name to its final name when
+// the storage did not (it cannot while something still has the file open, as
+// on Windows after an interrupted run); the torrent has been dropped by now.
+func promote(path string) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	var err error
+	for range 20 {
+		if err = os.Rename(path+".part", path); err == nil {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond) // a handle being released
+	}
+	return err //nolint:wrapcheck // wrapped with the path by the caller
 }
 
 // makeWritable gives the owner write permission.
@@ -359,7 +379,6 @@ func (d *Download) transfer(ctx context.Context, cl *torrent.Client, mi *metainf
 		d.checkpoint(ctx, true)
 	}
 
-	finals := finalFiles(d.spec.Path, info, selected)
 	var pieces []int
 	seen := map[int]bool{}
 	for _, f := range chosen {
@@ -384,13 +403,6 @@ func (d *Download) transfer(ctx context.Context, cl *torrent.Client, mi *metainf
 		completeAt = func() bool {
 			for _, i := range pieces {
 				if ps := t.PieceState(i); !ps.Ok || !ps.Complete || ps.Marking {
-					return false
-				}
-			}
-			// The storage renames a file from .part to its name when its
-			// last piece is marked; wait until that has happened.
-			for _, p := range finals {
-				if _, err := os.Stat(p); err != nil {
 					return false
 				}
 			}
