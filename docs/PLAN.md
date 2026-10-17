@@ -128,6 +128,9 @@ internal/
   - browser usage (never/auto/always)
   - post-actions, category rules
   - schedule (queue only)
+  - speed profiles (time-of-day speed limits; queue/global only)
+  - quota (byte limit and period; queue/global only)
+  - on-queue-complete (action, command, args, delay; queue only)
 - **Resolution:** `Effective = Defaults ⊕ Global ⊕ Queue ⊕ Task`; the nearest non-empty value wins. `GET /v1/tasks/{id}/settings/effective` (and `dlm task settings <id> --effective`) returns each value with its **source level**. Fields that make no sense at a level are rejected by validation (for example concurrent downloads on a task).
 - **Scheduler:**
   - Each queue has its own run loop and slot count, plus an optional global cap across all queues.
@@ -262,7 +265,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 ### Phase 3: Queues & scheduler
 - [x] P3.1 Queue service: CRUD for queues, built-in Main queue, move/reorder tasks
 - [x] P3.2 Scheduler: per-queue + global slots, priority, correct pause/remove semantics; drives `service.Runner` and auto-starts queued tasks at startup (incl. recovered ones)
-- [ ] P3.3 Queue time windows, speed profiles, quotas, post-queue actions (platform sleep/shutdown)
+- [x] P3.3 Queue time windows, speed profiles, quotas, post-queue actions (platform sleep/shutdown)
 - [x] P3.4 REST + CLI for tasks (resolve, create, batch, list/filter/paginate, get, patch, pause/resume/delete, bulk ops), queues and settings (global/queue/task + effective)
 - [x] P3.5 SSE event stream + `dlm watch`
 

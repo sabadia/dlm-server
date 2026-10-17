@@ -45,6 +45,13 @@ type StatusData struct {
 	Error *domain.TaskError `json:"error,omitempty"`
 }
 
+// ByteCounter receives the bytes each run transfers, for byte quotas. n is
+// the number of bytes the task downloaded since the previous call (always
+// > 0); it is called from the run's own goroutines and must not block.
+type ByteCounter interface {
+	AddBytes(taskID, queueID string, n int64)
+}
+
 // RunnerDeps are the dependencies of a Runner.
 type RunnerDeps struct {
 	Store   storage.Store
@@ -56,6 +63,9 @@ type RunnerDeps struct {
 	Logger           *slog.Logger
 	Clock            func() time.Time
 	ProgressInterval time.Duration
+	// Bytes, when set, receives the bytes every run downloads, sampled
+	// every ProgressInterval and once more when the download ends.
+	Bytes ByteCounter
 	// TaskLocks serialises read-modify-write cycles of each task with the
 	// services; it must be the instance in their Deps.TaskLocks. Nil creates
 	// a private instance.
@@ -440,11 +450,24 @@ func (r *Runner) publishStatus(task *domain.Task, from domain.TaskStatus) {
 	})
 }
 
-// publishProgress publishes task.progress events until the returned stop
-// function is called. Speed is an exponentially smoothed byte rate.
+// publishProgress publishes task.progress events and reports downloaded
+// bytes to the ByteCounter until the returned stop function is called,
+// which also reports the bytes downloaded since the last sample. Speed is
+// an exponentially smoothed byte rate.
 func (r *Runner) publishProgress(task *domain.Task, dl engine.Download) (stop func()) {
-	if r.d.Bus == nil {
+	if r.d.Bus == nil && r.d.Bytes == nil {
 		return func() {}
+	}
+	// The baseline is the progress restored from checkpoints, so resumed
+	// bytes are not counted again.
+	counter := byteDelta{last: dl.Progress().Downloaded}
+	count := func(p engine.Progress) {
+		if r.d.Bytes == nil {
+			return
+		}
+		if n := counter.observe(p.Downloaded); n > 0 {
+			r.d.Bytes.AddBytes(task.ID, task.QueueID, n)
+		}
 	}
 	done := make(chan struct{})
 	var wg sync.WaitGroup
@@ -462,6 +485,10 @@ func (r *Runner) publishProgress(task *domain.Task, dl engine.Download) (stop fu
 				return
 			case <-t.C:
 				p := dl.Progress()
+				count(p)
+				if r.d.Bus == nil {
+					continue
+				}
 				now := r.d.Clock()
 				if dt := now.Sub(lastAt).Seconds(); dt > 0 {
 					inst := float64(p.Downloaded-last) / dt
@@ -483,5 +510,21 @@ func (r *Runner) publishProgress(task *domain.Task, dl engine.Download) (stop fu
 	return func() {
 		close(done)
 		wg.Wait()
+		count(dl.Progress()) // the sampler has exited; counter is ours now
 	}
+}
+
+// byteDelta turns a download's absolute progress into byte deltas. A
+// progress that goes backwards (the engine restarted the file from
+// scratch) moves the baseline down without counting, so the bytes fetched
+// again afterwards are counted as the new transfer they are.
+type byteDelta struct {
+	last int64
+}
+
+// observe returns the bytes downloaded since the previous observation.
+func (b *byteDelta) observe(downloaded int64) int64 {
+	n := downloaded - b.last
+	b.last = downloaded
+	return max(n, 0)
 }

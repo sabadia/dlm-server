@@ -66,6 +66,18 @@ type Settings struct {
 	// SpeedLimit is in bytes per second; 0 means unlimited. Limits nest:
 	// a task is bounded by its own, its queue's and the global limit.
 	SpeedLimit Optional[int64] `json:"speedLimit,omitzero"`
+	// SpeedProfiles are time-of-day speed limits: while one of a
+	// profile's windows is active its SpeedLimit replaces the level's
+	// SpeedLimit (the first active profile in list order wins). Global
+	// profiles apply to the global limit, queue profiles to that queue's
+	// own limit; like SpeedLimit, a queue's profiles are not inherited
+	// from the global layer.
+	SpeedProfiles Optional[[]SpeedProfile] `json:"speedProfiles,omitzero" levels:"global,queue"`
+	// Quota caps the bytes downloaded per period. The global quota counts
+	// every byte, a queue's quota only that queue's bytes (it is not
+	// inherited from the global layer). See the scheduler package for the
+	// exact semantics.
+	Quota Optional[Quota] `json:"quota,omitzero" levels:"global,queue"`
 
 	Retry RetrySettings `json:"retry,omitzero"`
 
@@ -93,6 +105,9 @@ type Settings struct {
 
 	// Schedule defines when a queue runs; it only makes sense per queue.
 	Schedule Optional[Schedule] `json:"schedule,omitzero" levels:"queue"`
+	// OnQueueComplete is run when the queue runs out of work after
+	// completing at least one task; it only makes sense per queue.
+	OnQueueComplete Optional[QueueCompleteAction] `json:"onQueueComplete,omitzero" levels:"queue"`
 }
 
 // RetrySettings controls retries of transient failures.
@@ -242,6 +257,68 @@ type TimeWindow struct {
 	Days  []Weekday `json:"days"`
 	Start string    `json:"start"`
 	End   string    `json:"end"`
+}
+
+// SpeedProfile is a speed limit that applies while any of its windows is
+// active.
+type SpeedProfile struct {
+	// Timezone is an IANA zone name; empty means the local zone.
+	Timezone string       `json:"timezone,omitempty"`
+	Windows  []TimeWindow `json:"windows"`
+	// SpeedLimit is in bytes per second; 0 means unlimited.
+	SpeedLimit int64 `json:"speedLimit"`
+}
+
+// MinQuotaPeriod is the shortest allowed Quota.Period.
+const MinQuotaPeriod = time.Minute
+
+// Quota limits the bytes downloaded per period (for example 500 MB per
+// hour: {"bytes": 524288000, "period": "1h"}).
+type Quota struct {
+	// Bytes is the number of bytes allowed per period; it must be > 0.
+	Bytes int64 `json:"bytes"`
+	// Period is the length of one accounting window; at least
+	// MinQuotaPeriod.
+	Period Duration `json:"period"`
+}
+
+// QueueAction names what happens when a queue completes its work.
+type QueueAction string
+
+// Post-queue actions.
+const (
+	QueueActionNone     QueueAction = "none"
+	QueueActionStop     QueueAction = "stop"
+	QueueActionSleep    QueueAction = "sleep"
+	QueueActionShutdown QueueAction = "shutdown"
+	QueueActionCommand  QueueAction = "command"
+)
+
+// Delay bounds of a QueueCompleteAction.
+const (
+	DefaultQueueActionDelay = time.Minute
+	MaxQueueActionDelay     = 24 * time.Hour
+)
+
+// QueueCompleteAction is the action run after a queue finishes its work.
+type QueueCompleteAction struct {
+	Action QueueAction `json:"action"`
+	// Command is the absolute path of the executable run by the "command"
+	// action. It is executed directly with Args, never through a shell.
+	Command string   `json:"command,omitempty"`
+	Args    []string `json:"args,omitempty"`
+	// Delay is the grace period between the queue completing and the
+	// action running, during which new work or stopping the queue cancels
+	// it; 0 means DefaultQueueActionDelay.
+	Delay Duration `json:"delay,omitzero"`
+}
+
+// EffectiveDelay returns Delay, or DefaultQueueActionDelay when it is 0.
+func (a QueueCompleteAction) EffectiveDelay() time.Duration {
+	if a.Delay <= 0 {
+		return DefaultQueueActionDelay
+	}
+	return a.Delay.Std()
 }
 
 // Weekday is a time.Weekday encoded as a three-letter lower-case name.

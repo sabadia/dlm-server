@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sabadia/dlm-server/internal/domain"
+	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage"
@@ -28,6 +29,13 @@ type TaskRunner interface {
 	Run(ctx context.Context, taskID string) error
 }
 
+// LimitsApplier applies the effective speed limits (including time-of-day
+// speed profiles) for the stored settings at now; service.LimitsController
+// implements it.
+type LimitsApplier interface {
+	Apply(global settings.Settings, queues []*domain.Queue, now time.Time)
+}
+
 // Options configures New. Store and Runner are required.
 type Options struct {
 	Store  storage.Store
@@ -38,11 +46,29 @@ type Options struct {
 	Defaults func() settings.Settings
 	// Logger defaults to a discarding logger.
 	Logger *slog.Logger
-	// Clock defaults to time.Now; it times runs for the logs.
+	// Clock defaults to time.Now. It decides time windows, speed profiles,
+	// quota windows and post-queue action delays, and times runs for the
+	// logs.
 	Clock func() time.Time
 	// Tick is the interval of periodic admission passes, which pick up
 	// changes nobody woke the scheduler for; <= 0 means DefaultTick.
 	Tick time.Duration
+	// Bus receives queue.completed, queue.action_cancelled,
+	// quota.exhausted and quota.reset events; nil disables them.
+	Bus *events.Bus
+	// Limits, when set, re-applies the speed limits on every pass so
+	// speed profiles switch on time.
+	Limits LimitsApplier
+	// Quotas meters bytes for quotas; the runner must report to the same
+	// meter (service.RunnerDeps.Bytes). Nil creates a private meter that
+	// only sees bytes reported to Scheduler.Quotas().AddBytes.
+	Quotas *QuotaMeter
+	// Actions executes the sleep, shutdown and command post-queue actions;
+	// nil makes them fail (logged).
+	Actions ActionExecutor
+	// StopQueue performs the "stop" post-queue action (QueueService.Stop in
+	// the daemon); nil makes it fail (logged).
+	StopQueue func(ctx context.Context, queueID string) error
 }
 
 // Scheduler admits queued tasks into runs. It implements service.Scheduler.
@@ -53,8 +79,14 @@ type Scheduler struct {
 
 	mu      sync.Mutex
 	running map[string]*run // by task ID
-	started bool
-	wg      sync.WaitGroup // run goroutines
+	// completed counts, per queue, the tasks completed since the queue
+	// last ran out of work (post-queue actions).
+	completed map[string]int
+	started   bool
+	wg        sync.WaitGroup // run and post-queue action goroutines
+
+	// pending post-queue actions by queue ID; owned by the Run goroutine.
+	pending map[string]*pendingAction
 }
 
 // run is one admitted task.
@@ -62,6 +94,9 @@ type run struct {
 	queueID string // queue the task was admitted from; its slot is counted there
 	cancel  context.CancelCauseFunc
 	done    chan struct{} // closed once Runner.Run returned and the run was removed
+	// requeued is set (under Scheduler.mu) once a gate (time window,
+	// quota) cancelled the run, so it is logged once.
+	requeued bool
 }
 
 var _ service.Scheduler = (*Scheduler)(nil)
@@ -80,12 +115,22 @@ func New(o Options) *Scheduler {
 	if o.Tick <= 0 {
 		o.Tick = DefaultTick
 	}
-	return &Scheduler{
-		o:       o,
-		wake:    make(chan struct{}, 1),
-		running: make(map[string]*run),
+	if o.Quotas == nil {
+		o.Quotas = NewQuotaMeter(o.Clock)
 	}
+	s := &Scheduler{
+		o:         o,
+		wake:      make(chan struct{}, 1),
+		running:   make(map[string]*run),
+		completed: make(map[string]int),
+		pending:   make(map[string]*pendingAction),
+	}
+	o.Quotas.setWake(s.Wake)
+	return s
 }
+
+// Quotas returns the scheduler's quota meter.
+func (s *Scheduler) Quotas() *QuotaMeter { return s.o.Quotas }
 
 // Wake asks for an admission pass soon. It never blocks; wake-ups that
 // arrive while one is pending are merged into it.
@@ -178,13 +223,32 @@ type queueSlots struct {
 	candidates []string // queued task IDs in queue order, at most the free slots
 }
 
+// passState is the stored state one admission pass works on.
+type passState struct {
+	queues   []*domain.Queue
+	global   settings.Settings
+	defaults settings.Settings
+}
+
 // admit runs one admission pass (see the package documentation). Errors
 // are logged; the next pass retries.
 func (s *Scheduler) admit(ctx, runCtx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	plan, globalFree, err := s.plan(ctx)
+	st, err := s.load(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.o.Logger.ErrorContext(ctx, "scheduler: admission failed", "error", err)
+		}
+		return
+	}
+	now := s.o.Clock()
+	if s.o.Limits != nil {
+		s.o.Limits.Apply(st.global, st.queues, now)
+	}
+	open := s.gates(ctx, st, now)
+	plan, globalFree, err := s.plan(ctx, st, open)
 	if err != nil {
 		if ctx.Err() == nil {
 			s.o.Logger.ErrorContext(ctx, "scheduler: admission failed", "error", err)
@@ -196,21 +260,102 @@ func (s *Scheduler) admit(ctx, runCtx context.Context) {
 			s.start(runCtx, qs.queue.ID, id)
 		}
 	}
+	s.queueActions(ctx, st, now)
 }
 
-// plan computes every running queue's candidates and the free global slots
-// (-1 when there is no global cap).
-func (s *Scheduler) plan(ctx context.Context) ([]queueSlots, int, error) {
+// load reads the queues and the settings layers of a pass.
+func (s *Scheduler) load(ctx context.Context) (*passState, error) {
 	queues, err := s.o.Store.Queues().List(ctx)
 	if err != nil {
-		return nil, 0, fmt.Errorf("scheduler: list queues: %w", err)
+		return nil, fmt.Errorf("scheduler: list queues: %w", err)
 	}
 	global, err := s.o.Store.Settings().GetGlobal(ctx)
 	if err != nil {
-		return nil, 0, fmt.Errorf("scheduler: get global settings: %w", err)
+		return nil, fmt.Errorf("scheduler: get global settings: %w", err)
 	}
-	defaults := s.o.Defaults()
+	return &passState{queues: queues, global: global, defaults: s.o.Defaults()}, nil
+}
 
+// Gate reasons, logged when a gate requeues running tasks.
+const (
+	gateOutsideWindow = "outside_window"
+	gateQueueQuota    = "queue_quota"
+	gateGlobalQuota   = "global_quota"
+)
+
+// gates decides which running queues may admit tasks now: a queue is open
+// when it is inside its schedule's time windows (or has no schedule) and
+// neither its own quota nor the global quota is exhausted. It publishes
+// quota state changes and requeues the running tasks of every running
+// queue whose gate is closed. Stopped queues are not open; their tasks
+// are stopped by QueueService.Stop, not here.
+func (s *Scheduler) gates(ctx context.Context, st *passState, now time.Time) map[string]bool {
+	globalQuota := settings.Merge(st.defaults, st.global).Quota
+	globalExhausted, change := s.o.Quotas.check(globalScope, globalQuota, now)
+	s.publishQuota(ctx, change)
+
+	open := make(map[string]bool, len(st.queues))
+	closed := make(map[string]string) // queue ID -> reason
+	known := make(map[string]bool, len(st.queues))
+	for _, q := range st.queues {
+		known[q.ID] = true
+	}
+	s.o.Quotas.prune(known)
+	for _, q := range st.queues {
+		queueExhausted, change := s.o.Quotas.check(q.ID, q.Settings.Quota, now)
+		s.publishQuota(ctx, change)
+		if q.State != domain.QueueRunning {
+			continue
+		}
+		reason := ""
+		switch sch, ok := q.Settings.Schedule.Get(); {
+		case globalExhausted:
+			reason = gateGlobalQuota
+		case ok && !sch.ActiveAt(now):
+			reason = gateOutsideWindow
+		case queueExhausted:
+			reason = gateQueueQuota
+		}
+		if reason != "" {
+			closed[q.ID] = reason
+			continue
+		}
+		open[q.ID] = true
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, r := range s.running {
+		reason, ok := closed[r.queueID]
+		if !ok && globalExhausted {
+			reason, ok = gateGlobalQuota, true
+		}
+		if !ok || r.requeued {
+			continue
+		}
+		r.requeued = true
+		s.o.Logger.InfoContext(ctx, "scheduler: requeueing task", "task_id", id, "queue_id", r.queueID, "reason", reason)
+		r.cancel(service.ErrRequeued)
+	}
+	return open
+}
+
+// publishQuota logs and publishes a quota state change, if any.
+func (s *Scheduler) publishQuota(ctx context.Context, c *quotaChange) {
+	if c == nil {
+		return
+	}
+	typ := events.TypeQuotaReset
+	if c.typ == quotaExhausted {
+		typ = events.TypeQuotaExhausted
+	}
+	s.o.Logger.InfoContext(ctx, "scheduler: quota state changed", "state", c.typ, "scope", c.data.Scope, "queue_id", c.data.QueueID, "bytes", c.data.Bytes, "used", c.data.Used)
+	s.publish(typ, c.data.QueueID, c.data)
+}
+
+// plan computes every open queue's candidates and the free global slots
+// (-1 when there is no global cap).
+func (s *Scheduler) plan(ctx context.Context, st *passState, open map[string]bool) ([]queueSlots, int, error) {
 	s.mu.Lock()
 	perQueue := make(map[string]int)
 	admitted := make(map[string]bool, len(s.running))
@@ -222,7 +367,7 @@ func (s *Scheduler) plan(ctx context.Context) ([]queueSlots, int, error) {
 	s.mu.Unlock()
 
 	globalFree := -1
-	if limit := settings.Resolve(settings.Layers{Defaults: defaults, Global: global}).Settings.MaxActiveDownloadsTotal.Value(); limit > 0 {
+	if limit := settings.Resolve(settings.Layers{Defaults: st.defaults, Global: st.global}).Settings.MaxActiveDownloadsTotal.Value(); limit > 0 {
 		globalFree = max(limit-total, 0)
 		if globalFree == 0 {
 			return nil, 0, nil
@@ -230,11 +375,11 @@ func (s *Scheduler) plan(ctx context.Context) ([]queueSlots, int, error) {
 	}
 
 	var plan []queueSlots
-	for _, q := range queues {
-		if q.State != domain.QueueRunning {
+	for _, q := range st.queues {
+		if !open[q.ID] {
 			continue
 		}
-		limit := settings.Resolve(settings.Layers{Defaults: defaults, Global: global, Queue: q.Settings}).Settings.MaxConcurrentDownloads.Value()
+		limit := settings.Resolve(settings.Layers{Defaults: st.defaults, Global: st.global, Queue: q.Settings}).Settings.MaxConcurrentDownloads.Value()
 		free := limit - perQueue[q.ID]
 		if globalFree >= 0 {
 			free = min(free, globalFree)
@@ -329,12 +474,36 @@ func (s *Scheduler) start(runCtx context.Context, queueID, taskID string) {
 		begin := s.o.Clock()
 		err := s.o.Runner.Run(ctx, taskID)
 		cancel(nil) // release the context's resources
+		completedIn := ""
+		if err == nil {
+			completedIn = s.completedQueue(context.WithoutCancel(ctx), taskID)
+		}
 		s.mu.Lock()
 		delete(s.running, taskID)
+		if completedIn != "" {
+			s.completed[completedIn]++
+		}
 		s.mu.Unlock()
 		close(r.done)
 		s.finished(ctx, taskID, err, s.o.Clock().Sub(begin))
 	})
+}
+
+// completedQueue returns the queue of taskID when its run left it
+// completed, else "". Errors are logged: they only affect post-queue
+// actions.
+func (s *Scheduler) completedQueue(ctx context.Context, taskID string) string {
+	t, err := s.o.Store.Tasks().Get(ctx, taskID)
+	if err != nil {
+		if !errors.Is(err, domain.ErrNotFound) {
+			s.o.Logger.WarnContext(ctx, "scheduler: read task after run", "task_id", taskID, "error", err)
+		}
+		return ""
+	}
+	if t.Status != domain.StatusCompleted {
+		return ""
+	}
+	return t.QueueID
 }
 
 // finished logs the outcome of a run and wakes the scheduler so the freed

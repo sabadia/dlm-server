@@ -369,11 +369,10 @@ func (s *QueueService) Reorder(ctx context.Context, id string, position int) (*d
 	return target, nil
 }
 
-// applyLimit sets the queue bucket to the queue's own speed limit.
+// applyLimit sets the queue bucket to the queue's own effective speed
+// limit now (its speed limit, or its active speed profile's).
 func (s *QueueService) applyLimit(q *domain.Queue) {
-	if s.d.Limits != nil {
-		s.d.Limits.SetQueue(q.ID, q.Settings.SpeedLimit.Value())
-	}
+	NewLimitsController(s.d).applyQueue(q, s.d.now())
 }
 
 // moveTo moves items[from] to index to (clamped to the last index),
