@@ -62,11 +62,14 @@ func newOpsFixture(t *testing.T) *opsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	jar := cookies.NewStore(store.Cookies(), cipher, cookies.Options{})
+	tasks := service.NewTaskService(d)
 	cfg := config.Default()
+	cfg.Server.AllowedOrigins = []string{testOrigin}
 	s, err := New(&cfg, Deps{
 		Token: testToken, Version: testVersion,
-		Settings: service.NewSettingsService(d), Queues: service.NewQueueService(d), Tasks: service.NewTaskService(d),
-		Cookies: service.NewCookieService(cookies.NewStore(store.Cookies(), cipher, cookies.Options{})),
+		Settings: service.NewSettingsService(d), Queues: service.NewQueueService(d), Tasks: tasks,
+		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(tasks, jar),
 	})
 	if err != nil {
 		t.Fatal(err)

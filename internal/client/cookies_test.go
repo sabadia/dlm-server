@@ -93,3 +93,29 @@ func TestCookieResponses(t *testing.T) {
 		t.Errorf("import = %+v, %v", res, err)
 	}
 }
+
+func TestCaptureDownload(t *testing.T) {
+	c, rec := newCaptureClient(t)
+	rec.status = 201
+	rec.response = `{"task":` + taskJSON + `,"cookies":{"imported":1,"skipped":0,"errors":["#2: bad"]}}`
+	res, err := c.CaptureDownload(context.Background(), CaptureRequest{
+		URL: "http://x/f", FinalURL: "http://cdn/f", PageURL: "http://x/p", Size: 5, Paused: true,
+		Cookies:         []CaptureCookie{{Domain: "x", Name: "a", Value: "b", HostOnly: true}},
+		MediaCandidates: []MediaCandidate{{URL: "http://x/m.m3u8", Kind: "hls", Variant: "720p"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.method != "POST" || rec.uri != "/v1/capture" || rec.contentType != jsonType {
+		t.Errorf("request = %s %s (%s)", rec.method, rec.uri, rec.contentType)
+	}
+	want := `{"url":"http://x/f","finalUrl":"http://cdn/f","pageUrl":"http://x/p","size":5,"paused":true,
+	  "cookies":[{"domain":"x","name":"a","value":"b","hostOnly":true}],
+	  "mediaCandidates":[{"url":"http://x/m.m3u8","kind":"hls","variant":"720p"}]}`
+	if diff := cmp.Diff(jsonValue(t, want), rec.body); diff != "" {
+		t.Errorf("body (-want +got):\n%s", diff)
+	}
+	if res.Task.ID != "t1" || res.Cookies.Imported != 1 || len(res.Cookies.Errors) != 1 {
+		t.Errorf("result = %+v", res)
+	}
+}

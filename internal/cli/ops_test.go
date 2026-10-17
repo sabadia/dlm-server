@@ -58,10 +58,11 @@ func newE2E(t *testing.T) *e2e {
 		Store: store, Engines: reg, Resolves: resolves,
 		Defaults: func() settings.Settings { return defaults },
 	})
+	jar := cookies.NewStore(store.Cookies(), cipher, cookies.Options{})
 	base := startAPIWith(t, api.Deps{
 		Token: testToken, Version: testSrvVersion,
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
-		Cookies: service.NewCookieService(cookies.NewStore(store.Cookies(), cipher, cookies.Options{})),
+		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar),
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -502,5 +503,53 @@ func TestCookieCommandsEndToEnd(t *testing.T) {
 	}
 	if out = e.ok(t, nil, "cookies", "list", "-o", "json"); strings.TrimSpace(out) != "[]" {
 		t.Errorf("list after clear = %q, want []", out)
+	}
+}
+
+func TestCaptureCommandEndToEnd(t *testing.T) {
+	e := newE2E(t)
+	request := `{
+	  "url": "` + e.url("dl?id=1") + `",
+	  "finalUrl": "` + e.url("final.bin") + `",
+	  "pageUrl": "https://example.com/page",
+	  "cookies": [{"domain": "127.0.0.1", "name": "sid", "value": "s3cret", "hostOnly": true}],
+	  "mediaCandidates": [{"url": "https://example.com/m.m3u8", "kind": "hls"}]
+	}`
+
+	var res client.CaptureResult
+	r := e.run(t, request, "capture", "-r", "-", "--paused", "--header", "X-Test=1", "--filename", "my/file.bin", "--size", "2KiB", "-o", "json")
+	if r.code != ExitOK {
+		t.Fatalf("capture: exit %d\nstdout: %s\nstderr: %s", r.code, r.stdout, r.stderr)
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &res); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, r.stdout)
+	}
+	src := res.Task.Source
+	if res.Task.Status != "paused" || res.Task.Name != "file.bin" || src.OriginalURL != e.url("dl?id=1") || src.CurrentURL != e.url("final.bin") ||
+		src.PageURL != "https://example.com/page" || src.Headers["X-Test"] != "1" || src.Fingerprint.Size != 2048 || res.Cookies.Imported != 1 {
+		t.Fatalf("result = %+v source %+v", res, src)
+	}
+	if out := e.ok(t, nil, "cookies", "list", "--domain", "127.0.0.1"); !strings.Contains(out, "sid") {
+		t.Errorf("captured cookie not stored:\n%s", out)
+	}
+
+	// A URL argument with flags only; the table shows the task.
+	out := e.ok(t, nil, "capture", e.url("plain.bin"), "--page-url", "https://example.com/p", "--referrer", "https://ref.example/")
+	if !strings.Contains(out, "plain.bin") && !strings.Contains(out, e.url("plain.bin")) {
+		t.Errorf("table output:\n%s", out)
+	}
+
+	// Usage and server errors.
+	if r := e.run(t, "not json", "capture", "-r", "-"); r.code != ExitUsage || !strings.Contains(r.stderr, "not a capture request") {
+		t.Errorf("bad request file: exit %d stderr %s", r.code, r.stderr)
+	}
+	if r := e.run(t, `{"url":"x","bogus":1}`, "capture", "-r", "-"); r.code != ExitUsage {
+		t.Errorf("unknown field: exit %d stderr %s", r.code, r.stderr)
+	}
+	if r := e.run(t, "", "capture", e.url("a.bin"), "--size", "lots"); r.code != ExitUsage {
+		t.Errorf("bad size: exit %d stderr %s", r.code, r.stderr)
+	}
+	if r := e.run(t, "", "capture"); r.code != ExitError || !strings.Contains(r.stderr, "Unprocessable") {
+		t.Errorf("nothing to capture: exit %d stderr %s", r.code, r.stderr)
 	}
 }
