@@ -211,9 +211,9 @@ internal/
 
 | Table | Columns |
 |---|---|
-| `settings_global` | single row, JSON settings + version |
-| `queues` | id, name, is_default, position, state, schedule_json, settings_json |
-| `tasks` | id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source_json, resource_json, settings_json, error_code, error_msg, created_at/updated_at/done_at |
+| `settings_global` | single row: JSON settings, updated_at |
+| `queues` | id, name (unique, case-insensitive), is_default, position, state, settings (JSON, schedule lives inside), created_at/updated_at |
+| `tasks` | id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error (JSON TEXT columns), created_at/updated_at/started_at/completed_at |
 | `task_segments` | task_id, idx, start, end, done (writes throttled about every 2 s + on pause/exit) |
 | `engine_state` | task_id, blob (per-engine resume data) |
 | `refresh_history` | per-attempt record of refreshes |

@@ -271,6 +271,9 @@ func TestServeEndToEnd(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, "data", "logs", "dlm.log")); err != nil {
 		t.Errorf("log file not written: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(home, "data", "dlm.db")); err != nil {
+		t.Errorf("database not created: %v", err)
+	}
 }
 
 // waitHealthy polls get-health until the daemon answers, failing early if
