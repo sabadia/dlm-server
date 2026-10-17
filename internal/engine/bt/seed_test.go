@@ -41,7 +41,6 @@ func leech(t *testing.T, sw *swarm, port int) {
 	mi.Announce, mi.AnnounceList = "", nil
 	dir := t.TempDir()
 	cc := testClientConfig(t, dir)
-	cc.DefaultStorage = plainStorage(dir)
 	cl, err := torrent.NewClient(cc)
 	if err != nil {
 		t.Fatal(err)
