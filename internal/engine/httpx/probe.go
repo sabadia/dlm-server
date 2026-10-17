@@ -111,6 +111,10 @@ func Probe(ctx context.Context, client *http.Client, src domain.Source, s settin
 		_ = resp.Body.Close() // error response; only status and headers matter
 		return nil, NewStatusError(resp)
 	}
+	if err := htmlInsteadOfFile(resp, src); err != nil {
+		_ = resp.Body.Close() // an error page, not the file
+		return nil, err
+	}
 	return buildResult(resp, src), nil
 }
 

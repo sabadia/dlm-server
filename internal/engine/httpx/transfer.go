@@ -161,6 +161,13 @@ func (d *Download) openRange(runCtx, ctx context.Context, next, end int64) (*str
 		release()
 		return nil, d.streamErr(ctx, wd, err)
 	}
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
+		if err := htmlInsteadOfFile(resp, d.source()); err != nil {
+			_ = resp.Body.Close() // an error page, not the file
+			release()
+			return nil, err
+		}
+	}
 	size := d.res.Size
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
@@ -187,9 +194,9 @@ func (d *Download) openRange(runCtx, ctx context.Context, next, end int64) (*str
 // rangeIgnored handles a 200 answer to a range request. With
 // onMismatch=restart the first such response is kept (see restartSequential)
 // and ErrRangeIgnored ends the ranged phase; otherwise it is closed and the
-// download fails with a fatal ErrRangeIgnored.
+// download fails with a link-expired ErrRangeIgnored.
 func (d *Download) rangeIgnored(reqCtx context.Context, resp *http.Response, wd *watchdog, stop func() bool, cancel context.CancelFunc) error {
-	err := engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf(
+	err := engine.LinkExpired(fmt.Errorf(
 		"%w (status 200 to a range request): the file changed or the server stopped honouring ranges", ErrRangeIgnored))
 	if d.onMismatch() == settings.MismatchRestart && stop() {
 		body := resp.Body
@@ -233,6 +240,11 @@ func (d *Download) openFull(ctx context.Context) (*stream, error) {
 		cancel()
 		return nil, d.e.classifier.Classify(se)
 	}
+	if err := htmlInsteadOfFile(resp, d.source()); err != nil {
+		_ = resp.Body.Close() // an error page, not the file
+		cancel()
+		return nil, err
+	}
 	if err := d.adoptSize(resp.ContentLength); err != nil {
 		_ = resp.Body.Close() // rejected response
 		cancel()
@@ -245,7 +257,7 @@ func (d *Download) openFull(ctx context.Context) (*stream, error) {
 // adoptSize reconciles the size announced by a full response with the
 // known size. A sequential download always restarts from 0, so a different
 // size only means the file changed: allowed with onMismatch=restart (the
-// new size and fingerprint size are adopted), a fatal ErrSizeMismatch
+// new size and fingerprint size are adopted), a link-expired ErrSizeMismatch
 // otherwise. An unknown size simply becomes the announced one.
 func (d *Download) adoptSize(cl int64) error {
 	if cl < 0 {
@@ -254,7 +266,7 @@ func (d *Download) adoptSize(cl int64) error {
 	cur := d.size.Load()
 	if cur >= 0 && cl != cur {
 		if d.onMismatch() != settings.MismatchRestart {
-			return engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w: got %d, expected %d", ErrSizeMismatch, cl, cur))
+			return engine.LinkExpired(fmt.Errorf("%w: got %d, expected %d", ErrSizeMismatch, cl, cur))
 		}
 		d.updateSource(func(s *domain.Source) { s.Fingerprint.Size = cl })
 	}

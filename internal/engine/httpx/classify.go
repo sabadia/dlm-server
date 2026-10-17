@@ -5,11 +5,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"syscall"
@@ -215,6 +218,38 @@ func IsHTMLInsteadOfFile(resp *http.Response, expectedContentType string) bool {
 		return false
 	}
 	return !isHTML(expectedContentType)
+}
+
+// expectedContentType returns the media type a response for src should have:
+// the fingerprinted (or captured) content type, else the one the URL path's
+// file extension implies. It is "" when there is no positive expectation, in
+// which case a response is never held to be the wrong kind of content.
+func expectedContentType(src domain.Source) string {
+	if ct := src.Fingerprint.ContentType; ct != "" {
+		return ct
+	}
+	raw := src.RedirectURL
+	if raw == "" {
+		raw = src.CurrentURL
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return mime.TypeByExtension(strings.ToLower(path.Ext(u.Path)))
+}
+
+// htmlInsteadOfFile returns a link-expired error when resp is an HTML page
+// although src is expected to be something else, else nil.
+func htmlInsteadOfFile(resp *http.Response, src domain.Source) error {
+	exp := expectedContentType(src)
+	if exp == "" || !IsHTMLInsteadOfFile(resp, exp) {
+		return nil
+	}
+	e := engine.LinkExpired(fmt.Errorf("httpx: the server answered with an HTML page (%q) instead of the file (%s)",
+		resp.Header.Get("Content-Type"), exp))
+	e.StatusCode = resp.StatusCode
+	return e
 }
 
 func isHTML(contentType string) bool {
