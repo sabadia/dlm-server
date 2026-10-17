@@ -56,7 +56,9 @@ this file covers *how* code is written.
 - Tests must be hermetic: no network access beyond `httptest`, temp dirs via
   `t.TempDir()`, configuration via `DLM_HOME`-style injection, never the real
   user directories.
-- `go test -race ./...` must pass. Tests must not depend on wall-clock sleeps
+- `go test -race ./...` must pass. On Apple Silicon also run numeric code under
+  `GOARCH=amd64 go test` (float→int overflow behaves differently on amd64).
+ Tests must not depend on wall-clock sleeps
   for correctness where a fake clock or synchronisation can be used.
 
 ## Intent records (intentline)
