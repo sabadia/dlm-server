@@ -1,0 +1,53 @@
+schema_version: 1
+id: 01a14970-f771-7a5f-8d09-6ec20c1c3b75
+status: draft
+created_at: '2026-10-17T10:38:22Z'
+updated_at: '2026-10-17T10:38:22Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P2.5: hierarchical task/queue/global bandwidth limiter with live limit updates per docs/PLAN.md'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: internal/ratelimit/reader_test.go
+  exit_code: null
+links:
+- path: internal/ratelimit/bucket.go
+  start_line: null
+  end_line: null
+- path: internal/ratelimit/chain.go
+  start_line: null
+  end_line: null
+- path: internal/ratelimit/manager.go
+  start_line: null
+  end_line: null
+- path: internal/ratelimit/reader.go
+  start_line: null
+  end_line: null
+- path: internal/ratelimit/clock.go
+  start_line: null
+  end_line: null
+- path: internal/ratelimit/doc.go
+  start_line: null
+  end_line: null
+- path: go.mod
+  start_line: null
+  end_line: null
+- path: go.sum
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
