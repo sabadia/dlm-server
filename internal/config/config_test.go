@@ -207,3 +207,18 @@ func TestBrowserConfig(t *testing.T) {
 		t.Errorf("BrowserStagingDir = %q, want %q", got, want)
 	}
 }
+
+func TestFFmpegConfig(t *testing.T) {
+	if d := Default().FFmpeg; !d.AutoDownload || d.Path != "" {
+		t.Errorf("default ffmpeg config = %+v", d)
+	}
+	cfg, err := Load(LoadOptions{Environ: func() []string {
+		return []string{"DLM_HOME=" + t.TempDir(), "DLM_FFMPEG_PATH=/opt/ffmpeg", "DLM_FFMPEG_AUTO_DOWNLOAD=false"}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.FFmpeg.Path != "/opt/ffmpeg" || cfg.FFmpeg.AutoDownload {
+		t.Errorf("ffmpeg config from the environment = %+v", cfg.FFmpeg)
+	}
+}

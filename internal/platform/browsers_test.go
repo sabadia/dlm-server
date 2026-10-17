@@ -70,3 +70,16 @@ func cutSlash(s string) (string, string, bool) {
 	}
 	return s, "", false
 }
+
+func TestFFmpegPlatform(t *testing.T) {
+	for in, want := range map[string]string{
+		"linux/amd64": "linux-x64", "linux/arm64": "linux-arm64", "linux/arm": "linux-arm", "linux/386": "linux-ia32",
+		"darwin/arm64": "darwin-arm64", "darwin/amd64": "darwin-x64", "windows/amd64": "win32-x64", "windows/arm64": "win32-x64",
+		"windows/386": "", "freebsd/amd64": "",
+	} {
+		goos, goarch, _ := cutSlash(in)
+		if got := ffmpegPlatform(goos, goarch); got != want {
+			t.Errorf("%s = %q, want %q", in, got, want)
+		}
+	}
+}
