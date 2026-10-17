@@ -108,10 +108,17 @@ func (p Policy) Backoff(attempt int) time.Duration {
 	if r < 0 || math.IsNaN(r) {
 		r = 0
 	}
-	if r > 1 {
-		r = 1
+	if r >= 1 {
+		return d
 	}
-	return time.Duration(float64(d) * r)
+	// float64(d) can round up past MaxInt64 (e.g. float64(MaxInt64) == 2^63)
+	// and float→int conversion of an out-of-range value is
+	// platform-dependent (saturates on arm64, wraps on amd64), so clamp.
+	j := float64(d) * r
+	if j >= float64(d) {
+		return d
+	}
+	return time.Duration(j)
 }
 
 // Delay returns the wait before retry number attempt after err. When
