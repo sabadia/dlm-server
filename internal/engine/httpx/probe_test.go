@@ -79,29 +79,44 @@ func TestProbeStatusAndRange(t *testing.T) {
 			wantSize: int64(len(payload)), wantRange: true, wantBody: payload[:10],
 		},
 		{
-			name: "206 non-zero start is malformed",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
+			name: "206 non-zero start is malformed, re-requested without range",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Range") == "" { // retry without Range gets the whole file
+					w.Header().Set("Content-Length", n)
+					_, _ = io.WriteString(w, payload)
+					return
+				}
 				w.Header().Set("Content-Range", "bytes 5-9/"+n)
 				w.WriteHeader(http.StatusPartialContent)
 				_, _ = io.WriteString(w, payload[5:10])
 			},
-			wantSize: -1, wantRange: false, wantBody: payload[5:10],
+			wantSize: int64(len(payload)), wantRange: false, wantBody: payload,
 		},
 		{
-			name: "206 end beyond total is malformed",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
+			name: "206 end beyond total is malformed, re-requested without range",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Range") == "" { // retry without Range gets the whole file
+					w.Header().Set("Content-Length", n)
+					_, _ = io.WriteString(w, payload)
+					return
+				}
 				w.Header().Set("Content-Range", "bytes 0-99/10")
 				w.WriteHeader(http.StatusPartialContent)
 			},
-			wantSize: -1, wantRange: false,
+			wantSize: int64(len(payload)), wantRange: false, wantBody: payload,
 		},
 		{
-			name: "206 garbage content-range",
-			handler: func(w http.ResponseWriter, _ *http.Request) {
+			name: "206 garbage content-range, re-requested without range",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Range") == "" { // retry without Range gets the whole file
+					w.Header().Set("Content-Length", n)
+					_, _ = io.WriteString(w, payload)
+					return
+				}
 				w.Header().Set("Content-Range", "items 0-1/2")
 				w.WriteHeader(http.StatusPartialContent)
 			},
-			wantSize: -1, wantRange: false,
+			wantSize: int64(len(payload)), wantRange: false, wantBody: payload,
 		},
 		{
 			name: "200 ignoring range",

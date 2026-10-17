@@ -63,8 +63,10 @@ func (r *ProbeResult) Close() error {
 //
 // Response interpretation:
 //   - 206 with a valid "Content-Range: bytes 0-N/TOTAL" means ranges are
-//     supported and Size is TOTAL (-1 for "*"); a malformed Content-Range
-//     means no range support and unknown size;
+//     supported and Size is TOTAL (-1 for "*"); a 206 with a malformed
+//     Content-Range (or one not starting at 0) is closed and the request is
+//     repeated without Range, because its body may not start at offset 0
+//     and the downloader streams the probe body from the beginning;
 //   - any other 2xx means the server ignored the range: Size comes from
 //     Content-Length (-1 when absent) and RangeSupported reflects
 //     "Accept-Ranges: bytes";
@@ -94,6 +96,17 @@ func Probe(ctx context.Context, client *http.Client, src domain.Source, s settin
 		resp, err = doProbe(ctx, client, src, s, false)
 		if err != nil {
 			return nil, err
+		}
+	}
+	if resp.StatusCode == http.StatusPartialContent && !isCompressed(resp.Header) {
+		if _, ok := parseContentRange(resp.Header.Get("Content-Range")); !ok {
+			// The body is a partial range we cannot place; it must not be
+			// streamed as the start of the file.
+			_ = resp.Body.Close() // replaced by the retry
+			resp, err = doProbe(ctx, client, src, s, false)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
