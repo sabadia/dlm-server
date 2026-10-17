@@ -2,6 +2,7 @@ package platform
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -55,18 +56,27 @@ func TestChromeForTestingPlatform(t *testing.T) {
 		"linux/amd64": "linux64", "linux/arm64": "linux-arm64", "darwin/arm64": "mac-arm64", "darwin/amd64": "mac-x64",
 		"windows/amd64": "win64", "windows/arm64": "win64", "windows/386": "win32", "freebsd/amd64": "",
 	} {
-		goos, goarch, _ := cutSlash(in)
+		goos, goarch := cutSlash(in)
 		if got := chromeForTestingPlatform(goos, goarch); got != want {
 			t.Errorf("%s = %q, want %q", in, got, want)
 		}
 	}
 }
 
-func cutSlash(s string) (string, string, bool) {
-	for i := range s {
-		if s[i] == '/' {
-			return s[:i], s[i+1:], true
+func cutSlash(s string) (string, string) {
+	goos, goarch, _ := strings.Cut(s, "/")
+	return goos, goarch
+}
+
+func TestFFmpegPlatform(t *testing.T) {
+	for in, want := range map[string]string{
+		"linux/amd64": "linux-x64", "linux/arm64": "linux-arm64", "linux/arm": "linux-arm", "linux/386": "linux-ia32",
+		"darwin/arm64": "darwin-arm64", "darwin/amd64": "darwin-x64", "windows/amd64": "win32-x64", "windows/arm64": "win32-x64",
+		"windows/386": "", "freebsd/amd64": "",
+	} {
+		goos, goarch := cutSlash(in)
+		if got := ffmpegPlatform(goos, goarch); got != want {
+			t.Errorf("%s = %q, want %q", in, got, want)
 		}
 	}
-	return s, "", false
 }

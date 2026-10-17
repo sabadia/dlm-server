@@ -36,6 +36,8 @@ type Config struct {
 	Log    LogConfig    `koanf:"log"`
 	// Browser configures the internal headless browser.
 	Browser BrowserConfig `koanf:"browser"`
+	// FFmpeg configures the ffmpeg the stream engines use.
+	FFmpeg FFmpegConfig `koanf:"ffmpeg"`
 }
 
 // ServerConfig controls the HTTP listener.
@@ -96,6 +98,17 @@ type BrowserConfig struct {
 	NoSandbox bool `koanf:"no_sandbox"`
 }
 
+// FFmpegConfig configures where dlm gets ffmpeg, which remuxes and merges
+// streams (HLS, DASH). It is run as a separate program.
+type FFmpegConfig struct {
+	// Path is the ffmpeg executable. Empty means: ffmpeg on PATH, else a
+	// downloaded static build.
+	Path string `koanf:"path"`
+	// AutoDownload lets dlm download a pinned static ffmpeg build into the
+	// cache directory when none is installed.
+	AutoDownload bool `koanf:"auto_download"`
+}
+
 // Default returns the configuration used when nothing else is specified.
 func Default() Config {
 	return Config{
@@ -113,6 +126,7 @@ func Default() Config {
 			MaxAgeDays: 30,
 		},
 		Browser: BrowserConfig{AutoDownload: true, MaxBrowsers: 2, IdleTimeout: 2 * time.Minute},
+		FFmpeg:  FFmpegConfig{AutoDownload: true},
 	}
 }
 

@@ -128,3 +128,37 @@ func HeadlessShellExecutable() string {
 	}
 	return "chrome-headless-shell"
 }
+
+// FFmpegPlatform returns the platform name of the static ffmpeg builds dlm
+// downloads ("linux-x64", "darwin-arm64", "win32-x64"…) for the running OS
+// and architecture, or "" when there is none.
+func FFmpegPlatform() string { return ffmpegPlatform(runtime.GOOS, runtime.GOARCH) }
+
+func ffmpegPlatform(goos, goarch string) string {
+	switch goos + "/" + goarch {
+	case "linux/amd64":
+		return "linux-x64"
+	case "linux/arm64":
+		return "linux-arm64"
+	case "linux/arm":
+		return "linux-arm"
+	case "linux/386":
+		return "linux-ia32"
+	case "darwin/arm64":
+		return "darwin-arm64"
+	case "darwin/amd64":
+		return "darwin-x64"
+	case "windows/amd64", "windows/arm64": // arm64 Windows runs the x64 build
+		return "win32-x64"
+	default:
+		return ""
+	}
+}
+
+// FFmpegExecutable returns the file name of ffmpeg on the running OS.
+func FFmpegExecutable() string {
+	if runtime.GOOS == "windows" {
+		return "ffmpeg.exe"
+	}
+	return "ffmpeg"
+}

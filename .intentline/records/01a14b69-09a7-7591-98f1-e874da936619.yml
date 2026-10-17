@@ -1,0 +1,29 @@
+schema_version: 1
+id: 01a14b69-09a7-7591-98f1-e874da936619
+status: draft
+created_at: '2026-10-17T19:48:57Z'
+updated_at: '2026-10-17T19:48:57Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P7.1: ffmpeg locator/auto-downloader'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/ffmpeg/locate.go
+  start_line: null
+  end_line: null
+- path: internal/ffmpeg/fetch.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
