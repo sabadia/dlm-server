@@ -118,7 +118,7 @@ func TestMergeAndSetPaths(t *testing.T) {
 }
 
 func TestDefaultsAreValid(t *testing.T) {
-	d := Defaults("/downloads")
+	d := Defaults(t.TempDir()) // OS-native absolute path
 	if err := d.Validate(LevelDefault); err != nil {
 		t.Fatalf("defaults invalid: %v", err)
 	}
