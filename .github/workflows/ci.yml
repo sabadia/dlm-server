@@ -48,6 +48,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: install ffmpeg (the HLS engine tests run against the real one)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: go vet
         run: go vet ./...
       - name: go test (race)

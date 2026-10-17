@@ -9,6 +9,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/browserx"
+	"github.com/sabadia/dlm-server/internal/engine/hls"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/netclient"
 )
@@ -43,7 +44,7 @@ func newBrowserService(t *testing.T, fb *fakeBackend) (*BrowserService, *svcFixt
 	f := newSvcFixture(t)
 	clients := netclient.New(netclient.Options{})
 	t.Cleanup(func() { _ = clients.Close() })
-	reg, err := engine.NewRegistry(browserx.New(fb), httpx.New(engine.Env{Clients: clients}))
+	reg, err := engine.NewRegistry(browserx.New(fb), hls.New(engine.Env{Clients: clients}, nil), httpx.New(engine.Env{Clients: clients}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,15 +94,29 @@ func TestBrowserDownloadOfAStagedFile(t *testing.T) {
 	}
 }
 
+func TestBrowserDownloadOfAnHLSPlaylist(t *testing.T) {
+	fb := &fakeBackend{cands: map[string]browser.Candidate{
+		browserx.URL("r1", 0): {URL: "https://cdn.example/live/master.m3u8?t=1", Kind: browser.KindHLS, Page: "https://example.com/watch", Size: -1},
+	}}
+	s, _ := newBrowserService(t, fb)
+	task, err := s.Download(t.Context(), BrowserDownloadInput{ResultID: "r1", Index: 0, Paused: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Engine != "hls" || task.Source.CurrentURL != "https://cdn.example/live/master.m3u8?t=1" || task.Source.PageURL != "https://example.com/watch" {
+		t.Errorf("task = %+v", task)
+	}
+}
+
 func TestBrowserDownloadErrors(t *testing.T) {
 	fb := &fakeBackend{cands: map[string]browser.Candidate{
-		browserx.URL("r1", 0): {URL: "https://x/master.m3u8", Kind: browser.KindHLS},
+		browserx.URL("r1", 0): {URL: "https://x/playlist?id=7", Kind: browser.KindHLS},
 		browserx.URL("r1", 1): {URL: "https://x/m.mpd", Kind: browser.KindDASH},
 	}}
 	s, _ := newBrowserService(t, fb)
 	for _, idx := range []int{0, 1} {
 		if _, err := s.Download(t.Context(), BrowserDownloadInput{ResultID: "r1", Index: idx}); !errors.Is(err, domain.ErrInvalidArgument) {
-			t.Errorf("stream candidate %d: %v, want ErrInvalidArgument", idx, err)
+			t.Errorf("candidate %d: %v, want ErrInvalidArgument", idx, err)
 		}
 	}
 	if _, err := s.Download(t.Context(), BrowserDownloadInput{ResultID: "expired", Index: 0}); !errors.Is(err, domain.ErrNotFound) {

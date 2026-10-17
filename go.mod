@@ -28,6 +28,7 @@ require (
 )
 
 require (
+	github.com/Eyevinn/hls-m3u8 v0.6.5 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/fatih/structs v1.1.0 // indirect

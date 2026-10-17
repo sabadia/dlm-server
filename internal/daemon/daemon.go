@@ -20,8 +20,10 @@ import (
 	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/browserx"
+	"github.com/sabadia/dlm-server/internal/engine/hls"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/events"
+	"github.com/sabadia/dlm-server/internal/ffmpeg"
 	"github.com/sabadia/dlm-server/internal/logging"
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/platform"
@@ -97,9 +99,17 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	resolver := browser.NewResolver(browser.ResolverOptions{
 		Manager: browsers, Cookies: jar, Dir: cfg.BrowserStagingDir(), Logger: log,
 	})
+	// ffmpeg is found (or downloaded) the first time a stream needs merging.
+	ffmpegLocator := ffmpeg.NewLocator(ffmpeg.Options{
+		Path: cfg.FFmpeg.Path, CacheDir: cfg.Paths.CacheDir, AutoDownload: cfg.FFmpeg.AutoDownload, Logger: log,
+	})
+	env := engine.Env{Logger: log, Clock: time.Now, Clients: clients}
+	// Specific engines first: the first one that matches a source wins, and
+	// the HTTP engine matches every http(s) URL.
 	engines, err := engine.NewRegistry(
-		browserx.New(resolver), // dlm-browser:// files first: the HTTP engine would not match them anyway
-		httpx.New(engine.Env{Logger: log, Clock: time.Now, Clients: clients}),
+		browserx.New(resolver), // dlm-browser:// files
+		hls.New(env, ffmpegLocator),
+		httpx.New(env),
 	)
 	if err != nil {
 		bus.Close()

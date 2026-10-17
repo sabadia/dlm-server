@@ -1,3 +1,5 @@
+github.com/Eyevinn/hls-m3u8 v0.6.5 h1:qcX5h+kh3RDUQsvWzS0G8NdLquHi6eY3Ap67ywzIjgY=
+github.com/Eyevinn/hls-m3u8 v0.6.5/go.mod h1:9jzVfwCo1+TC6yz+TKDBt9gIshzI9fhVE7M5AhcOSnQ=
 github.com/chromedp/cdproto v0.157.8 h1:Tkq0AjsUlC3Z4sJfHBzV/uAAxnTF/AZyuSTjfV/1gvk=
 github.com/chromedp/cdproto v0.157.8/go.mod h1:h68JaIuFr9o3yiayxEYhBdvaxgYO3shDrPSYhNlyfu0=
 github.com/chromedp/chromedp v0.21.0 h1:nVHgS2LHyhZJ1l3BWRbG2eFIFYiJMnvkJbELbd8WBoQ=
