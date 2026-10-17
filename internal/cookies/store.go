@@ -232,6 +232,37 @@ func (s *Store) ForURL(ctx context.Context, u *url.URL) ([]*domain.Cookie, error
 	return out, nil
 }
 
+// ForSite returns the unexpired cookies of a registrable domain and of its
+// subdomains, values decrypted, for a browser to load. A cookie that cannot
+// be decrypted is skipped and logged.
+func (s *Store) ForSite(ctx context.Context, site string) ([]*domain.Cookie, error) {
+	site = domain.CanonicalDomain(site)
+	if site == "" {
+		return nil, domain.InvalidArgument("cookies: site must not be empty")
+	}
+	recs, err := s.repo.List(ctx, storage.CookieFilter{})
+	if err != nil {
+		return nil, fmt.Errorf("cookies: list: %w", err)
+	}
+	now := s.now()
+	var out []*domain.Cookie
+	for _, r := range recs {
+		if r.Domain != site && !strings.HasSuffix(r.Domain, "."+site) {
+			continue
+		}
+		if metadata(r).IsExpired(now) {
+			continue
+		}
+		c, err := s.decrypt(r)
+		if err != nil {
+			s.log.Warn("cookies: skipping undecryptable cookie", "domain", r.Domain, "name", r.Name, "error", err)
+			continue
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 // SetCookies implements http.CookieJar: it stores the cookies a response
 // from u set. Invalid cookies (domain not matching u, public suffix, Secure
 // over plain HTTP) are dropped; an already expired cookie deletes the stored

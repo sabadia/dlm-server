@@ -341,3 +341,38 @@ func TestRunPurgesExpired(t *testing.T) {
 		t.Errorf("Run = %v, want nil on cancel", err)
 	}
 }
+
+func TestForSite(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	put := func(domainName, name string, exp *time.Time) {
+		t.Helper()
+		if err := f.store.Put(ctx, &domain.Cookie{Domain: domainName, Name: name, Value: "v-" + name, Path: "/", ExpiresAt: exp}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	past := t0.Add(-time.Hour)
+	put("example.com", "root", nil)
+	put("www.example.com", "sub", nil)
+	put("a.b.example.com", "deep", nil)
+	put("example.com", "old", &past)
+	put("notexample.com", "lookalike", nil)
+	put("example.org", "other", nil)
+
+	got, err := f.store.ForSite(ctx, "Example.COM")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, c := range got {
+		names = append(names, c.Name+"="+c.Value)
+	}
+	slices.Sort(names)
+	want := []string{"deep=v-deep", "root=v-root", "sub=v-sub"}
+	if !slices.Equal(names, want) {
+		t.Errorf("ForSite = %v, want %v", names, want)
+	}
+	if _, err := f.store.ForSite(ctx, ""); !errors.Is(err, domain.ErrInvalidArgument) {
+		t.Errorf("ForSite(\"\") = %v, want ErrInvalidArgument", err)
+	}
+}

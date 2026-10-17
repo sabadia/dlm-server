@@ -3,6 +3,8 @@ module github.com/sabadia/dlm-server
 go 1.27
 
 require (
+	github.com/chromedp/cdproto v0.157.8
+	github.com/chromedp/chromedp v0.21.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -26,8 +28,6 @@ require (
 )
 
 require (
-	github.com/chromedp/cdproto v0.157.8 // indirect
-	github.com/chromedp/chromedp v0.21.0 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
