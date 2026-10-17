@@ -287,14 +287,25 @@ func TestResumeKeepsWhatWasDownloaded(t *testing.T) {
 	second := spec(dir, sw.dataURL(), "single.bin", testSettings(), nil)
 	second.EngineState = blob
 	e2 := newEngine(t, testConfig())
-	if _, err := runWithin(t, e2, second, 60*time.Second); err != nil {
+	// A stall is diagnosed while it lasts: once the run is over the torrent
+	// is gone from the client.
+	dumped := make(chan string, 1)
+	go func() {
+		time.Sleep(20 * time.Second)
 		e2.mu.Lock()
 		cl := e2.client
 		e2.mu.Unlock()
+		var buf bytes.Buffer
 		if cl != nil {
-			var buf bytes.Buffer
 			cl.WriteStatus(&buf)
-			t.Logf("client status of the resumed run:\n%s", buf.String())
+		}
+		dumped <- buf.String()
+	}()
+	if _, err := runWithin(t, e2, second, 60*time.Second); err != nil {
+		select {
+		case d := <-dumped:
+			t.Logf("client status 20s into the resumed run:\n%s", d)
+		default:
 		}
 		if ents, derr := os.ReadDir(dir); derr == nil {
 			for _, en := range ents {
