@@ -21,6 +21,16 @@ const (
 	TypeQueueUpdated    Type = "queue.updated"
 	TypeQueueDeleted    Type = "queue.deleted"
 	TypeSettingsUpdated Type = "settings.updated"
+	// TypeQueueCompleted: a queue with an onQueueComplete action ran out
+	// of work; the action runs after its delay unless cancelled.
+	TypeQueueCompleted Type = "queue.completed"
+	// TypeQueueActionCancelled: a pending post-queue action was cancelled
+	// (new work, queue stopped or deleted, settings changed).
+	TypeQueueActionCancelled Type = "queue.action_cancelled"
+	// TypeQuotaExhausted: a global or queue byte quota was used up.
+	TypeQuotaExhausted Type = "quota.exhausted"
+	// TypeQuotaReset: an exhausted quota is available again.
+	TypeQuotaReset Type = "quota.reset"
 )
 
 // Event is a single notification published on the Bus.

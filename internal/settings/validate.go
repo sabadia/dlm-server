@@ -141,7 +141,27 @@ func (s *Settings) Validate(level Level) error {
 		}
 	}
 	if sch, ok := s.Schedule.Get(); ok {
-		v.schedule(sch)
+		v.windows("schedule", sch.Timezone, sch.Windows)
+	}
+	if profiles, ok := s.SpeedProfiles.Get(); ok {
+		for i, p := range profiles {
+			prefix := fmt.Sprintf("speedProfiles[%d]", i)
+			v.windows(prefix, p.Timezone, p.Windows)
+			if p.SpeedLimit < 0 {
+				v.add(prefix+".speedLimit", "must be >= 0 (0 = unlimited)")
+			}
+		}
+	}
+	if q, ok := s.Quota.Get(); ok {
+		if q.Bytes <= 0 {
+			v.add("quota.bytes", "must be > 0")
+		}
+		if q.Period.Std() < MinQuotaPeriod {
+			v.add("quota.period", "must be at least "+MinQuotaPeriod.String())
+		}
+	}
+	if a, ok := s.OnQueueComplete.Get(); ok {
+		v.queueAction(a)
 	}
 
 	if len(v.errs) == 0 {
@@ -197,17 +217,19 @@ func (v *validator) checksum(c Checksum) {
 	}
 }
 
-func (v *validator) schedule(s Schedule) {
-	if s.Timezone != "" {
-		if _, err := time.LoadLocation(s.Timezone); err != nil {
-			v.add("schedule.timezone", fmt.Sprintf("unknown time zone %q", s.Timezone))
+// windows validates a time zone and its windows under prefix (for example
+// "schedule" or "speedProfiles[0]").
+func (v *validator) windows(prefix, timezone string, windows []TimeWindow) {
+	if timezone != "" {
+		if _, err := time.LoadLocation(timezone); err != nil {
+			v.add(prefix+".timezone", fmt.Sprintf("unknown time zone %q", timezone))
 		}
 	}
-	if len(s.Windows) == 0 {
-		v.add("schedule.windows", "at least one window is required")
+	if len(windows) == 0 {
+		v.add(prefix+".windows", "at least one window is required")
 	}
-	for i, w := range s.Windows {
-		p := fmt.Sprintf("schedule.windows[%d]", i)
+	for i, w := range windows {
+		p := fmt.Sprintf("%s.windows[%d]", prefix, i)
 		if len(w.Days) == 0 {
 			v.add(p+".days", "at least one day is required")
 		}
@@ -227,6 +249,28 @@ func (v *validator) schedule(s Schedule) {
 		if errS == nil && errE == nil && start == end {
 			v.add(p, "start and end must differ")
 		}
+	}
+}
+
+func (v *validator) queueAction(a QueueCompleteAction) {
+	const p = "onQueueComplete"
+	switch a.Action {
+	case QueueActionCommand:
+		if a.Command == "" || !filepath.IsAbs(a.Command) {
+			v.add(p+".command", "must be the absolute path of an executable")
+		}
+		if strings.ContainsRune(a.Command, 0) || slices.ContainsFunc(a.Args, func(s string) bool { return strings.ContainsRune(s, 0) }) {
+			v.add(p+".args", "must not contain NUL characters")
+		}
+	case QueueActionNone, QueueActionStop, QueueActionSleep, QueueActionShutdown:
+		if a.Command != "" || len(a.Args) > 0 {
+			v.add(p+".command", fmt.Sprintf("command and args are only allowed for action %q", QueueActionCommand))
+		}
+	default:
+		v.add(p+".action", "must be one of none, stop, sleep, shutdown, command")
+	}
+	if a.Delay < 0 || a.Delay.Std() > MaxQueueActionDelay {
+		v.add(p+".delay", "must be between 0 and "+MaxQueueActionDelay.String()+" (0 = default "+DefaultQueueActionDelay.String()+")")
 	}
 }
 

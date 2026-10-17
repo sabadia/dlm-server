@@ -101,35 +101,19 @@ func (s *SettingsService) EffectiveForQueue(ctx context.Context, queueID string)
 	return effective(ctx, s.d, queueID, settings.Settings{})
 }
 
-// SyncLimits applies the stored global and per-queue speed limits to the
-// rate-limit manager. The daemon calls it once at startup; afterwards the
-// services keep the limits in sync on every change.
+// SyncLimits applies the stored global and per-queue speed limits,
+// including the speed profiles active now, to the rate-limit manager (see
+// LimitsController). The daemon calls it once at startup; afterwards the
+// services re-apply limits on every change and the scheduler re-applies
+// them on every admission pass so profiles switch on time.
 func (s *SettingsService) SyncLimits(ctx context.Context) error {
-	if s.d.Limits == nil {
-		return nil
-	}
-	g, err := s.Global(ctx)
-	if err != nil {
-		return err
-	}
-	queues, err := s.d.Store.Queues().List(ctx)
-	if err != nil {
-		return fmt.Errorf("service: sync limits: %w", err)
-	}
-	s.applyGlobalLimit(g)
-	for _, q := range queues {
-		s.d.Limits.SetQueue(q.ID, q.Settings.SpeedLimit.Value())
-	}
-	return nil
+	return NewLimitsController(s.d).Sync(ctx)
 }
 
-// applyGlobalLimit sets the global bucket to the global layer's speed limit
-// (falling back to the default layer).
+// applyGlobalLimit sets the global bucket to the global layer's effective
+// speed limit now (falling back to the default layer).
 func (s *SettingsService) applyGlobalLimit(g settings.Settings) {
-	if s.d.Limits == nil {
-		return
-	}
-	s.d.Limits.SetGlobal(settings.Merge(s.d.Defaults(), g).SpeedLimit.Value())
+	NewLimitsController(s.d).applyGlobal(g, s.d.now())
 }
 
 // effective resolves the layers for a task of queueID with the given task

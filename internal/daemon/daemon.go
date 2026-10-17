@@ -87,7 +87,9 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	// Construction order: the runner needs the store; the scheduler needs
 	// the runner and the store; the services need the scheduler. One
 	// TaskLocks instance is shared by the runner and every service.
+	// The runner reports downloaded bytes to the scheduler's quota meter.
 	locks := service.NewTaskLocks()
+	quotas := scheduler.NewQuotaMeter(time.Now)
 	runner := service.NewRunner(service.RunnerDeps{
 		Store:     store,
 		Engines:   engines,
@@ -96,14 +98,24 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Defaults:  defaults,
 		Logger:    log,
 		TaskLocks: locks,
+		Bytes:     quotas,
 	})
+	var services *Services // assigned below, before the scheduler runs
 	sched := scheduler.New(scheduler.Options{
 		Store:    store,
 		Runner:   runner,
 		Defaults: defaults,
 		Logger:   log,
+		Bus:      bus,
+		Limits:   service.NewLimitsController(service.Deps{Store: store, Limits: limits, Defaults: defaults}),
+		Quotas:   quotas,
+		Actions:  scheduler.SystemActions{},
+		StopQueue: func(ctx context.Context, queueID string) error {
+			_, err := services.Queues.Stop(ctx, queueID)
+			return err
+		},
 	})
-	services := NewServices(service.Deps{
+	services = NewServices(service.Deps{
 		Store:     store,
 		Engines:   engines,
 		Resolves:  resolves,
