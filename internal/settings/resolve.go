@@ -51,6 +51,12 @@ func Resolve(l Layers) Effective {
 			}
 		}
 	}
+	// Proxy rules are a global default: an explicit queue or task proxy
+	// overrides them entirely.
+	if src, ok := eff.Sources["proxy"]; ok && (src == LevelQueue || src == LevelTask) {
+		eff.Settings.ProxyRules = None[[]ProxyRule]()
+		delete(eff.Sources, "proxyRules")
+	}
 	return eff
 }
 

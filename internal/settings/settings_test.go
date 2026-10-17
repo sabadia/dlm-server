@@ -247,3 +247,62 @@ func TestEveryLeafFieldIsCollected(t *testing.T) {
 		}
 	}
 }
+
+func TestProxyRules(t *testing.T) {
+	video := Proxy{Mode: ProxyCustom, URL: "socks5h://127.0.0.1:1080"}
+	global := Settings{
+		Proxy: Some(Proxy{Mode: ProxySystem}),
+		ProxyRules: Some([]ProxyRule{
+			{Hosts: []string{"*.corp.local", "10.*"}, Proxy: Proxy{Mode: ProxyNone}},
+			{Hosts: []string{"*.Video-Site.com"}, Proxy: video},
+		}),
+	}
+	if err := global.Validate(LevelGlobal); err != nil {
+		t.Fatalf("valid rules rejected: %v", err)
+	}
+	cases := map[string]ProxyMode{
+		"a.corp.local":       ProxyNone,
+		"a.b.corp.local":     ProxyNone, // * spans dots
+		"10.1.2.3":           ProxyNone,
+		"cdn.video-site.com": ProxyCustom, // case-insensitive
+		"example.com":        ProxySystem,
+	}
+	for host, want := range cases {
+		if got := global.ProxyFor(host).Mode; got != want {
+			t.Errorf("ProxyFor(%s) = %s, want %s", host, got, want)
+		}
+	}
+
+	// An explicit queue or task proxy disables the global rules.
+	for _, layers := range []Layers{
+		{Global: global, Queue: Settings{Proxy: Some(Proxy{Mode: ProxyNone})}},
+		{Global: global, Task: Settings{Proxy: Some(Proxy{Mode: ProxyNone})}},
+	} {
+		eff := Resolve(layers)
+		if eff.Settings.ProxyRules.IsSet() {
+			t.Error("rules must not apply when queue/task sets proxy")
+		}
+		if _, ok := eff.Sources["proxyRules"]; ok {
+			t.Error("proxyRules source must be removed")
+		}
+	}
+	if eff := Resolve(Layers{Global: global}); !eff.Settings.ProxyRules.IsSet() {
+		t.Error("rules must apply when only global sets proxy")
+	}
+
+	bad := []Settings{
+		{ProxyRules: Some([]ProxyRule{{Proxy: Proxy{Mode: ProxyNone}}})},                             // no hosts
+		{ProxyRules: Some([]ProxyRule{{Hosts: []string{"[bad"}, Proxy: Proxy{Mode: ProxyNone}}})},    // malformed glob
+		{ProxyRules: Some([]ProxyRule{{Hosts: []string{"a.com/x"}, Proxy: Proxy{Mode: ProxyNone}}})}, // path char
+		{ProxyRules: Some([]ProxyRule{{Hosts: []string{"a.com"}, Proxy: Proxy{Mode: ProxyCustom}}})}, // custom w/o url
+	}
+	for i, s := range bad {
+		var ve *ValidationError
+		if err := s.Validate(LevelGlobal); !errors.As(err, &ve) || !strings.HasPrefix(ve.Fields[0].Path, "proxyRules[0]") {
+			t.Errorf("bad[%d]: err = %v", i, err)
+		}
+	}
+	if err := global.Validate(LevelQueue); err == nil {
+		t.Error("proxyRules must be global-only")
+	}
+}

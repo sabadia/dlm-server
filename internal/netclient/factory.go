@@ -194,6 +194,9 @@ func (f *Factory) Client(s settings.Settings) (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	if rules := s.ProxyRules.Value(); len(rules) > 0 {
+		rt = &ruleTransport{factory: f, settings: s, tlsVerify: cfg.TLSVerify}
+	}
 	return &http.Client{
 		Transport:     newHeaderTransport(rt, s.UserAgent.OrElse(settings.DefaultUserAgent), s.Headers.Value(), f.log),
 		CheckRedirect: checkRedirect,
