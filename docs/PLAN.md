@@ -253,7 +253,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P2.1 Engine interface + registry; resolve cache
 - [ ] P2.2 HTTP probe (keeps the response open), filename detection, If-Range validator capture
 - [ ] P2.3 Segmented downloader: slow-start, work stealing, strict range validation, sequential fallback, `.part` + rename, preallocation, disk precheck
-- [ ] P2.4 Retry policy (exponential backoff + jitter, Retry-After) and error classification (transient / fatal / link-expired)
+- [x] P2.4 Retry policy (exponential backoff + jitter, Retry-After) and error classification (transient / fatal / link-expired)
 - [ ] P2.5 Hierarchical rate limiter wired into the engines
 - [ ] P2.6 Proxy (global/per-site/per-task, system), custom headers/UA/TLS options, optional TLS impersonation fallback
 - [ ] P2.7 Resume persistence (throttled segment writes) + startup auto-resume
