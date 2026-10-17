@@ -240,7 +240,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P0.4 Create issues for every task below and attach them to the board
 
 ### Phase 1: Foundations
-- [ ] P1.1 Boot config (koanf), data/config/cache dirs, slog logging with rotation
+- [x] P1.1 Boot config (koanf), data/config/cache dirs, slog logging with rotation
 - [ ] P1.2 Domain models + status FSM + typed errors (with unit tests)
 - [ ] P1.3 `settings` package: `Optional[T]`, layered resolve + provenance, per-level validation
 - [ ] P1.4 SQLite storage: goose migrations, sqlc queries, repositories for settings/queues/tasks/segments
