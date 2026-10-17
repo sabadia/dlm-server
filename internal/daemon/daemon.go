@@ -149,6 +149,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Logger: log, Version: version, Token: token, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
 		Cookies: service.NewCookieService(jar),
+		Capture: service.NewCaptureService(services.Tasks, jar),
 	})
 	if err != nil {
 		bus.Close()

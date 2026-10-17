@@ -30,6 +30,21 @@ func (s *Store) Import(ctx context.Context, format Format, data []byte) (ImportR
 	if err != nil {
 		return ImportResult{}, err
 	}
+	return s.ImportParsed(ctx, parsed)
+}
+
+// ImportCookies stores already decoded cookies like Import does; positions in
+// the result's errors are 1-based indexes into cs.
+func (s *Store) ImportCookies(ctx context.Context, cs []*domain.Cookie) (ImportResult, error) {
+	parsed := make([]Parsed, len(cs))
+	for i, c := range cs {
+		parsed[i] = Parsed{Index: i + 1, Cookie: c}
+	}
+	return s.ImportParsed(ctx, parsed)
+}
+
+// ImportParsed stores the cookies of a Decode result; see Import.
+func (s *Store) ImportParsed(ctx context.Context, parsed []Parsed) (ImportResult, error) {
 	now := s.now()
 	res := ImportResult{Errors: []string{}}
 	for _, p := range parsed {

@@ -1,0 +1,38 @@
+schema_version: 1
+id: 01a14afd-b97a-733b-9073-ce9cd3b8e776
+status: draft
+created_at: '2026-10-17T17:51:44Z'
+updated_at: '2026-10-17T17:51:44Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P4.2: /v1/capture + CaptureService (creates the task with the full Source context)'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: TestCaptureBuildsFullSource
+  exit_code: null
+links:
+- path: internal/service/capture.go
+  start_line: null
+  end_line: null
+- path: internal/api/capture.go
+  start_line: null
+  end_line: null
+- path: internal/cli/capture.go
+  start_line: null
+  end_line: null
+- path: internal/client/capture.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
