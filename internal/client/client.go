@@ -112,25 +112,18 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		}
 		body = bytes.NewReader(data)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	req, err := c.newRequest(ctx, method, path, body)
 	if err != nil {
-		return fmt.Errorf("client: build %s %s request: %w", method, path, err)
+		return err
 	}
 	req.Header.Set("Accept", "application/json, application/problem+json")
-	req.Header.Set("User-Agent", c.userAgent)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		if isDialFailure(err) {
-			return fmt.Errorf("%w at %s (start it with `dlm serve`): %w", ErrDaemonUnreachable, c.baseURL, err)
-		}
-		return fmt.Errorf("client: %s %s: %w", method, path, err)
+		return c.transportError(method, path, err)
 	}
 	defer func() {
 		// Drain so the connection can be reused; errors here are irrelevant
@@ -149,6 +142,29 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		return fmt.Errorf("client: decode %s %s response: %w", method, path, err)
 	}
 	return nil
+}
+
+// newRequest builds a request to path carrying the User-Agent and, if set,
+// the bearer token.
+func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return nil, fmt.Errorf("client: build %s %s request: %w", method, path, err)
+	}
+	req.Header.Set("User-Agent", c.userAgent)
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	return req, nil
+}
+
+// transportError wraps an http.Client.Do error, mapping connection failures
+// to ErrDaemonUnreachable.
+func (c *Client) transportError(method, path string, err error) error {
+	if isDialFailure(err) {
+		return fmt.Errorf("%w at %s (start it with `dlm serve`): %w", ErrDaemonUnreachable, c.baseURL, err)
+	}
+	return fmt.Errorf("client: %s %s: %w", method, path, err)
 }
 
 // isDialFailure reports whether err is a failure to establish the TCP

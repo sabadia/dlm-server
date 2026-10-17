@@ -470,6 +470,23 @@ func TestCloseSemantics(t *testing.T) {
 	}
 }
 
+func TestLastID(t *testing.T) {
+	b := newTestBus(Options{})
+	defer b.Close()
+	if got := b.LastID(); got != 0 {
+		t.Fatalf("LastID on empty bus = %d, want 0", got)
+	}
+	b.Publish(Event{Type: TypeTaskCreated, TaskID: "a"})
+	b.Publish(Event{Type: TypeTaskProgress, TaskID: "a"}) // pending, no ID yet
+	if got := b.LastID(); got != 1 {
+		t.Fatalf("LastID with pending progress = %d, want 1", got)
+	}
+	b.flush()
+	if got := b.LastID(); got != 2 {
+		t.Fatalf("LastID after flush = %d, want 2", got)
+	}
+}
+
 func TestConcurrentPublishersAndSubscribers(t *testing.T) {
 	b := newTestBus(Options{SubscriberBuffer: 16, ReplaySize: 64})
 	ctx, cancel := context.WithCancel(context.Background())

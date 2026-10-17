@@ -124,6 +124,7 @@ func newApp(version string, opts ...Option) *app {
 		a.newHealthCommand(),
 		a.newVersionCommand(),
 		a.newTokenCommand(),
+		a.newWatchCommand(),
 	)
 	a.root = root
 	return a
