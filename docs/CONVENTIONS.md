@@ -7,6 +7,9 @@ this file covers *how* code is written.
 - Dependency direction: `domain` / `settings` (pure, no I/O) ← `service` ← adapters
   (`api`, `cli`, `mcp`, `storage`, `engine/*`). Adapters never import each other,
   except `cli` → `client`.
+- `internal/daemon` is the only composition root: it may import everything and
+  wires dependencies together. `cli` may import `daemon` (for `dlm serve`) but
+  no other server-side package; tests are exempt.
 - No package-level mutable state and no `init()` side effects. Pass dependencies
   explicitly through constructors (`NewX(deps...)`).
 - OS-specific code lives only in `internal/platform`. Use `filepath`, never

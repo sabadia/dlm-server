@@ -95,3 +95,21 @@ func TestLoadOrCreateTokenRejectsEmptyFile(t *testing.T) {
 		}
 	}
 }
+
+func TestReadTokenNeverCreates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "token")
+	if _, err := ReadToken(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ReadToken(missing) error = %v, want fs.ErrNotExist", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ReadToken created the token file (stat err = %v)", err)
+	}
+	want, err := LoadOrCreateToken(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadToken(path)
+	if err != nil || got != want {
+		t.Fatalf("ReadToken = %q, %v; want %q", got, err, want)
+	}
+}

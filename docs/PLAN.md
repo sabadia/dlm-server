@@ -86,7 +86,8 @@ internal/
   postproc/             checksum, extract, move-by-category, run-command, AV scan, webhook
   api/                  huma operations, auth middleware, SSE, problem details
   client/               Go REST client (shared by CLI and tests)
-  cli/                  cobra commands (thin; call client)
+  cli/                  cobra commands (thin; call client; `serve` delegates to daemon)
+  daemon/               composition root: wires config, logging, storage, bus, services, API; runs until shutdown
   mcp/                  MCP tools mapped onto services
   nativehost/           Native Messaging shim + manifest installer (Chrome/Chromium/Edge/Brave/Firefox × OS)
   platform/             ONLY place for build-tagged OS code: prealloc, disk-free, sleep/shutdown, paths
@@ -246,7 +247,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [ ] P1.4 SQLite storage: goose migrations, sqlc queries, repositories for settings/queues/tasks/segments
 - [x] P1.5 Event bus (multi-subscriber, non-blocking, coalescing)
 - [x] P1.6 API server skeleton: huma, auth token, CORS/origin check, problem details, `/v1/health`, `/openapi.json`, graceful shutdown
-- [ ] P1.7 CLI skeleton: cobra root, `serve`, client package, output formats, parity-test harness
+- [x] P1.7 CLI skeleton: cobra root, `serve`, client package, output formats, parity-test harness
 
 ### Phase 2: HTTP engine
 - [ ] P2.1 Engine interface + registry; resolve cache

@@ -2,15 +2,20 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/sabadia/dlm-server/internal/cli"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
 func main() {
-	if _, err := fmt.Fprintf(os.Stdout, "dlm %s\n", version); err != nil {
-		os.Exit(1)
-	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := cli.Execute(ctx, version)
+	stop()
+	os.Exit(code)
 }

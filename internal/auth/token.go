@@ -31,19 +31,26 @@ var ErrEmptyToken = errors.New("auth: token file is empty")
 // inherits the ACL of its directory, which for the per-user config directory
 // is owner-only by default.
 func LoadOrCreateToken(path string) (string, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path comes from the boot configuration, not from a request
-	switch {
-	case err == nil:
-		token := strings.TrimSpace(string(data))
-		if token == "" {
-			return "", fmt.Errorf("%w: %q", ErrEmptyToken, path)
-		}
-		return token, nil
-	case errors.Is(err, fs.ErrNotExist):
+	token, err := ReadToken(path)
+	if errors.Is(err, fs.ErrNotExist) {
 		return createToken(path)
-	default:
+	}
+	return token, err
+}
+
+// ReadToken returns the bearer token stored at path without ever creating
+// it; clients use it so that only the daemon generates the token. A missing
+// file yields an error matching fs.ErrNotExist, an empty one ErrEmptyToken.
+func ReadToken(path string) (string, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // path comes from the boot configuration, not from a request
+	if err != nil {
 		return "", fmt.Errorf("auth: read token file %q: %w", path, err)
 	}
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return "", fmt.Errorf("%w: %q", ErrEmptyToken, path)
+	}
+	return token, nil
 }
 
 func createToken(path string) (string, error) {
