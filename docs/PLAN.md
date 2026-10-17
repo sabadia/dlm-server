@@ -281,7 +281,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 
 ### Phase 6: Internal browser
 - [x] P6.1 Browser discovery + chrome-headless-shell downloader, pool, profiles
-- [ ] P6.2 Network sniffer (media/download/blob candidates), cookie sync both ways
+- [x] P6.2 Network sniffer (media/download/blob candidates), cookie sync both ways
 - [ ] P6.3 Browser resolver engine + the `page-reload` refresh strategy; `/v1/browser/*` + CLI (resolve page, list candidates)
 
 ### Phase 7: Streams
