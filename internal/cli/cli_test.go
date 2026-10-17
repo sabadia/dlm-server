@@ -28,9 +28,15 @@ const (
 // base URL. The server stops when the test ends.
 func startAPI(t *testing.T) string {
 	t.Helper()
+	return startAPIWith(t, api.Deps{Token: testToken, Version: testSrvVersion})
+}
+
+// startAPIWith is startAPI with custom dependencies (e.g. an event bus).
+func startAPIWith(t *testing.T, deps api.Deps) string {
+	t.Helper()
 	cfg := config.Default()
 	cfg.Home = t.TempDir()
-	srv, err := daemon.BuildServer(&cfg, api.Deps{Token: testToken, Version: testSrvVersion})
+	srv, err := daemon.BuildServer(&cfg, deps)
 	if err != nil {
 		t.Fatal(err)
 	}

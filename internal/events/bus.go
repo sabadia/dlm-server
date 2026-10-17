@@ -209,6 +209,15 @@ func (b *Bus) Since(afterID uint64, f Filter) (events []Event, complete bool) {
 	return events, afterID >= b.evicted
 }
 
+// LastID returns the ID of the most recently delivered event (0 when none
+// has been delivered yet). Coalesced progress events still pending a flush
+// have no ID yet and are not counted.
+func (b *Bus) LastID() uint64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.lastID
+}
+
 // flush delivers all pending coalesced progress events.
 func (b *Bus) flush() {
 	b.mu.Lock()

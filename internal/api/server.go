@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/events"
 )
 
 const (
@@ -39,6 +40,16 @@ type Deps struct {
 	Version string
 	// Token is the bearer token clients must present. It must not be empty.
 	Token string
+	// Bus is the event bus streamed by stream-events. When nil the operation
+	// is still registered (OpenAPI document, CLI parity) but answers 503.
+	Bus *events.Bus
+	// BootID identifies this daemon process in SSE event IDs
+	// ("<bootID>-<seq>"). It must be alphanumeric; empty generates a random
+	// one, which is what the daemon wants (one per process).
+	BootID string
+	// EventsHeartbeat is the interval between SSE keep-alive comments. Zero
+	// selects DefaultEventsHeartbeat.
+	EventsHeartbeat time.Duration
 }
 
 // Server is the REST API server.
@@ -50,6 +61,10 @@ type Server struct {
 	mux     *http.ServeMux
 	api     huma.API
 	handler http.Handler
+
+	bus       *events.Bus
+	bootID    string
+	heartbeat time.Duration
 
 	mu     sync.RWMutex
 	public map[string]struct{} // mux patterns ("GET /v1/health") that need no token
@@ -71,6 +86,19 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	if version == "" {
 		version = "dev"
 	}
+	bootID := deps.BootID
+	if bootID == "" {
+		var err error
+		if bootID, err = newBootID(); err != nil {
+			return nil, err
+		}
+	} else if !validBootID(bootID) {
+		return nil, fmt.Errorf("api: invalid boot id %q: must be 1-64 ASCII letters or digits", bootID)
+	}
+	heartbeat := deps.EventsHeartbeat
+	if heartbeat <= 0 {
+		heartbeat = DefaultEventsHeartbeat
+	}
 
 	s := &Server{
 		cfg:     cfg,
@@ -79,6 +107,10 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		token:   []byte(deps.Token),
 		mux:     http.NewServeMux(),
 		public:  make(map[string]struct{}),
+
+		bus:       deps.Bus,
+		bootID:    bootID,
+		heartbeat: heartbeat,
 	}
 	s.api = humago.New(s.mux, humaConfig(version))
 
@@ -89,6 +121,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.handler = handler
 
 	s.registerHealth()
+	s.registerEvents()
 	return s, nil
 }
 

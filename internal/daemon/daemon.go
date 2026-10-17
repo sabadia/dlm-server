@@ -109,7 +109,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		return fmt.Errorf("daemon: %w", err)
 	}
 	_ = services // the API registers its task, queue and settings operations on them in P3.4
-	srv, err := BuildServer(cfg, api.Deps{Logger: log, Version: version, Token: token})
+	srv, err := BuildServer(cfg, api.Deps{Logger: log, Version: version, Token: token, Bus: bus})
 	if err != nil {
 		bus.Close()
 		return err

@@ -264,7 +264,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [ ] P3.2 Scheduler: per-queue + global slots, priority, correct pause/remove semantics; drives `service.Runner` and auto-starts queued tasks at startup (incl. recovered ones)
 - [ ] P3.3 Queue time windows, speed profiles, quotas, post-queue actions (platform sleep/shutdown)
 - [ ] P3.4 REST + CLI for tasks (resolve, create, batch, list/filter/paginate, get, patch, pause/resume/delete, bulk ops), queues and settings (global/queue/task + effective)
-- [ ] P3.5 SSE event stream + `dlm watch`
+- [x] P3.5 SSE event stream + `dlm watch`
 
 ### Phase 4: Cookies & extension contract
 - [ ] P4.1 Cookie store (encrypted, public suffix), jar used by engines; import/export endpoints + CLI
