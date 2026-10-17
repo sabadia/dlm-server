@@ -9,6 +9,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/browserx"
+	"github.com/sabadia/dlm-server/internal/engine/dash"
 	"github.com/sabadia/dlm-server/internal/engine/hls"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/netclient"
@@ -44,7 +45,7 @@ func newBrowserService(t *testing.T, fb *fakeBackend) (*BrowserService, *svcFixt
 	f := newSvcFixture(t)
 	clients := netclient.New(netclient.Options{})
 	t.Cleanup(func() { _ = clients.Close() })
-	reg, err := engine.NewRegistry(browserx.New(fb), hls.New(engine.Env{Clients: clients}, nil), httpx.New(engine.Env{Clients: clients}))
+	reg, err := engine.NewRegistry(browserx.New(fb), hls.New(engine.Env{Clients: clients}, nil), dash.New(engine.Env{Clients: clients}, nil), httpx.New(engine.Env{Clients: clients}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,10 +109,24 @@ func TestBrowserDownloadOfAnHLSPlaylist(t *testing.T) {
 	}
 }
 
+func TestBrowserDownloadOfADASHManifest(t *testing.T) {
+	fb := &fakeBackend{cands: map[string]browser.Candidate{
+		browserx.URL("r1", 0): {URL: "https://cdn.example/v/manifest.mpd?t=1", Kind: browser.KindDASH, Page: "https://example.com/watch", Size: -1},
+	}}
+	s, _ := newBrowserService(t, fb)
+	task, err := s.Download(t.Context(), BrowserDownloadInput{ResultID: "r1", Index: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Engine != "dash" || task.Source.CurrentURL != "https://cdn.example/v/manifest.mpd?t=1" {
+		t.Errorf("task = %+v", task)
+	}
+}
+
 func TestBrowserDownloadErrors(t *testing.T) {
 	fb := &fakeBackend{cands: map[string]browser.Candidate{
 		browserx.URL("r1", 0): {URL: "https://x/playlist?id=7", Kind: browser.KindHLS},
-		browserx.URL("r1", 1): {URL: "https://x/m.mpd", Kind: browser.KindDASH},
+		browserx.URL("r1", 1): {URL: "https://x/manifest?id=7", Kind: browser.KindDASH},
 	}}
 	s, _ := newBrowserService(t, fb)
 	for _, idx := range []int{0, 1} {

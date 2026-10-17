@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -13,49 +12,8 @@ import (
 	"github.com/Eyevinn/hls-m3u8/m3u8"
 
 	"github.com/sabadia/dlm-server/internal/domain"
+	"github.com/sabadia/dlm-server/internal/engine/segmented"
 )
-
-// byteRange selects part of a resource.
-type byteRange struct{ offset, length int64 }
-
-// keyInfo is the encryption of a segment.
-type keyInfo struct {
-	method string // "AES-128"
-	url    string // absolute key URL
-	iv     []byte // 16 bytes; nil means derive from the segment's sequence number
-}
-
-// fileRef is an init section or a segment resource: a URL and an optional byte
-// range.
-type fileRef struct {
-	url string
-	rng *byteRange
-}
-
-type segment struct {
-	seq      uint64
-	ref      fileRef
-	duration float64
-	key      *keyInfo // nil when clear
-	init     *fileRef // fMP4 initialisation section, nil for MPEG-TS
-	disc     bool
-}
-
-// media is a parsed media playlist with absolute URLs.
-type media struct {
-	segments []segment
-	closed   bool // ENDLIST present: a finished stream
-	target   float64
-	seq      uint64 // media sequence of the first segment
-}
-
-func (m *media) duration() float64 {
-	var d float64
-	for _, s := range m.segments {
-		d += s.duration
-	}
-	return d
-}
 
 // variant is one stream of a master playlist.
 type variant struct {
@@ -85,7 +43,7 @@ type master struct {
 // playlist is what parse found: exactly one of master and media is set.
 type playlist struct {
 	master *master
-	media  *media
+	media  *segmented.Media
 }
 
 var (
@@ -171,10 +129,10 @@ func parseResolution(s string) (w, h int) {
 // absolute, byte ranges without an offset continue the previous range of the
 // same resource, and the key and init section in force are attached to every
 // segment.
-func toMedia(mp *m3u8.MediaPlaylist, base *url.URL) (*media, error) {
-	m := &media{closed: mp.Closed, target: float64(mp.TargetDuration), seq: mp.SeqNo}
+func toMedia(mp *m3u8.MediaPlaylist, base *url.URL) (*segmented.Media, error) {
+	m := &segmented.Media{Closed: mp.Closed, Target: float64(mp.TargetDuration)}
 	curKey := currentKey(mp.Keys, base)
-	var curMap *fileRef
+	var curMap *segmented.FileRef
 	if mp.Map != nil {
 		curMap = mapRef(mp.Map, base)
 	}
@@ -189,30 +147,30 @@ func toMedia(mp *m3u8.MediaPlaylist, base *url.URL) (*media, error) {
 		if s.Map != nil {
 			curMap = mapRef(s.Map, base)
 		}
-		if curKey != nil && curKey.method != "AES-128" {
-			return nil, fmt.Errorf("%w (%s)", errSampleAES, curKey.method)
+		if curKey != nil && curKey.Method != "AES-128" {
+			return nil, fmt.Errorf("%w (%s)", errSampleAES, curKey.Method)
 		}
-		seg := segment{seq: s.SeqId, duration: s.Duration, key: curKey, init: curMap, disc: s.Discontinuity}
-		seg.ref.url = resolve(base, s.URI)
+		seg := segmented.Segment{Seq: s.SeqId, Duration: s.Duration, Key: curKey, Init: curMap, Disc: s.Discontinuity}
+		seg.Ref.URL = resolve(base, s.URI)
 		if s.Limit > 0 {
 			off := s.Offset
 			if off == 0 {
-				if end, ok := prevEnd[seg.ref.url]; ok {
+				if end, ok := prevEnd[seg.Ref.URL]; ok {
 					off = end // "@offset" omitted: the range follows the previous one
 				}
 			}
-			seg.ref.rng = &byteRange{offset: off, length: s.Limit}
-			prevEnd[seg.ref.url] = off + s.Limit
+			seg.Ref.Range = &segmented.ByteRange{Offset: off, Length: s.Limit}
+			prevEnd[seg.Ref.URL] = off + s.Limit
 		}
-		m.segments = append(m.segments, seg)
+		m.Segments = append(m.Segments, seg)
 	}
 	return m, nil
 }
 
-func mapRef(mp *m3u8.Map, base *url.URL) *fileRef {
-	r := &fileRef{url: resolve(base, mp.URI)}
+func mapRef(mp *m3u8.Map, base *url.URL) *segmented.FileRef {
+	r := &segmented.FileRef{URL: resolve(base, mp.URI)}
 	if mp.Limit > 0 {
-		r.rng = &byteRange{offset: mp.Offset, length: mp.Limit}
+		r.Range = &segmented.ByteRange{Offset: mp.Offset, Length: mp.Limit}
 	}
 	return r
 }
@@ -220,7 +178,7 @@ func mapRef(mp *m3u8.Map, base *url.URL) *fileRef {
 // currentKey picks the identity key of a list of EXT-X-KEY tags; nil for
 // METHOD=NONE or no key. A method other than AES-128 is kept so the caller can
 // reject it.
-func currentKey(keys []m3u8.Key, base *url.URL) *keyInfo {
+func currentKey(keys []m3u8.Key, base *url.URL) *segmented.Key {
 	for _, k := range keys {
 		if kf := strings.ToLower(k.Keyformat); kf != "" && kf != "identity" {
 			continue
@@ -229,9 +187,9 @@ func currentKey(keys []m3u8.Key, base *url.URL) *keyInfo {
 		if method == "" || method == "NONE" {
 			return nil
 		}
-		ki := &keyInfo{method: method, url: resolve(base, k.URI)}
+		ki := &segmented.Key{Method: method, URL: resolve(base, k.URI)}
 		if iv, err := parseIV(k.IV); err == nil {
-			ki.iv = iv
+			ki.IV = iv
 		}
 		return ki
 	}
@@ -347,13 +305,4 @@ func pickAudio(m *master, v variant) (rendition, bool) {
 		return *first, true
 	}
 	return rendition{}, false
-}
-
-// estimateSize guesses the output size from the bandwidth and the duration;
-// it is only used to show progress.
-func estimateSize(bandwidth int64, seconds float64) int64 {
-	if bandwidth <= 0 || seconds <= 0 || math.IsInf(seconds, 0) {
-		return -1
-	}
-	return int64(float64(bandwidth) / 8 * seconds)
 }

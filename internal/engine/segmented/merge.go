@@ -1,4 +1,4 @@
-package hls
+package segmented
 
 import (
 	"context"
@@ -34,12 +34,12 @@ func containerFor(path string) (format string, faststart bool) {
 
 // needsFFmpeg reports whether the result cannot be produced by plain
 // concatenation: only a single MPEG-TS track saved as .ts can.
-func (d *Download) needsFFmpeg(p *plan) bool {
-	if len(p.tracks) != 1 || !strings.EqualFold(filepath.Ext(d.spec.Path), ".ts") {
+func (d *Download) needsFFmpeg(p *Plan) bool {
+	if len(p.Tracks) != 1 || !strings.EqualFold(filepath.Ext(d.spec.Path), ".ts") {
 		return true
 	}
-	for _, s := range p.tracks[0].snapshot() {
-		if s.init != nil {
+	for _, s := range p.Tracks[0].snapshot() {
+		if s.Init != nil {
 			return true
 		}
 	}
@@ -47,10 +47,10 @@ func (d *Download) needsFFmpeg(p *plan) bool {
 }
 
 func (d *Download) locateFFmpeg(ctx context.Context) (string, error) {
-	if d.e.ff == nil {
+	if d.r.ff == nil {
 		return "", engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w: no ffmpeg is configured", ErrFFmpeg))
 	}
-	b, err := d.e.ff.Locate(ctx)
+	b, err := d.r.ff.Locate(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err() //nolint:wrapcheck // cancellation is reported as is
@@ -64,13 +64,13 @@ func (d *Download) locateFFmpeg(ctx context.Context) (string, error) {
 // place. Every track is first concatenated (each fMP4 init section before the
 // segments it belongs to); ffmpeg then remuxes one track, or combines the
 // video and the audio track, without re-encoding.
-func (d *Download) merge(ctx context.Context, p *plan, ffmpegPath string) error {
+func (d *Download) merge(ctx context.Context, p *Plan, ffmpegPath string) error {
 	if err := d.ensureAllInits(ctx, p); err != nil {
 		return err
 	}
 	var inputs []string
-	for _, t := range p.tracks {
-		in := filepath.Join(d.work, fmt.Sprintf("track%d.bin", t.idx))
+	for _, t := range p.Tracks {
+		in := filepath.Join(d.work, fmt.Sprintf("track%d.bin", t.Index))
 		if err := d.concat(t, in); err != nil {
 			return err
 		}
@@ -81,7 +81,7 @@ func (d *Download) merge(ctx context.Context, p *plan, ffmpegPath string) error 
 		if err := os.Rename(inputs[0], d.part); err != nil {
 			return d.fileError("rename", d.part, err)
 		}
-	} else if err := d.e.opts.exec(ctx, ffmpegPath, d.ffmpegArgs(inputs)); err != nil {
+	} else if err := d.r.opts.exec(ctx, ffmpegPath, d.ffmpegArgs(inputs)); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err() //nolint:wrapcheck // cancellation is reported as is
 		}
@@ -96,13 +96,13 @@ func (d *Download) merge(ctx context.Context, p *plan, ffmpegPath string) error 
 
 // ensureAllInits makes sure every init section the segments need is on disk
 // and known (a resumed run that had nothing left to fetch has not read them).
-func (d *Download) ensureAllInits(ctx context.Context, p *plan) error {
-	for _, t := range p.tracks {
+func (d *Download) ensureAllInits(ctx context.Context, p *Plan) error {
+	for _, t := range p.Tracks {
 		for _, s := range t.snapshot() {
-			if s.init == nil || !d.isDone(t.idx, s.seq) {
+			if s.Init == nil || !d.isDone(t.Index, s.Seq) {
 				continue
 			}
-			if err := d.ensureInit(ctx, *s.init); err != nil {
+			if err := d.ensureInit(ctx, *s.Init); err != nil {
 				return err
 			}
 		}
@@ -131,7 +131,7 @@ func (d *Download) ffmpegArgs(inputs []string) []string {
 
 // concat writes the init sections and downloaded segments of t, in playlist
 // order, to dest. An init section is repeated only when it changes.
-func (d *Download) concat(t *track, dest string) error {
+func (d *Download) concat(t *Track, dest string) error {
 	out, err := os.Create(dest) //nolint:gosec // inside our work directory
 	if err != nil {
 		return d.fileError("create", dest, err)
@@ -139,11 +139,11 @@ func (d *Download) concat(t *track, dest string) error {
 	var lastInit string
 	copied := 0
 	for _, s := range t.snapshot() {
-		if !d.isDone(t.idx, s.seq) {
+		if !d.isDone(t.Index, s.Seq) {
 			continue // a live stream cut short, or a gap
 		}
-		if s.init != nil {
-			if id := initID(*s.init); id != lastInit {
+		if s.Init != nil {
+			if id := initID(*s.Init); id != lastInit {
 				if err := appendFile(out, d.inits[id]); err != nil {
 					_ = out.Close() // the append failed; the error is what matters
 					return d.fileError("append", d.inits[id], err)
@@ -151,9 +151,9 @@ func (d *Download) concat(t *track, dest string) error {
 				lastInit = id
 			}
 		}
-		if err := appendFile(out, d.segPath(t.idx, s.seq)); err != nil {
+		if err := appendFile(out, d.segPath(t.Index, s.Seq)); err != nil {
 			_ = out.Close() // the append failed; the error is what matters
-			return d.fileError("append", d.segPath(t.idx, s.seq), err)
+			return d.fileError("append", d.segPath(t.Index, s.Seq), err)
 		}
 		copied++
 	}

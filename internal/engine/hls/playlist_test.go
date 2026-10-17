@@ -2,13 +2,12 @@ package hls
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
 	"errors"
 	"net/url"
 	"testing"
 
 	"github.com/sabadia/dlm-server/internal/domain"
+	"github.com/sabadia/dlm-server/internal/engine/segmented"
 )
 
 func mustParse(t *testing.T, src, base string) *playlist {
@@ -30,7 +29,7 @@ func TestParseMediaPlaylist(t *testing.T) {
 #EXT-X-TARGETDURATION:6
 #EXT-X-MEDIA-SEQUENCE:100
 #EXT-X-MAP:URI="init.mp4"
-#EXT-X-KEY:METHOD=AES-128,URI="keys/k1.key",IV=0x01
+#EXT-X-KEY:METHOD=AES-128,URI="keys/k1.Key",IV=0x01
 #EXTINF:6.0,
 #EXT-X-BYTERANGE:1000@0
 main.mp4
@@ -47,40 +46,40 @@ https://other.example/s4.m4s?x=1
 #EXT-X-ENDLIST
 `, "https://cdn.example/path/live/index.m3u8?token=abc")
 	m := p.media
-	if m == nil || !m.closed || m.target != 6 || m.seq != 100 || len(m.segments) != 4 {
+	if m == nil || !m.Closed || m.Target != 6 || len(m.Segments) != 4 {
 		t.Fatalf("media = %+v", m)
 	}
-	s := m.segments
-	if s[0].seq != 100 || s[0].ref.url != "https://cdn.example/path/live/main.mp4" || *s[0].ref.rng != (byteRange{0, 1000}) {
+	s := m.Segments
+	if s[0].Seq != 100 || s[0].Ref.URL != "https://cdn.example/path/live/main.mp4" || *s[0].Ref.Range != (segmented.ByteRange{Offset: 0, Length: 1000}) {
 		t.Errorf("segment 0 = %+v", s[0])
 	}
-	if *s[1].ref.rng != (byteRange{1000, 2000}) {
-		t.Errorf("an omitted offset must continue the previous range, got %+v", s[1].ref.rng)
+	if *s[1].Ref.Range != (segmented.ByteRange{Offset: 1000, Length: 2000}) {
+		t.Errorf("an omitted offset must continue the previous range, got %+v", s[1].Ref.Range)
 	}
-	if s[0].key == nil || s[0].key.url != "https://cdn.example/path/live/keys/k1.key" || s[0].key.method != "AES-128" ||
-		!bytes.Equal(s[0].key.iv, append(make([]byte, 15), 1)) || s[1].key == nil {
-		t.Errorf("keys = %+v / %+v", s[0].key, s[1].key)
+	if s[0].Key == nil || s[0].Key.URL != "https://cdn.example/path/live/keys/k1.Key" || s[0].Key.Method != "AES-128" ||
+		!bytes.Equal(s[0].Key.IV, append(make([]byte, 15), 1)) || s[1].Key == nil {
+		t.Errorf("keys = %+v / %+v", s[0].Key, s[1].Key)
 	}
-	if s[2].key != nil || s[3].key != nil {
-		t.Errorf("METHOD=NONE must clear the key: %+v %+v", s[2].key, s[3].key)
+	if s[2].Key != nil || s[3].Key != nil {
+		t.Errorf("METHOD=NONE must clear the key: %+v %+v", s[2].Key, s[3].Key)
 	}
-	if s[0].init == nil || s[0].init.url != "https://cdn.example/path/live/init.mp4" || s[2].init.url != s[0].init.url {
-		t.Errorf("init = %+v / %+v", s[0].init, s[2].init)
+	if s[0].Init == nil || s[0].Init.URL != "https://cdn.example/path/live/init.mp4" || s[2].Init.URL != s[0].Init.URL {
+		t.Errorf("init = %+v / %+v", s[0].Init, s[2].Init)
 	}
-	if s[2].ref.url != "https://cdn.example/abs/s3.m4s" || s[3].ref.url != "https://other.example/s4.m4s?x=1" {
-		t.Errorf("urls = %q %q", s[2].ref.url, s[3].ref.url)
+	if s[2].Ref.URL != "https://cdn.example/abs/s3.m4s" || s[3].Ref.URL != "https://other.example/s4.m4s?x=1" {
+		t.Errorf("urls = %q %q", s[2].Ref.URL, s[3].Ref.URL)
 	}
-	if s[3].init == nil || s[3].init.url != "https://cdn.example/path/live/init2.mp4" || *s[3].init.rng != (byteRange{10, 720}) || !s[3].disc {
-		t.Errorf("segment 3 = %+v init %+v", s[3], s[3].init)
+	if s[3].Init == nil || s[3].Init.URL != "https://cdn.example/path/live/init2.mp4" || *s[3].Init.Range != (segmented.ByteRange{Offset: 10, Length: 720}) || !s[3].Disc {
+		t.Errorf("segment 3 = %+v init %+v", s[3], s[3].Init)
 	}
-	if got := m.duration(); got != 21.5 {
+	if got := m.Duration(); got != 21.5 {
 		t.Errorf("duration = %v", got)
 	}
 }
 
 func TestParseLivePlaylist(t *testing.T) {
 	p := mustParse(t, "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n", "https://x/live.m3u8")
-	if p.media.closed || len(p.media.segments) != 2 || p.media.segments[1].seq != 8 {
+	if p.media.Closed || len(p.media.Segments) != 2 || p.media.Segments[1].Seq != 8 {
 		t.Errorf("live playlist = %+v", p.media)
 	}
 }
@@ -98,7 +97,7 @@ func TestParseRejects(t *testing.T) {
 	}
 	// A key format other than identity (a DRM system) is ignored, not mistaken for AES-128.
 	drm := "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\",KEYFORMAT=\"com.apple.streamingkeydelivery\"\n#EXTINF:4,\na.ts\n#EXT-X-ENDLIST\n"
-	if p, err := parse([]byte(drm), base); err != nil || p.media.segments[0].key != nil {
+	if p, err := parse([]byte(drm), base); err != nil || p.media.Segments[0].Key != nil {
 		t.Errorf("a DRM key format must be skipped: %v", err)
 	}
 }
@@ -186,51 +185,6 @@ func TestIV(t *testing.T) {
 	for _, bad := range []string{"", "0xzz", "0x" + string(bytes.Repeat([]byte("1"), 33))} {
 		if _, err := parseIV(bad); err == nil {
 			t.Errorf("parseIV(%q) accepted", bad)
-		}
-	}
-	k := &keyInfo{}
-	iv := ivFor(k, 258)
-	if len(iv) != 16 || iv[14] != 1 || iv[15] != 2 || iv[0] != 0 {
-		t.Errorf("sequence IV = %x", iv)
-	}
-	explicit := &keyInfo{iv: bytes.Repeat([]byte{7}, 16)}
-	if !bytes.Equal(ivFor(explicit, 5), explicit.iv) {
-		t.Error("an explicit IV was not used")
-	}
-}
-
-func encrypt(t *testing.T, plain, key, iv []byte) []byte {
-	t.Helper()
-	pad := aes.BlockSize - len(plain)%aes.BlockSize
-	padded := append(bytes.Clone(plain), bytes.Repeat([]byte{byte(pad)}, pad)...)
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := make([]byte, len(padded))
-	cipher.NewCBCEncrypter(block, iv).CryptBlocks(out, padded)
-	return out
-}
-
-func TestDecryptAES128(t *testing.T) {
-	key := bytes.Repeat([]byte{3}, 16)
-	iv := ivFor(&keyInfo{}, 9)
-	for _, n := range []int{0, 1, 15, 16, 17, 1000} {
-		plain := bytes.Repeat([]byte{0xAB}, n)
-		got, err := decryptAES128(encrypt(t, plain, key, iv), key, iv)
-		if err != nil || !bytes.Equal(got, plain) {
-			t.Errorf("round trip of %d bytes: %v", n, err)
-		}
-	}
-	enc := encrypt(t, []byte("secret segment"), key, iv)
-	if _, err := decryptAES128(enc, bytes.Repeat([]byte{4}, 16), iv); err == nil {
-		t.Error("a wrong key was accepted")
-	}
-	for name, tc := range map[string]struct{ data, key []byte }{
-		"short key": {enc, key[:8]}, "empty": {nil, key}, "not a block multiple": {append(bytes.Clone(enc), 0), key},
-	} {
-		if _, err := decryptAES128(tc.data, tc.key, iv); err == nil {
-			t.Errorf("%s accepted", name)
 		}
 	}
 }

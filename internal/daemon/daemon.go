@@ -20,6 +20,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/browserx"
+	"github.com/sabadia/dlm-server/internal/engine/dash"
 	"github.com/sabadia/dlm-server/internal/engine/hls"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/events"
@@ -109,6 +110,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	engines, err := engine.NewRegistry(
 		browserx.New(resolver), // dlm-browser:// files
 		hls.New(env, ffmpegLocator),
+		dash.New(env, ffmpegLocator),
 		httpx.New(env),
 	)
 	if err != nil {
