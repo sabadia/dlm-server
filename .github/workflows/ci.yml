@@ -57,6 +57,17 @@ jobs:
         if: runner.os == 'Windows'
         run: go test -count=1 ./...
 
+  browser:
+    name: browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: go test (browser tag, needs the Chrome of the runner image)
+        run: go test -tags browser -race -count=1 ./internal/browser/...
+
   build:
     name: build (${{ matrix.goos }}/${{ matrix.goarch }})
     needs: [lint, generate, test]
