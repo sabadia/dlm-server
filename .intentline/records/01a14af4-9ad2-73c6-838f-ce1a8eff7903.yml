@@ -1,0 +1,47 @@
+schema_version: 1
+id: 01a14af4-9ad2-73c6-838f-ce1a8eff7903
+status: draft
+created_at: '2026-10-17T17:41:46Z'
+updated_at: '2026-10-17T17:41:46Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P4.1: Cookie store (encrypted, public suffix), jar used by engines; import/export endpoints + CLI'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: TestEngineClientsShareTheJar
+  exit_code: null
+links:
+- path: internal/cookies/store.go
+  start_line: null
+  end_line: null
+- path: internal/cookies/key.go
+  start_line: null
+  end_line: null
+- path: internal/cookies/crypto.go
+  start_line: null
+  end_line: null
+- path: internal/cookies/format.go
+  start_line: null
+  end_line: null
+- path: internal/api/cookies.go
+  start_line: null
+  end_line: null
+- path: internal/cli/cookies.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

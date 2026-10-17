@@ -138,6 +138,7 @@ func newApp(version string, opts ...Option) *app {
 		a.newTaskCommand(),
 		a.newQueueCommand(),
 		a.newSettingsCommand(),
+		a.newCookiesCommand(),
 	)
 	a.root = root
 	return a

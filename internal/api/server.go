@@ -58,6 +58,9 @@ type Deps struct {
 	Settings *service.SettingsService
 	Queues   *service.QueueService
 	Tasks    *service.TaskService
+	// Cookies is the service behind the cookie operations; like the others
+	// it answers 503 while nil.
+	Cookies *service.CookieService
 }
 
 // Server is the REST API server.
@@ -77,6 +80,7 @@ type Server struct {
 	settings *service.SettingsService
 	queues   *service.QueueService
 	tasks    *service.TaskService
+	cookies  *service.CookieService
 
 	mu     sync.RWMutex
 	public map[string]struct{} // mux patterns ("GET /v1/health") that need no token
@@ -127,6 +131,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		settings: deps.Settings,
 		queues:   deps.Queues,
 		tasks:    deps.Tasks,
+		cookies:  deps.Cookies,
 	}
 	s.api = humago.New(s.mux, humaConfig(version))
 
@@ -142,6 +147,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerTasks()
 	s.registerQueues()
 	s.registerSettings()
+	s.registerCookies()
 	return s, nil
 }
 
