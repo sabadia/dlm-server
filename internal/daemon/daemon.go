@@ -156,6 +156,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
 		Cookies: service.NewCookieService(jar),
 		Capture: service.NewCaptureService(services.Tasks, jar, services.Refresh),
+		Refresh: services.Refresh,
 	})
 	if err != nil {
 		bus.Close()

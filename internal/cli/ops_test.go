@@ -62,7 +62,7 @@ func newE2E(t *testing.T) *e2e {
 	base := startAPIWith(t, api.Deps{
 		Token: testToken, Version: testSrvVersion,
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
-		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh),
+		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh,
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -551,5 +551,85 @@ func TestCaptureCommandEndToEnd(t *testing.T) {
 	}
 	if r := e.run(t, "", "capture"); r.code != ExitError || !strings.Contains(r.stderr, "Unprocessable") {
 		t.Errorf("nothing to capture: exit %d stderr %s", r.code, r.stderr)
+	}
+}
+
+func TestRefreshCommandsEndToEnd(t *testing.T) {
+	e := newE2E(t)
+	var task client.Task
+	e.ok(t, &task, "task", "add", e.url("a.bin"), "--paused", "-o", "json")
+
+	var got client.Task
+	e.ok(t, &got, "task", "set-url", task.ID, e.url("fresh.bin"), "--referrer", "https://example.com/", "--header", "X-A=1",
+		"--on-mismatch", "restart", "-o", "json")
+	if got.Status != "paused" || got.Source.CurrentURL != e.url("fresh.bin") || got.Source.Referrer != "https://example.com/" ||
+		got.Source.Headers["X-A"] != "1" || got.Source.OriginalURL != e.url("a.bin") {
+		t.Fatalf("after set-url: %s %+v", got.Status, got.Source)
+	}
+
+	e.ok(t, &got, "task", "refresh", task.ID, "-o", "json")
+	if got.Status != "paused" {
+		t.Errorf("status after refresh = %s, want paused", got.Status)
+	}
+
+	var history []client.RefreshAttempt
+	e.ok(t, &history, "task", "refresh-history", task.ID, "-o", "json")
+	if len(history) != 2 || history[0].Cause != "source" || history[0].Outcome != "success" ||
+		history[1].Strategy != "origin-redirect" || history[1].Cause != "manual" || history[1].NewURL != e.url("a.bin") {
+		t.Errorf("history = %+v", history)
+	}
+	out := e.ok(t, nil, "task", "refresh-history", task.ID)
+	if !strings.HasPrefix(strings.Join(strings.Fields(out), " "), "TIME CAUSE STRATEGY OUTCOME DETAIL") ||
+		!strings.Contains(out, "source") || !strings.Contains(out, "manual") || !strings.Contains(out, "origin-redirect") || !strings.Contains(out, "success") {
+		t.Errorf("history table:\n%s", out)
+	}
+
+	// Errors are reported with the right exit codes.
+	if r := e.run(t, "", "task", "await-link", task.ID); r.code != ExitError || !strings.Contains(r.stderr, "only a failed or awaiting_link task") {
+		t.Errorf("await-link of a paused task: exit %d stderr %s", r.code, r.stderr)
+	}
+	if r := e.run(t, "", "task", "refresh", "missing"); r.code != ExitError || !strings.Contains(r.stderr, "Not Found") {
+		t.Errorf("refresh of a missing task: exit %d stderr %s", r.code, r.stderr)
+	}
+	if r := e.run(t, "", "task", "set-url", task.ID); r.code != ExitUsage {
+		t.Errorf("set-url without a URL: exit %d", r.code)
+	}
+	if r := e.run(t, "", "task", "set-url", task.ID, "not a url"); r.code != ExitError {
+		t.Errorf("set-url with a bad URL: exit %d stderr %s", r.code, r.stderr)
+	}
+}
+
+// TestRefreshSettingsPerLevel: the refresh settings can be set globally, per
+// queue and per task, and the effective view says where each value comes from.
+func TestRefreshSettingsPerLevel(t *testing.T) {
+	e := newE2E(t)
+	e.ok(t, nil, "settings", "set", `refresh.strategies=["origin-redirect","manual"]`, "refresh.awaitTimeout=5m", "refresh.maxAttempts=7")
+	var q client.Queue
+	e.ok(t, &q, "queue", "add", "slow", "--set", "refresh.auto=false", "--set", "refresh.maxAttempts=2", "-o", "json")
+	var task client.Task
+	e.ok(t, &task, "task", "add", e.url("a.bin"), "--queue", q.ID, "--paused", "--set", "refresh.onMismatch=restart", "-o", "json")
+
+	out := e.ok(t, nil, "task", "settings", task.ID)
+	for _, row := range []string{
+		"refresh.auto false queue",
+		"refresh.maxAttempts 2 queue",
+		"refresh.onMismatch restart task",
+		"refresh.awaitTimeout 5m0s global",
+	} {
+		if !containsRow(out, row) {
+			t.Errorf("effective settings lack the row %q:\n%s", row, out)
+		}
+	}
+	if !strings.Contains(out, "refresh.strategies") || !strings.Contains(out, "origin-redirect") || !strings.Contains(out, "manual") {
+		t.Errorf("effective settings lack the global strategies:\n%s", out)
+	}
+
+	// A task level override wins; an unknown strategy is rejected.
+	e.ok(t, nil, "task", "set", task.ID, "--set", `refresh.strategies=["extension-capture"]`)
+	if r := e.run(t, "", "task", "set", task.ID, "--set", `refresh.strategies=["teleport"]`); r.code != ExitError || !strings.Contains(r.stderr, "unknown strategy") {
+		t.Errorf("unknown strategy: exit %d stderr %s", r.code, r.stderr)
+	}
+	if r := e.run(t, "", "settings", "set", "refresh.onMismatch=sometimes"); r.code != ExitError {
+		t.Errorf("bad onMismatch: exit %d stderr %s", r.code, r.stderr)
 	}
 }

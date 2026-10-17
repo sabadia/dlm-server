@@ -332,6 +332,10 @@ func (s *RefreshService) runChain(ctx context.Context, t *domain.Task, eff setti
 			return chainExhausted, err //nolint:wrapcheck // cancellation is reported as is
 		}
 		if name == settings.RefreshExtensionCapture || name == settings.RefreshManual {
+			if !canPark(t.Status) {
+				s.record(ctx, t, string(name), why, domain.RefreshSkipped, fmt.Sprintf("a %s task cannot wait for a new link", t.Status), "")
+				continue
+			}
 			if err := s.parkFrom(ctx, t, eff, why, name); err != nil {
 				return chainExhausted, err
 			}
@@ -469,6 +473,9 @@ func (s *RefreshService) tryCandidate(ctx context.Context, t *domain.Task, eff s
 		return applyOutcome{ok: true}, nil
 	case settings.MismatchAsk:
 		s.record(ctx, t, string(name), why, domain.RefreshMismatch, msg, cand.Source.CurrentURL)
+		if !canPark(t.Status) {
+			return applyOutcome{err: domain.Conflict("service: %s", msg)}, nil
+		}
 		if err := s.parkFrom(ctx, t, eff, why, settings.RefreshManual); err != nil {
 			return applyOutcome{}, err
 		}
@@ -616,6 +623,13 @@ func mergeSource(base, in domain.Source) domain.Source {
 }
 
 // ---- waiting ----
+
+// canPark reports whether the state machine lets a task in status wait in
+// awaiting_link: running and refreshing tasks (their link expired), failed
+// tasks and tasks already waiting.
+func canPark(status domain.TaskStatus) bool {
+	return status == domain.StatusAwaitingLink || domain.CanTransition(status, domain.StatusAwaitingLink)
+}
 
 // parkFrom moves the task to awaiting_link (from running, refreshing, failed
 // or already awaiting) and records the wait: extension-capture waits get the

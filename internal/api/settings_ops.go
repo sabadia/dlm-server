@@ -68,7 +68,7 @@ func (s *Server) registerSettings() {
 // allowMergePatch documents application/merge-patch+json as an accepted
 // request media type of a registered operation (huma decodes any +json
 // media type as JSON).
-func (s *Server) allowMergePatch(method, path string) {
+func (s *Server) allowMergePatch(method, path string) { //nolint:unparam // PATCH is the only caller today; the switch below also serves PUT and POST
 	item := s.api.OpenAPI().Paths[path]
 	if item == nil {
 		panic("api: allowMergePatch: unknown path " + path) // programming error caught at startup
