@@ -23,6 +23,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/platform"
 	"github.com/sabadia/dlm-server/internal/ratelimit"
+	"github.com/sabadia/dlm-server/internal/scheduler"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage/sqlite"
@@ -83,13 +84,22 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	limits := ratelimit.NewManager(0)
 	resolves := engine.NewResolveCache(engine.CacheOptions{})
 	defer resolves.Close()
-	// The runner is driven by the scheduler (P3.2); until then the services
-	// use a NopScheduler and queued tasks wait.
+	// Construction order: the runner needs the store; the scheduler needs
+	// the runner and the store; the services need the scheduler. One
+	// TaskLocks instance is shared by the runner and every service.
+	locks := service.NewTaskLocks()
 	runner := service.NewRunner(service.RunnerDeps{
+		Store:     store,
+		Engines:   engines,
+		Limits:    limits,
+		Bus:       bus,
+		Defaults:  defaults,
+		Logger:    log,
+		TaskLocks: locks,
+	})
+	sched := scheduler.New(scheduler.Options{
 		Store:    store,
-		Engines:  engines,
-		Limits:   limits,
-		Bus:      bus,
+		Runner:   runner,
 		Defaults: defaults,
 		Logger:   log,
 	})
@@ -97,12 +107,13 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Store:     store,
 		Engines:   engines,
 		Resolves:  resolves,
-		Scheduler: service.NopScheduler{},
+		Scheduler: sched,
 		Bus:       bus,
 		Limits:    limits,
 		Runner:    runner,
 		Defaults:  defaults,
 		Logger:    log,
+		TaskLocks: locks,
 	})
 	if err := services.Settings.SyncLimits(ctx); err != nil {
 		bus.Close()
@@ -134,6 +145,10 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	sweepCtx, stopSweep := context.WithCancel(gctx)
 	defer stopSweep()
 	g.Go(func() error { return resolves.Run(sweepCtx, time.Minute) })
+	// The scheduler starts queued tasks, including the ones recovered
+	// above; on shutdown it requeues its running tasks and waits for them
+	// (the store stays open until g.Wait returns).
+	g.Go(func() error { return sched.Run(gctx) })
 	g.Go(func() error {
 		// The bus outlives the server so in-flight requests can still
 		// publish; closing it also stops bus.Run.

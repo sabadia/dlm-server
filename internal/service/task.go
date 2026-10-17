@@ -294,11 +294,31 @@ func (s *TaskService) Update(ctx context.Context, id string, in UpdateTaskInput)
 		}
 	}
 	var t *domain.Task
-	err := s.d.Store.WithTx(ctx, func(tx storage.Store) error {
-		var err error
-		if t, err = tx.Tasks().Get(ctx, id); err != nil {
+	err := s.d.withTaskLock(ctx, id, func() error {
+		return s.update(ctx, id, in, dir, &t)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if s.d.Limits != nil && in.SettingsPatch != nil && stoppable(t.Status) {
+		s.d.Limits.SetTask(t.ID, t.Settings.SpeedLimit.Value())
+	}
+	s.d.publishTask(events.TypeTaskUpdated, t)
+	if in.Priority != nil {
+		s.d.Scheduler.Wake()
+	}
+	return t, nil
+}
+
+// update applies in to task id inside a transaction; the caller holds the
+// task's lock. The updated task is stored in *out.
+func (s *TaskService) update(ctx context.Context, id string, in UpdateTaskInput, dir string, out **domain.Task) error {
+	return s.d.Store.WithTx(ctx, func(tx storage.Store) error { //nolint:wrapcheck // wrapped inside the transaction
+		t, err := tx.Tasks().Get(ctx, id)
+		if err != nil {
 			return fmt.Errorf("service: update task: %w", err)
 		}
+		*out = t
 		if (in.Name != nil && *in.Name != t.Name) || (in.Dir != nil && dir != t.Dir) {
 			if t.Status.Active() || (t.Downloaded > 0 && t.Status != domain.StatusCompleted) {
 				return domain.Conflict("service: task %q: name and dir cannot change while it is active or has partial data", id)
@@ -333,17 +353,6 @@ func (s *TaskService) Update(ctx context.Context, id string, in UpdateTaskInput)
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, err //nolint:wrapcheck // wrapped inside the transaction
-	}
-	if s.d.Limits != nil && in.SettingsPatch != nil && stoppable(t.Status) {
-		s.d.Limits.SetTask(t.ID, t.Settings.SpeedLimit.Value())
-	}
-	s.d.publishTask(events.TypeTaskUpdated, t)
-	if in.Priority != nil {
-		s.d.Scheduler.Wake()
-	}
-	return t, nil
 }
 
 // Move appends a task at the end of another queue and wakes the scheduler.
@@ -354,30 +363,32 @@ func (s *TaskService) Move(ctx context.Context, id, queueID string) (*domain.Tas
 		t     *domain.Task
 		moved bool
 	)
-	err := s.d.Store.WithTx(ctx, func(tx storage.Store) error {
-		var err error
-		if t, err = tx.Tasks().Get(ctx, id); err != nil {
-			return fmt.Errorf("service: move task: %w", err)
-		}
-		if t.QueueID == queueID {
+	err := s.d.withTaskLock(ctx, id, func() error {
+		return s.d.Store.WithTx(ctx, func(tx storage.Store) error { //nolint:wrapcheck // wrapped inside the transaction
+			var err error
+			if t, err = tx.Tasks().Get(ctx, id); err != nil {
+				return fmt.Errorf("service: move task: %w", err)
+			}
+			if t.QueueID == queueID {
+				return nil
+			}
+			if _, err := tx.Queues().Get(ctx, queueID); err != nil {
+				return fmt.Errorf("service: move task: %w", err)
+			}
+			pos, err := tx.Tasks().NextPosition(ctx, queueID)
+			if err != nil {
+				return fmt.Errorf("service: move task: %w", err)
+			}
+			t.QueueID, t.Position, t.UpdatedAt = queueID, pos, s.d.now()
+			if err := tx.Tasks().Update(ctx, t); err != nil {
+				return fmt.Errorf("service: move task: %w", err)
+			}
+			moved = true
 			return nil
-		}
-		if _, err := tx.Queues().Get(ctx, queueID); err != nil {
-			return fmt.Errorf("service: move task: %w", err)
-		}
-		pos, err := tx.Tasks().NextPosition(ctx, queueID)
-		if err != nil {
-			return fmt.Errorf("service: move task: %w", err)
-		}
-		t.QueueID, t.Position, t.UpdatedAt = queueID, pos, s.d.now()
-		if err := tx.Tasks().Update(ctx, t); err != nil {
-			return fmt.Errorf("service: move task: %w", err)
-		}
-		moved = true
-		return nil
+		})
 	})
 	if err != nil {
-		return nil, err //nolint:wrapcheck // wrapped inside the transaction
+		return nil, err
 	}
 	if moved {
 		s.d.publishTask(events.TypeTaskUpdated, t)
@@ -394,11 +405,45 @@ func (s *TaskService) Reorder(ctx context.Context, id string, position int) (*do
 	if position < 0 {
 		return nil, domain.InvalidArgument("service: reorder task %q: position must be >= 0", id)
 	}
+	// Renumbering rewrites the positions of the queue's other tasks too, so
+	// all of them are locked (in ID order); the transaction re-reads them.
+	t, err := s.d.Store.Tasks().Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("service: reorder task: %w", err)
+	}
+	tasks, err := queueTasks(ctx, s.d.Store, t.QueueID)
+	if err != nil {
+		return nil, err
+	}
+	ids := []string{id}
+	for _, qt := range tasks {
+		ids = append(ids, qt.ID)
+	}
 	var (
 		target  *domain.Task
 		changed []*domain.Task
 	)
-	err := s.d.Store.WithTx(ctx, func(tx storage.Store) error {
+	err = s.d.withTaskLocks(ctx, ids, func() error {
+		return s.reorder(ctx, id, position, &target, &changed)
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range changed {
+		s.d.publishTask(events.TypeTaskUpdated, t)
+	}
+	if len(changed) > 0 {
+		s.d.Scheduler.Wake()
+	}
+	return target, nil
+}
+
+// reorder renumbers task id's queue inside a transaction; the caller holds
+// the locks of the queue's tasks. Tasks added to the queue after they were
+// locked are renumbered too: only their position changes, and the
+// transaction re-reads every row, so no update is lost.
+func (s *TaskService) reorder(ctx context.Context, id string, position int, target **domain.Task, changed *[]*domain.Task) error {
+	return s.d.Store.WithTx(ctx, func(tx storage.Store) error { //nolint:wrapcheck // wrapped inside the transaction
 		t, err := tx.Tasks().Get(ctx, id)
 		if err != nil {
 			return fmt.Errorf("service: reorder task: %w", err)
@@ -411,7 +456,7 @@ func (s *TaskService) Reorder(ctx context.Context, id string, position int) (*do
 		if i < 0 {
 			return domain.NotFound("task", id) // deleted concurrently
 		}
-		target = tasks[i]
+		*target = tasks[i]
 		now := s.d.now()
 		for pos, qt := range moveTo(tasks, i, position) {
 			if qt.Position == int64(pos) {
@@ -421,42 +466,64 @@ func (s *TaskService) Reorder(ctx context.Context, id string, position int) (*do
 			if err := tx.Tasks().Update(ctx, qt); err != nil {
 				return fmt.Errorf("service: reorder task %q: %w", qt.ID, err)
 			}
-			changed = append(changed, qt)
+			*changed = append(*changed, qt)
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, err //nolint:wrapcheck // wrapped inside the transaction
-	}
-	for _, t := range changed {
-		s.d.publishTask(events.TypeTaskUpdated, t)
-	}
-	if len(changed) > 0 {
-		s.d.Scheduler.Wake()
-	}
-	return target, nil
 }
+
+// retryAttempts bounds how often Pause and Delete re-evaluate a task that
+// was running: after stopping it the decision is taken again on its fresh
+// state, and a scheduler could in principle re-admit a requeued task in
+// between.
+const retryAttempts = 4
 
 // Pause pauses each task independently. Queued, errored and awaiting_link
 // tasks become paused at once; running and refreshing tasks are stopped
 // through Scheduler.Stop(ErrPaused) and the runner persists them paused.
 // Pausing a paused task is a no-op. Postprocessing and completed tasks
-// cannot be paused (domain.ErrConflict).
+// cannot be paused (domain.ErrConflict). When Pause succeeds the task is
+// paused: the decision is made under the task's lock on its current state,
+// so a concurrent start by the scheduler cannot be lost.
 func (s *TaskService) Pause(ctx context.Context, ids []string) []BatchResult {
-	return s.each(ids, func(id string) (*domain.Task, error) {
-		t, err := s.d.Store.Tasks().Get(ctx, id)
+	return s.each(ids, func(id string) (*domain.Task, error) { return s.pause(ctx, id) })
+}
+
+func (s *TaskService) pause(ctx context.Context, id string) (*domain.Task, error) {
+	for range retryAttempts {
+		var (
+			t       *domain.Task
+			running bool
+		)
+		err := s.d.withTaskLock(ctx, id, func() error {
+			var err error
+			if t, err = s.d.Store.Tasks().Get(ctx, id); err != nil {
+				return fmt.Errorf("service: pause task: %w", err)
+			}
+			switch {
+			case t.Status == domain.StatusPaused:
+				return nil
+			case stoppable(t.Status):
+				running = true
+				return nil
+			default:
+				t, err = s.transitionLocked(ctx, id, domain.StatusPaused, false)
+				return err
+			}
+		})
 		if err != nil {
-			return nil, fmt.Errorf("service: pause task: %w", err)
+			return nil, err
 		}
-		switch {
-		case t.Status == domain.StatusPaused:
+		if !running {
 			return t, nil
-		case stoppable(t.Status):
-			return stopTask(ctx, s.d, id, ErrPaused)
-		default:
-			return s.transition(ctx, id, domain.StatusPaused, false)
 		}
-	})
+		// Stop without holding the lock: the runner needs it to persist
+		// the paused state. The next iteration checks the outcome.
+		if err := stopTask(ctx, s.d, id, ErrPaused); err != nil {
+			return nil, err
+		}
+	}
+	return nil, domain.Conflict("service: pause task %q: it was restarted while being stopped", id)
 }
 
 // Resume queues each paused or errored task again (retrying an errored
@@ -465,18 +532,26 @@ func (s *TaskService) Pause(ctx context.Context, ids []string) []BatchResult {
 // (domain.ErrConflict; use Restart for a completed task).
 func (s *TaskService) Resume(ctx context.Context, ids []string) []BatchResult {
 	return s.each(ids, func(id string) (*domain.Task, error) {
-		t, err := s.d.Store.Tasks().Get(ctx, id)
+		var t *domain.Task
+		err := s.d.withTaskLock(ctx, id, func() error {
+			var err error
+			if t, err = s.d.Store.Tasks().Get(ctx, id); err != nil {
+				return fmt.Errorf("service: resume task: %w", err)
+			}
+			switch t.Status {
+			case domain.StatusQueued, domain.StatusRunning, domain.StatusRefreshing, domain.StatusPostprocessing:
+				return nil
+			case domain.StatusPaused, domain.StatusError:
+				t, err = s.transitionLocked(ctx, id, domain.StatusQueued, false)
+				return err
+			default:
+				return domain.Conflict("service: task %q: cannot resume a %s task", id, t.Status)
+			}
+		})
 		if err != nil {
-			return nil, fmt.Errorf("service: resume task: %w", err)
+			return nil, err
 		}
-		switch t.Status {
-		case domain.StatusQueued, domain.StatusRunning, domain.StatusRefreshing, domain.StatusPostprocessing:
-			return t, nil
-		case domain.StatusPaused, domain.StatusError:
-			return s.transition(ctx, id, domain.StatusQueued, false)
-		default:
-			return nil, domain.Conflict("service: task %q: cannot resume a %s task", id, t.Status)
-		}
+		return t, nil
 	})
 }
 
@@ -486,26 +561,34 @@ func (s *TaskService) Resume(ctx context.Context, ids []string) []BatchResult {
 // deleted: when it exists the restart fails with domain.ErrConflict. Other
 // states return domain.ErrConflict.
 func (s *TaskService) Restart(ctx context.Context, id string) (*domain.Task, error) {
-	t, err := s.d.Store.Tasks().Get(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("service: restart task: %w", err)
-	}
-	if t.Status != domain.StatusCompleted && t.Status != domain.StatusError {
-		return nil, domain.Conflict("service: task %q: only completed or failed tasks can be restarted, not %s", id, t.Status)
-	}
-	if final, part, ok := taskPaths(t); ok {
-		exists, err := fileExists(final)
+	var out *domain.Task
+	err := s.d.withTaskLock(ctx, id, func() error {
+		t, err := s.d.Store.Tasks().Get(ctx, id)
 		if err != nil {
-			return nil, fmt.Errorf("service: restart task %q: %w", id, err)
+			return fmt.Errorf("service: restart task: %w", err)
 		}
-		if exists {
-			return nil, domain.Conflict("service: task %q: file %q exists; delete or move it before restarting", id, final)
+		if t.Status != domain.StatusCompleted && t.Status != domain.StatusError {
+			return domain.Conflict("service: task %q: only completed or failed tasks can be restarted, not %s", id, t.Status)
 		}
-		if err := removeFile(part); err != nil {
-			return nil, fmt.Errorf("service: restart task %q: %w", id, err)
+		if final, part, ok := taskPaths(t); ok {
+			exists, err := fileExists(final)
+			if err != nil {
+				return fmt.Errorf("service: restart task %q: %w", id, err)
+			}
+			if exists {
+				return domain.Conflict("service: task %q: file %q exists; delete or move it before restarting", id, final)
+			}
+			if err := removeFile(part); err != nil {
+				return fmt.Errorf("service: restart task %q: %w", id, err)
+			}
 		}
+		out, err = s.transitionLocked(ctx, id, domain.StatusQueued, true)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
-	return s.transition(ctx, id, domain.StatusQueued, true)
+	return out, nil
 }
 
 // Delete removes each task independently. A running or refreshing task is
@@ -514,35 +597,56 @@ func (s *TaskService) Restart(ctx context.Context, id string) (*domain.Task, err
 // directory at the final path is left alone). The result carries the
 // task's last state. The scheduler is woken afterwards.
 func (s *TaskService) Delete(ctx context.Context, ids []string, opts DeleteOptions) []BatchResult {
-	res := s.each(ids, func(id string) (*domain.Task, error) {
-		t, err := s.d.Store.Tasks().Get(ctx, id)
-		if err != nil {
-			return nil, fmt.Errorf("service: delete task: %w", err)
-		}
-		if stoppable(t.Status) {
-			if t, err = stopTask(ctx, s.d, id, ErrRequeued); err != nil {
-				return nil, err
-			}
-		}
-		if opts.Files {
-			if err := s.removeFiles(ctx, t); err != nil {
-				return nil, err
-			}
-		}
-		if err := s.d.Store.Tasks().Delete(ctx, id); err != nil {
-			return nil, fmt.Errorf("service: delete task: %w", err)
-		}
-		if s.d.Runner != nil {
-			s.d.Runner.ReleaseProbe(id)
-		}
-		if s.d.Limits != nil {
-			s.d.Limits.RemoveTask(id)
-		}
-		s.d.publishTask(events.TypeTaskDeleted, t)
-		return t, nil
-	})
+	res := s.each(ids, func(id string) (*domain.Task, error) { return s.delete(ctx, id, opts) })
 	s.d.Scheduler.Wake()
 	return res
+}
+
+func (s *TaskService) delete(ctx context.Context, id string, opts DeleteOptions) (*domain.Task, error) {
+	for range retryAttempts {
+		var (
+			t       *domain.Task
+			running bool
+		)
+		err := s.d.withTaskLock(ctx, id, func() error {
+			var err error
+			if t, err = s.d.Store.Tasks().Get(ctx, id); err != nil {
+				return fmt.Errorf("service: delete task: %w", err)
+			}
+			if stoppable(t.Status) {
+				running = true
+				return nil
+			}
+			if opts.Files {
+				if err := s.removeFiles(ctx, t); err != nil {
+					return err
+				}
+			}
+			if err := s.d.Store.Tasks().Delete(ctx, id); err != nil {
+				return fmt.Errorf("service: delete task: %w", err)
+			}
+			if s.d.Runner != nil {
+				s.d.Runner.ReleaseProbe(id)
+			}
+			if s.d.Limits != nil {
+				s.d.Limits.RemoveTask(id)
+			}
+			s.d.publishTask(events.TypeTaskDeleted, t)
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !running {
+			return t, nil
+		}
+		// Stop without holding the lock (the runner persists the final
+		// state under it); the next iteration deletes the stopped task.
+		if err := stopTask(ctx, s.d, id, ErrRequeued); err != nil {
+			return nil, err
+		}
+	}
+	return nil, domain.Conflict("service: delete task %q: it was restarted while being stopped", id)
 }
 
 // removeFiles deletes a task's .part and final file. Only plain files and
@@ -565,10 +669,11 @@ func (s *TaskService) removeFiles(ctx context.Context, t *domain.Task) error {
 	return nil
 }
 
-// transition moves a task to status to inside a transaction, persists it
-// and publishes a task.status event. With reset it also clears the
-// task's download progress (segments, engine state, Downloaded).
-func (s *TaskService) transition(ctx context.Context, id string, to domain.TaskStatus, reset bool) (*domain.Task, error) {
+// transitionLocked moves a task to status to inside a transaction that
+// re-reads it, persists it and publishes a task.status event. With reset
+// it also clears the task's download progress (segments, engine state,
+// Downloaded). The caller holds the task's lock.
+func (s *TaskService) transitionLocked(ctx context.Context, id string, to domain.TaskStatus, reset bool) (*domain.Task, error) {
 	var (
 		t    *domain.Task
 		from domain.TaskStatus

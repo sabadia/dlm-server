@@ -1,0 +1,53 @@
+schema_version: 1
+id: 01a14a08-a7d2-765e-8f0a-72df12a8014b
+status: draft
+created_at: '2026-10-17T13:24:03Z'
+updated_at: '2026-10-17T13:24:03Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P3.2: multi-queue scheduler (per-queue and global slots, priority ordering, correct pause/stop semantics, startup auto-resume) plus per-task locking to fix the lost-update race, per docs/PLAN.md'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: internal/service/locks_test.go
+  exit_code: null
+links:
+- path: internal/scheduler/scheduler.go
+  start_line: null
+  end_line: null
+- path: internal/scheduler/doc.go
+  start_line: null
+  end_line: null
+- path: internal/service/locks.go
+  start_line: null
+  end_line: null
+- path: internal/service/deps.go
+  start_line: null
+  end_line: null
+- path: internal/service/task.go
+  start_line: null
+  end_line: null
+- path: internal/service/queue.go
+  start_line: null
+  end_line: null
+- path: internal/service/runner.go
+  start_line: null
+  end_line: null
+- path: internal/service/checkpoint.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

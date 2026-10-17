@@ -166,9 +166,10 @@ func newSvcFixture(t *testing.T) *svcFixture {
 	defaults.Proxy = settings.Some(settings.Proxy{Mode: settings.ProxyNone})
 	defaultsFn := func() settings.Settings { return defaults }
 	limits := ratelimit.NewManager(0)
+	locks := NewTaskLocks()
 	runner := NewRunner(RunnerDeps{
 		Store: store, Engines: reg, Limits: limits, Bus: bus, Defaults: defaultsFn,
-		ProgressInterval: 10 * time.Millisecond,
+		ProgressInterval: 10 * time.Millisecond, TaskLocks: locks,
 	})
 	sched := newFakeScheduler()
 	sched.runner = runner
@@ -177,7 +178,7 @@ func newSvcFixture(t *testing.T) *svcFixture {
 	t.Cleanup(resolves.Close)
 	d := Deps{
 		Store: store, Engines: reg, Resolves: resolves, Scheduler: sched, Bus: bus,
-		Limits: limits, Runner: runner, Defaults: defaultsFn,
+		Limits: limits, Runner: runner, Defaults: defaultsFn, TaskLocks: locks,
 	}
 	return &svcFixture{
 		store: store, bus: bus, limits: limits, runner: runner, sched: sched, clock: clk, dir: dir,

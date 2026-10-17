@@ -56,6 +56,10 @@ type RunnerDeps struct {
 	Logger           *slog.Logger
 	Clock            func() time.Time
 	ProgressInterval time.Duration
+	// TaskLocks serialises read-modify-write cycles of each task with the
+	// services; it must be the instance in their Deps.TaskLocks. Nil creates
+	// a private instance.
+	TaskLocks *TaskLocks
 }
 
 // Runner executes one task end to end: it resolves the effective settings,
@@ -80,6 +84,9 @@ func NewRunner(d RunnerDeps) *Runner {
 	}
 	if d.ProgressInterval <= 0 {
 		d.ProgressInterval = DefaultProgressInterval
+	}
+	if d.TaskLocks == nil {
+		d.TaskLocks = NewTaskLocks()
 	}
 	if d.Defaults == nil {
 		d.Defaults = func() settings.Settings { return settings.Settings{} }
@@ -125,40 +132,87 @@ func (r *Runner) takeProbe(taskID string) *engine.Probe {
 // its last checkpoint. Download failures are recorded on the task and are
 // not returned; Run returns an error only when the task cannot be run or
 // its state cannot be persisted.
+//
+// The task must be queued in a running queue when Run takes it: the check
+// and the queued → running transition happen under the task's lock in one
+// store transaction, so a task paused, deleted, moved or whose queue was
+// stopped meanwhile is never started (an error matching domain.ErrConflict
+// or domain.ErrNotFound). When ctx is already cancelled at that point the
+// download does not start and the task is left as the cause says (paused
+// for ErrPaused, otherwise queued).
 func (r *Runner) Run(ctx context.Context, taskID string) error {
-	task, eff, err := r.load(ctx, taskID)
-	if err != nil {
+	task, eff, started, err := r.start(ctx, taskID)
+	if err != nil || !started {
 		return err
 	}
-	if err := r.transition(ctx, task, domain.StatusRunning, nil); err != nil {
-		return err
-	}
-
 	runErr := r.download(ctx, task, eff)
 	return r.finish(context.WithoutCancel(ctx), task, runErr, context.Cause(ctx))
 }
 
-// load reads the task and computes its effective settings.
-func (r *Runner) load(ctx context.Context, taskID string) (*domain.Task, settings.Settings, error) {
-	task, err := r.d.Store.Tasks().Get(ctx, taskID)
+// start re-reads the task under its lock and moves it from queued to
+// running, returning it with its effective settings. started is false when
+// ctx was cancelled before the download began.
+func (r *Runner) start(ctx context.Context, taskID string) (task *domain.Task, eff settings.Settings, started bool, err error) {
+	// The store work uses a context without cancellation so a run stopped
+	// before it started still records the state its cause asks for.
+	wctx := context.WithoutCancel(ctx)
+	unlock, err := r.d.TaskLocks.Lock(wctx, taskID)
 	if err != nil {
-		return nil, settings.Settings{}, fmt.Errorf("service: run: %w", err)
+		return nil, settings.Settings{}, false, err
 	}
-	queue, err := r.d.Store.Queues().Get(ctx, task.QueueID)
-	if err != nil {
-		return nil, settings.Settings{}, fmt.Errorf("service: run task %q: %w", taskID, err)
-	}
-	global, err := r.d.Store.Settings().GetGlobal(ctx)
-	if err != nil {
-		return nil, settings.Settings{}, fmt.Errorf("service: run task %q: %w", taskID, err)
-	}
-	eff := settings.Resolve(settings.Layers{
-		Defaults: r.d.Defaults(),
-		Global:   global,
-		Queue:    queue.Settings,
-		Task:     task.Settings,
+	defer unlock()
+	var (
+		from domain.TaskStatus
+		to   domain.TaskStatus // empty: leave the task queued
+	)
+	err = r.d.Store.WithTx(wctx, func(tx storage.Store) error {
+		var err error
+		if task, err = tx.Tasks().Get(wctx, taskID); err != nil {
+			return fmt.Errorf("service: run: %w", err)
+		}
+		if task.Status != domain.StatusQueued {
+			return domain.Conflict("service: run task %q: status is %s, not queued", taskID, task.Status)
+		}
+		queue, err := tx.Queues().Get(wctx, task.QueueID)
+		if err != nil {
+			return fmt.Errorf("service: run task %q: %w", taskID, err)
+		}
+		if queue.State != domain.QueueRunning {
+			return domain.Conflict("service: run task %q: queue %q is %s", taskID, queue.ID, queue.State)
+		}
+		global, err := tx.Settings().GetGlobal(wctx)
+		if err != nil {
+			return fmt.Errorf("service: run task %q: %w", taskID, err)
+		}
+		eff = settings.Resolve(settings.Layers{
+			Defaults: r.d.Defaults(),
+			Global:   global,
+			Queue:    queue.Settings,
+			Task:     task.Settings,
+		}).Settings
+		from, to = task.Status, domain.StatusRunning
+		if cause := context.Cause(ctx); cause != nil {
+			if !errors.Is(cause, ErrPaused) {
+				to = ""
+				return nil
+			}
+			to = domain.StatusPaused
+		}
+		if err := task.TransitionTo(to, r.d.Clock()); err != nil {
+			return fmt.Errorf("service: task %q: %w", taskID, err)
+		}
+		if err := tx.Tasks().Update(wctx, task); err != nil {
+			return fmt.Errorf("service: save task %q: %w", taskID, err)
+		}
+		return nil
 	})
-	return task, eff.Settings, nil
+	if err != nil {
+		return nil, settings.Settings{}, false, err //nolint:wrapcheck // wrapped inside the transaction
+	}
+	if to != "" {
+		r.publishStatus(task, from)
+	}
+	return task, eff, to == domain.StatusRunning, nil
 }
 
 // download prepares and runs the engine download. Its error is the
@@ -180,9 +234,9 @@ func (r *Runner) download(ctx context.Context, task *domain.Task, eff settings.S
 			}
 		}
 		applyProbe(task, probe)
-		if err := r.d.Store.Tasks().Update(ctx, task); err != nil {
+		if err := r.saveResolved(ctx, task); err != nil {
 			_ = probe.Close() // not handed to the engine
-			return fmt.Errorf("service: save resolved task %q: %w", task.ID, err)
+			return err
 		}
 	}
 
@@ -226,7 +280,7 @@ func (r *Runner) download(ctx context.Context, task *domain.Task, eff settings.S
 		EngineState:  state,
 		Probe:        probe,
 		Limiter:      limiter,
-		Checkpointer: &storeCheckpointer{store: r.d.Store, taskID: task.ID, now: r.d.Clock},
+		Checkpointer: &storeCheckpointer{store: r.d.Store, locks: r.d.TaskLocks, taskID: task.ID, now: r.d.Clock},
 	})
 	if err != nil {
 		return err //nolint:wrapcheck // engine errors are classified; kept intact
@@ -271,15 +325,10 @@ func applyProbe(task *domain.Task, p *engine.Probe) {
 }
 
 // finish records the run outcome. cause is the context cancellation cause.
+// Each transition re-reads the task, so the counters the checkpointer
+// persisted and the fields services changed during the run (queue, order,
+// priority, labels, settings) are kept.
 func (r *Runner) finish(ctx context.Context, task *domain.Task, runErr, cause error) error {
-	// Reload the counters the checkpointer persisted during the run, and the
-	// fields services may change while the task runs (queue, order,
-	// priority, labels, settings) so the final write does not revert them.
-	if fresh, err := r.d.Store.Tasks().Get(ctx, task.ID); err == nil {
-		task.Downloaded, task.Size, task.Source = fresh.Downloaded, fresh.Size, fresh.Source
-		task.QueueID, task.Position, task.Priority = fresh.QueueID, fresh.Position, fresh.Priority
-		task.Labels, task.Settings = fresh.Labels, fresh.Settings
-	}
 	switch kind := engine.Classify(runErr); {
 	case runErr == nil:
 		if err := r.transition(ctx, task, domain.StatusPostprocessing, nil); err != nil {
@@ -300,32 +349,95 @@ func (r *Runner) finish(ctx context.Context, task *domain.Task, runErr, cause er
 	}
 }
 
-// transition changes the task status, persists the task and publishes a
-// task.status event.
+// transition changes the task status under the task's lock: it re-reads
+// the task in a transaction, carries over the fields the runner owns from
+// task (see keepRunnerFields), applies the transition, persists it and
+// publishes a task.status event. On success *task is the persisted state.
 func (r *Runner) transition(ctx context.Context, task *domain.Task, to domain.TaskStatus, te *domain.TaskError) error {
-	from := task.Status
-	now := r.d.Clock()
-	var err error
-	if to == domain.StatusError && te != nil {
-		err = task.SetError(*te, now)
-	} else {
-		err = task.TransitionTo(to, now)
-	}
+	return r.mutate(ctx, task, func(fresh *domain.Task) error {
+		now := r.d.Clock()
+		var err error
+		if to == domain.StatusError && te != nil {
+			err = fresh.SetError(*te, now)
+		} else {
+			err = fresh.TransitionTo(to, now)
+		}
+		if err != nil {
+			return fmt.Errorf("service: task %q: %w", fresh.ID, err)
+		}
+		return nil
+	})
+}
+
+// saveResolved persists the resolve results applyProbe put on task.
+func (r *Runner) saveResolved(ctx context.Context, task *domain.Task) error {
+	return r.mutate(ctx, task, func(fresh *domain.Task) error {
+		fresh.Source, fresh.Resource, fresh.Size, fresh.Name = task.Source, task.Resource, task.Size, task.Name
+		fresh.UpdatedAt = r.d.Clock().UTC()
+		return nil
+	})
+}
+
+// mutate re-reads the task under its lock inside a transaction, carries
+// over the fields the runner owns from task, applies fn and persists the
+// result, which then replaces *task. A status change made by fn is
+// published as a task.status event while the lock is still held, so the
+// events of a task are published in order.
+func (r *Runner) mutate(ctx context.Context, task *domain.Task, fn func(fresh *domain.Task) error) error {
+	unlock, err := r.d.TaskLocks.Lock(ctx, task.ID)
 	if err != nil {
-		return fmt.Errorf("service: task %q: %w", task.ID, err)
+		return err
 	}
-	if err := r.d.Store.Tasks().Update(ctx, task); err != nil {
-		return fmt.Errorf("service: save task %q: %w", task.ID, err)
+	defer unlock()
+	var fresh *domain.Task
+	err = r.d.Store.WithTx(ctx, func(tx storage.Store) error {
+		var err error
+		if fresh, err = tx.Tasks().Get(ctx, task.ID); err != nil {
+			return fmt.Errorf("service: save task %q: %w", task.ID, err)
+		}
+		keepRunnerFields(fresh, task)
+		if err := fn(fresh); err != nil {
+			return err
+		}
+		if err := tx.Tasks().Update(ctx, fresh); err != nil {
+			return fmt.Errorf("service: save task %q: %w", task.ID, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err //nolint:wrapcheck // wrapped inside the transaction
 	}
-	if r.d.Bus != nil {
-		r.d.Bus.Publish(events.Event{
-			Type:    events.TypeTaskStatus,
-			TaskID:  task.ID,
-			QueueID: task.QueueID,
-			Data:    StatusData{From: from, To: to, Error: task.Error},
-		})
+	from := task.Status
+	*task = *fresh
+	if task.Status != from {
+		r.publishStatus(task, from)
 	}
 	return nil
+}
+
+// keepRunnerFields copies onto fresh the fields the runner decides during a
+// run and may not have persisted yet: the selected engine and the download
+// directory chosen from the effective settings.
+func keepRunnerFields(fresh, task *domain.Task) {
+	if task.Engine != "" {
+		fresh.Engine = task.Engine
+	}
+	if fresh.Dir == "" {
+		fresh.Dir = task.Dir
+	}
+}
+
+// publishStatus publishes a task.status event for a change from → task.Status.
+func (r *Runner) publishStatus(task *domain.Task, from domain.TaskStatus) {
+	if r.d.Bus == nil {
+		return
+	}
+	r.d.Bus.Publish(events.Event{
+		Type:    events.TypeTaskStatus,
+		TaskID:  task.ID,
+		QueueID: task.QueueID,
+		Data:    StatusData{From: from, To: task.Status, Error: task.Error},
+	})
 }
 
 // publishProgress publishes task.progress events until the returned stop
