@@ -1,0 +1,38 @@
+schema_version: 1
+id: 01a14b08-c641-76e9-9fb3-239afb0d999a
+status: draft
+created_at: '2026-10-17T18:03:48Z'
+updated_at: '2026-10-17T18:03:48Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P4.3: Native Messaging host + manifest installer for all browsers and OSes'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence:
+- kind: test
+  ref: TestInstallAndUninstall
+  exit_code: null
+links:
+- path: internal/nativehost/host.go
+  start_line: null
+  end_line: null
+- path: internal/nativehost/install.go
+  start_line: null
+  end_line: null
+- path: internal/platform/nativehost.go
+  start_line: null
+  end_line: null
+- path: internal/cli/native_host.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

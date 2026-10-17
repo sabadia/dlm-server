@@ -272,7 +272,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 ### Phase 4: Cookies & extension contract
 - [x] P4.1 Cookie store (encrypted, public suffix), jar used by engines; import/export endpoints + CLI
 - [x] P4.2 `/v1/capture` + CaptureService (creates the task with the full Source context)
-- [ ] P4.3 Native Messaging host + manifest installer for all browsers and OSes
+- [x] P4.3 Native Messaging host + manifest installer for all browsers and OSes
 
 ### Phase 5: Link refresh
 - [ ] P5.1 Source model persistence, fingerprinting, expiry detection (incl. signed-URL params)

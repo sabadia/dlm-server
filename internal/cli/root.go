@@ -140,6 +140,7 @@ func newApp(version string, opts ...Option) *app {
 		a.newSettingsCommand(),
 		a.newCookiesCommand(),
 		a.newCaptureCommand(),
+		a.newNativeHostCommand(),
 	)
 	a.root = root
 	return a
