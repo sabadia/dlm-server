@@ -257,9 +257,11 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 		Short: "Add download tasks",
 		Long: "Add one task per URL (and per line of --file; '-' reads stdin, blank lines and # comments are skipped).\n\n" +
 			"One URL creates a single task (create-task); several URLs or a file create them in one batch " +
-			"(create-tasks) and print one result per URL. Settings flags apply to every task.",
+			"(create-tasks) and print one result per URL. Settings flags apply to every task.\n\n" +
+			"A URL can be a magnet link, or the path of a local .torrent file, which is sent to the daemon as a data URL.",
 		Example: "  dlm task add https://example.com/file.iso --queue <id> --speed-limit 1MB\n" +
 			"  dlm task add -f urls.txt --paused\n" +
+			"  dlm task add ./ubuntu.iso.torrent 'magnet:?xt=urn:btih:...'\n" +
 			"  dlm task add https://example.com/a.bin --header 'Cookie=x=1' --set retry.maxAttempts=10",
 		Annotations: map[string]string{annotationOperationID: "create-task,create-tasks"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -288,6 +290,10 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 			}
 			reqs := make([]client.CreateTaskRequest, len(urls))
 			for i, u := range urls {
+				u, err := resolveTorrentFile(u)
+				if err != nil {
+					return err
+				}
 				reqs[i] = client.CreateTaskRequest{
 					URL: u, QueueID: f.queue, Name: f.name, Dir: f.dir, Settings: layer,
 					Priority: f.priority, Paused: f.paused,

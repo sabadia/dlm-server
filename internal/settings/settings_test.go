@@ -3,6 +3,7 @@ package settings
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -183,6 +184,13 @@ func TestValidateValues(t *testing.T) {
 		{"bad mismatch", Settings{Refresh: RefreshSettings{OnMismatch: Some(MismatchPolicy("x"))}}, "refresh.onMismatch"},
 		{"bad browser usage", Settings{BrowserUsage: Some(BrowserUsage("sometimes"))}, "browserUsage"},
 		{"post action without kind", Settings{PostActions: Some([]PostAction{{}})}, "postActions[0].kind"},
+		{"negative seed ratio", Settings{Torrent: TorrentSettings{SeedRatio: Some(-0.5)}}, "torrent.seedRatio"},
+		{"huge seed ratio", Settings{Torrent: TorrentSettings{SeedRatio: Some(float64(MaxSeedRatio) + 1)}}, "torrent.seedRatio"},
+		{"nan seed ratio", Settings{Torrent: TorrentSettings{SeedRatio: Some(math.NaN())}}, "torrent.seedRatio"},
+		{"negative seed time", Settings{Torrent: TorrentSettings{SeedTime: Some(Duration(-time.Second))}}, "torrent.seedTime"},
+		{"bad tracker scheme", Settings{Torrent: TorrentSettings{Trackers: Some([]string{"ftp://t.example/announce"})}}, "torrent.trackers"},
+		{"tracker without host", Settings{Torrent: TorrentSettings{Trackers: Some([]string{"udp://"})}}, "torrent.trackers"},
+		{"torrent settings ok", Settings{Torrent: TorrentSettings{SeedKeep: Some(true), SeedRatio: Some(2.5), SeedTime: Some(Duration(0)), Trackers: Some([]string{"udp://t.example:6969/announce", "https://t.example/announce", "wss://t.example"})}}, ""},
 		{"schedule ok overnight", Settings{Schedule: Some(window("22:00", "06:00", 1, 2))}, ""},
 		{"schedule bad clock", Settings{Schedule: Some(window("25:00", "06:00", 1))}, "schedule.windows[0].start"},
 		{"schedule no days", Settings{Schedule: Some(window("01:00", "02:00"))}, "schedule.windows[0].days"},
@@ -304,5 +312,35 @@ func TestProxyRules(t *testing.T) {
 	}
 	if err := global.Validate(LevelQueue); err == nil {
 		t.Error("proxyRules must be global-only")
+	}
+}
+
+func TestTorrentSettingsLayering(t *testing.T) {
+	d := Defaults("/dl")
+	if d.Torrent.SeedKeep.Value() || d.Torrent.SeedRatio.Value() != 1.0 || d.Torrent.SeedTime.Value().Std() != 2*time.Hour {
+		t.Errorf("default torrent settings = %+v", d.Torrent)
+	}
+	task := Settings{Torrent: TorrentSettings{SeedKeep: Some(true)}}
+	queue := Settings{Torrent: TorrentSettings{SeedRatio: Some(3.0)}}
+	eff := Resolve(Layers{Defaults: d, Queue: queue, Task: task})
+	if !eff.Settings.Torrent.SeedKeep.Value() || eff.Settings.Torrent.SeedRatio.Value() != 3.0 || eff.Settings.Torrent.SeedTime.Value().Std() != 2*time.Hour {
+		t.Errorf("effective = %+v", eff.Settings.Torrent)
+	}
+	for path, want := range map[string]Level{"torrent.seedKeep": LevelTask, "torrent.seedRatio": LevelQueue, "torrent.seedTime": LevelDefault} {
+		if got := eff.Sources[path]; got != want {
+			t.Errorf("source of %s = %v, want %v", path, got, want)
+		}
+	}
+	// A merge patch reaches into the group.
+	got, err := MergePatch(Settings{}, []byte(`{"torrent":{"seedRatio":2,"seedTime":"30m","trackers":["udp://t.example/a"]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Torrent.SeedRatio.Value() != 2 || got.Torrent.SeedTime.Value().Std() != 30*time.Minute || len(got.Torrent.Trackers.Value()) != 1 {
+		t.Errorf("patched = %+v", got.Torrent)
+	}
+	got, err = MergePatch(got, []byte(`{"torrent":{"seedRatio":null}}`))
+	if err != nil || got.Torrent.SeedRatio.IsSet() || !got.Torrent.SeedTime.IsSet() {
+		t.Errorf("after unsetting seedRatio: %+v, %v", got.Torrent, err)
 	}
 }

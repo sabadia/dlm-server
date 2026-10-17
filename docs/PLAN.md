@@ -291,7 +291,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 
 ### Phase 8: Other protocols
 - [x] P8.1 FTP/FTPS engine (resume via REST command)
-- [ ] P8.2 BitTorrent engine (magnet/.torrent/base64, file select, trackers, DHT/PEX, seeding rules), instance-owned client
+- [x] P8.2 BitTorrent engine (magnet/.torrent/base64, file select, trackers, DHT/PEX, seeding rules), instance-owned client
 - [ ] P8.3 ed2k engine
 - [ ] P8.4 yt-dlp engine (managed binary, `-J` formats, progress template, cookies file)
 

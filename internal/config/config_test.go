@@ -222,3 +222,20 @@ func TestFFmpegConfig(t *testing.T) {
 		t.Errorf("ffmpeg config from the environment = %+v", cfg.FFmpeg)
 	}
 }
+
+func TestTorrentConfig(t *testing.T) {
+	d := Default().Torrent
+	if !d.Enabled || !d.DHT || !d.PEX || !d.PortForwarding || d.ListenPort != 0 || d.UploadLimit != 0 || d.MetadataTimeout != 2*time.Minute {
+		t.Errorf("default torrent config = %+v", d)
+	}
+	cfg, err := Load(LoadOptions{Environ: func() []string {
+		return []string{"DLM_HOME=" + t.TempDir(), "DLM_TORRENT_ENABLED=false", "DLM_TORRENT_LISTEN_PORT=51413", "DLM_TORRENT_DHT=false", "DLM_TORRENT_UPLOAD_LIMIT=1048576", "DLM_TORRENT_METADATA_TIMEOUT=30s"}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.Torrent
+	if got.Enabled || got.ListenPort != 51413 || got.DHT || !got.PEX || got.UploadLimit != 1<<20 || got.MetadataTimeout != 30*time.Second {
+		t.Errorf("torrent config from the environment = %+v", got)
+	}
+}

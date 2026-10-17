@@ -99,6 +99,8 @@ type Settings struct {
 
 	Refresh RefreshSettings `json:"refresh,omitzero"`
 
+	Torrent TorrentSettings `json:"torrent,omitzero"`
+
 	BrowserUsage   Optional[BrowserUsage] `json:"browserUsage,omitzero"`
 	PostActions    Optional[[]PostAction] `json:"postActions,omitzero"`
 	AutoCategorize Optional[bool]         `json:"autoCategorize,omitzero"`
@@ -127,6 +129,24 @@ type RefreshSettings struct {
 	// AwaitTimeout bounds the extension-capture wait.
 	AwaitTimeout Optional[Duration]       `json:"awaitTimeout,omitzero"`
 	OnMismatch   Optional[MismatchPolicy] `json:"onMismatch,omitzero"`
+}
+
+// TorrentSettings controls BitTorrent downloads (magnet links and .torrent
+// files).
+type TorrentSettings struct {
+	// SeedKeep keeps a finished torrent seeding until the task is paused or
+	// deleted, whatever SeedRatio and SeedTime say.
+	SeedKeep Optional[bool] `json:"seedKeep,omitzero"`
+	// SeedRatio stops seeding once the bytes uploaded reach this multiple
+	// of the torrent's size; 0 means no ratio limit.
+	SeedRatio Optional[float64] `json:"seedRatio,omitzero"`
+	// SeedTime stops seeding this long after the download finished; 0 means
+	// no time limit. Seeding ends at whichever limit is reached first, and
+	// a torrent with neither limit (and no SeedKeep) is not seeded at all.
+	SeedTime Optional[Duration] `json:"seedTime,omitzero"`
+	// Trackers are announce URLs (http, https, udp, wss) added to every
+	// torrent of the task, except private ones.
+	Trackers Optional[[]string] `json:"trackers,omitzero"`
 }
 
 // ProxyMode selects how requests are proxied.
@@ -381,6 +401,11 @@ func Defaults(downloadDir string) Settings {
 			MaxAttempts:  Some(3),
 			AwaitTimeout: Some(Duration(10 * time.Minute)),
 			OnMismatch:   Some(MismatchFail),
+		},
+		Torrent: TorrentSettings{
+			SeedKeep:  Some(false),
+			SeedRatio: Some(1.0),
+			SeedTime:  Some(Duration(2 * time.Hour)),
 		},
 		BrowserUsage:   Some(BrowserAuto),
 		AutoCategorize: Some(false),
