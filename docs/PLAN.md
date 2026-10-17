@@ -286,7 +286,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 
 ### Phase 7: Streams
 - [x] P7.1 ffmpeg locator/auto-downloader
-- [ ] P7.2 HLS engine (VOD + live record, AES-128, variant select, fMP4, key/segment URL refresh)
+- [x] P7.2 HLS engine (VOD + live record, AES-128, variant select, fMP4, key/segment URL refresh)
 - [ ] P7.3 DASH engine (MPD, audio+video selection, mux via ffmpeg)
 
 ### Phase 8: Other protocols

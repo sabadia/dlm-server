@@ -95,7 +95,7 @@ func (a *app) newBrowserDownloadCommand() *cobra.Command {
 		Use:   "download RESULT_ID INDEX",
 		Short: "Download a candidate found by `browser resolve`",
 		Long: "Create a task for candidate INDEX of the resolve result RESULT_ID. Files the browser downloaded itself (blob and " +
-			"attachment downloads) are imported; other candidates are downloaded from their URL. HLS and DASH streams are not supported yet.",
+			"attachment downloads) are imported; other candidates are downloaded from their URL. HLS playlists (.m3u8) use the HLS engine; DASH is not supported yet.",
 		Args:        cobra.ExactArgs(2),
 		Annotations: map[string]string{annotationOperationID: "download-candidate"},
 		RunE: func(cmd *cobra.Command, args []string) error {

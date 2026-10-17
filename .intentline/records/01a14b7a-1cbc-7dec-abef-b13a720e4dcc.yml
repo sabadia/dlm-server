@@ -1,0 +1,35 @@
+schema_version: 1
+id: 01a14b7a-1cbc-7dec-abef-b13a720e4dcc
+status: draft
+created_at: '2026-10-17T20:07:36Z'
+updated_at: '2026-10-17T20:07:36Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P7.2: HLS engine (VOD + live record, AES-128, variant select, fMP4, key/segment URL refresh)'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/engine/hls/download.go
+  start_line: null
+  end_line: null
+- path: internal/engine/hls/engine.go
+  start_line: null
+  end_line: null
+- path: internal/engine/hls/playlist.go
+  start_line: null
+  end_line: null
+- path: internal/engine/hls/merge.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

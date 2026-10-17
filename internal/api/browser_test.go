@@ -115,7 +115,7 @@ func TestBrowserOperationErrors(t *testing.T) {
 	req(http.MethodDelete, "/v1/browser/profiles/x", "", http.StatusConflict)
 	// Streams are refused with 422.
 	f.browser.err = nil
-	f.browser.cands = map[string]browser.Candidate{browserx.URL("r", 0): {URL: "https://x/m.m3u8", Kind: browser.KindHLS}}
+	f.browser.cands = map[string]browser.Candidate{browserx.URL("r", 0): {URL: "https://x/m.mpd", Kind: browser.KindDASH}}
 	req(http.MethodPost, "/v1/browser/results/r/candidates/0/download", `{}`, http.StatusUnprocessableEntity)
 	// Authentication.
 	assertProblem(t, do(t, f.s, request{method: http.MethodGet, path: "/v1/browser"}), http.StatusUnauthorized)
