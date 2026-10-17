@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
@@ -450,11 +451,12 @@ func TestPostQueueActionCommandFires(t *testing.T) {
 	exec := &fakeExecutor{}
 	h := newGateHarness(t, Options{Actions: exec})
 	sub := h.subscribe(t, events.TypeQueueCompleted)
+	cmdPath := filepath.Join(t.TempDir(), "true")
 	q := h.queue(t, "batch", settings.Settings{
 		MaxConcurrentDownloads: settings.Some(1),
 		OnQueueComplete: settings.Some(settings.QueueCompleteAction{
 			Action:  settings.QueueActionCommand,
-			Command: "/usr/bin/true",
+			Command: cmdPath,
 			Args:    []string{"--done"},
 		}),
 	}, "")
@@ -485,8 +487,8 @@ func TestPostQueueActionCommandFires(t *testing.T) {
 	exec.mu.Lock()
 	got := exec.commands[0]
 	exec.mu.Unlock()
-	if got[0] != "/usr/bin/true" || len(got) != 2 || got[1] != "--done" {
-		t.Errorf("command = %v", got)
+	if got[0] != cmdPath || len(got) != 2 || got[1] != "--done" {
+		t.Errorf("command = %v, want [%s, --done]", got, cmdPath)
 	}
 }
 
