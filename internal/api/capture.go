@@ -66,6 +66,8 @@ type CaptureBody struct {
 	Priority domain.Priority   `json:"priority,omitempty" enum:"low,normal,high"`
 	Labels   map[string]string `json:"labels,omitempty"`
 	Paused   bool              `json:"paused,omitempty" doc:"Create the task paused instead of queued."`
+	// AllowDuplicate lets the capture add a task that repeats another one.
+	AllowDuplicate bool `json:"allowDuplicate,omitempty" doc:"Add the task even when another task has the same link; otherwise it is refused with 409."`
 }
 
 // CaptureOutput is the response of capture-download.
@@ -82,7 +84,7 @@ func (b *CaptureBody) toInput() service.CaptureInput {
 	in := service.CaptureInput{
 		URL: b.URL, FinalURL: b.FinalURL, PageURL: b.PageURL, Referrer: b.Referrer,
 		Filename: b.Filename, MIME: b.MIME, Size: b.Size, UserAgent: b.UserAgent, Headers: b.Headers,
-		QueueID: b.QueueID, Dir: b.Dir, Settings: b.Settings, Priority: b.Priority, Labels: b.Labels, Paused: b.Paused,
+		QueueID: b.QueueID, Dir: b.Dir, Settings: b.Settings, Priority: b.Priority, Labels: b.Labels, Paused: b.Paused, AllowDuplicate: b.AllowDuplicate,
 	}
 	for _, c := range b.Cookies {
 		in.Cookies = append(in.Cookies, c.toDomain())

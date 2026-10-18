@@ -80,6 +80,8 @@ type CreateTaskBody struct {
 	Priority  domain.Priority   `json:"priority,omitempty" enum:"low,normal,high" doc:"Priority within the queue (default normal)."`
 	Labels    map[string]string `json:"labels,omitempty" doc:"Free-form labels."`
 	Paused    bool              `json:"paused,omitempty" doc:"Create the task paused instead of queued."`
+	// AllowDuplicate lets a task repeat another one.
+	AllowDuplicate bool `json:"allowDuplicate,omitempty" doc:"Add the task even when another task has the same link, expected checksum, or (once resolved) file name and size; otherwise it is refused with 409."`
 }
 
 func (b *CreateTaskBody) toInput() (service.CreateTaskInput, error) {
@@ -89,7 +91,7 @@ func (b *CreateTaskBody) toInput() (service.CreateTaskInput, error) {
 	}
 	return service.CreateTaskInput{
 		Source: src, ResolveID: b.ResolveID, QueueID: b.QueueID, Name: b.Name, Dir: b.Dir,
-		Settings: b.Settings, Priority: b.Priority, Labels: b.Labels, Paused: b.Paused,
+		Settings: b.Settings, Priority: b.Priority, Labels: b.Labels, Paused: b.Paused, AllowDuplicate: b.AllowDuplicate,
 	}, nil
 }
 

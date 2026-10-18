@@ -618,7 +618,7 @@ func TestTaskServiceDeleteFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	mk := func(name string) *domain.Task {
-		tk, err := f.tasks.Create(ctx, CreateTaskInput{Source: domain.Source{CurrentURL: "https://example.com/" + name}})
+		tk, err := f.tasks.Create(ctx, CreateTaskInput{Source: domain.Source{CurrentURL: "https://example.com/" + name}, AllowDuplicate: true})
 		if err != nil {
 			t.Fatal(err)
 		}

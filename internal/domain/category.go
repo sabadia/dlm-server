@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"path/filepath"
 	"strings"
 )
 
@@ -31,6 +32,13 @@ func (c *Category) Validate() error {
 	}
 	if strings.TrimSpace(c.Dir) == "" {
 		return InvalidArgument("category %q: dir is required", c.ID)
+	}
+	if !filepath.IsAbs(c.Dir) {
+		for _, part := range strings.FieldsFunc(c.Dir, func(r rune) bool { return r == '/' || r == '\\' }) {
+			if part == ".." {
+				return InvalidArgument("category %q: a relative dir must not contain ..", c.ID)
+			}
+		}
 	}
 	if len(c.Extensions) == 0 && len(c.MIMETypes) == 0 {
 		return InvalidArgument("category %q: at least one extension or MIME type is required", c.ID)
@@ -73,4 +81,13 @@ func (c *Category) Matches(filename, mimeType string) bool {
 		}
 	}
 	return false
+}
+
+// ResolveDir returns the directory of the category's downloads: Dir itself
+// when it is absolute, otherwise Dir below downloadDir.
+func (c *Category) ResolveDir(downloadDir string) string {
+	if filepath.IsAbs(c.Dir) {
+		return filepath.Clean(c.Dir)
+	}
+	return filepath.Join(downloadDir, filepath.FromSlash(strings.ReplaceAll(c.Dir, "\\", "/")))
 }

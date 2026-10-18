@@ -152,7 +152,10 @@ func TestCaptureRefreshesAWaitingTask(t *testing.T) {
 	if len(list.Tasks) != 1 {
 		t.Errorf("%d tasks after the capture, want the one that was refreshed", len(list.Tasks))
 	}
-	// A second capture matches nothing: it creates a task as usual.
+	// A second capture matches no waiting task. It repeats the link of the
+	// task that has it now, so it is refused unless duplicates are allowed.
+	f.call(t, http.MethodPost, "/v1/capture", body, http.StatusConflict, nil)
+	body = strings.Replace(body, "{", `{"allowDuplicate":true,`, 1)
 	f.call(t, http.MethodPost, "/v1/capture", body, http.StatusCreated, &out)
 	if out.Refreshed {
 		t.Errorf("a capture refreshed a task that no longer waits: %+v", out)

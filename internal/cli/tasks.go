@@ -219,6 +219,7 @@ type taskAddFlags struct {
 	ytdlp       bool
 	format      string
 	checksum    string
+	allowDup    bool
 }
 
 // settings builds the task-level settings layer from the flags.
@@ -312,7 +313,7 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 				}
 				reqs[i] = client.CreateTaskRequest{
 					URL: u, QueueID: f.queue, Name: f.name, Dir: f.dir, Settings: layer,
-					Priority: f.priority, Paused: f.paused,
+					Priority: f.priority, Paused: f.paused, AllowDuplicate: f.allowDup,
 				}
 				if f.ytdlp || f.format != "" {
 					src := &client.Source{CurrentURL: u, MediaHint: f.format}
@@ -346,6 +347,7 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 	fl.StringVar(&f.name, "name", "", "file name (single URL only; default: detected)")
 	fl.StringVar(&f.dir, "dir", "", "absolute download directory (default: the effective downloadDir)")
 	fl.BoolVar(&f.paused, "paused", false, "add the tasks paused")
+	fl.BoolVar(&f.allowDup, "allow-duplicate", false, "add the tasks even when another task has the same link, checksum, or file name and size")
 	fl.StringVar(&f.checksum, "checksum", "", "expected checksum ALGORITHM:HEX (md5, sha1, sha256 or blake3); a file that does not match is downloaded again")
 	fl.BoolVar(&f.ytdlp, "ytdlp", false, "download the URLs with yt-dlp (video and audio pages)")
 	fl.StringVar(&f.format, "format", "", "media format: a yt-dlp format selector with --ytdlp, or the quality of an HLS/DASH stream")

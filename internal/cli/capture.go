@@ -25,6 +25,7 @@ type captureFlags struct {
 	dir       string
 	priority  string
 	paused    bool
+	allowDup  bool
 }
 
 // request builds the capture request: the --request file first, then the
@@ -67,6 +68,9 @@ func (f *captureFlags) build(cmd *cobra.Command, args []string) (client.CaptureR
 	}
 	if fl.Changed("paused") {
 		req.Paused = f.paused
+	}
+	if fl.Changed("allow-duplicate") {
+		req.AllowDuplicate = f.allowDup
 	}
 	if fl.Changed("size") {
 		n, err := parseSize(f.size)
@@ -143,5 +147,6 @@ func (a *app) newCaptureCommand() *cobra.Command {
 	fl.StringVar(&f.dir, "dir", "", "absolute download directory")
 	fl.StringVar(&f.priority, "priority", "", "priority: low, normal or high")
 	fl.BoolVar(&f.paused, "paused", false, "create the task paused")
+	fl.BoolVar(&f.allowDup, "allow-duplicate", false, "add the task even when another task has the same link")
 	return cmd
 }

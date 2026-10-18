@@ -81,10 +81,20 @@ type RunnerDeps struct {
 	// returns nil. ErrRefreshDisabled makes the Runner record the failure
 	// itself; a context error is treated like any cancellation.
 	LinkExpired func(ctx context.Context, taskID string, cause error) error
+	// Categories, when set, sorts the downloads of tasks without a directory
+	// of their own into category directories (setting autoCategorize).
+	Categories CategoryMatcher
 	// Post, when set, runs the post-processing steps of a finished download
 	// while the task is postprocessing (verifying the checksum, …). Nil
 	// completes the task straight away.
 	Post PostProcessor
+}
+
+// CategoryMatcher finds the category of a file (CategoryService).
+type CategoryMatcher interface {
+	// Match returns the first category whose rules match the file name and
+	// MIME type, or nil.
+	Match(ctx context.Context, name, mimeType string) (*domain.Category, error)
 }
 
 // PostProcessor runs the steps after a download (postproc.Pipeline).
@@ -182,6 +192,14 @@ func (r *Runner) Run(ctx context.Context, taskID string) error {
 		return err
 	}
 	runErr := r.download(ctx, task, eff)
+	if errors.Is(runErr, errExistingFile) {
+		// The file is already there (policy skip, or resume with the same
+		// size): the task is done, after the post-processing steps.
+		if err := r.markPresent(context.WithoutCancel(ctx), task); err != nil {
+			return err
+		}
+		runErr = nil
+	}
 	return r.finish(ctx, task, eff, runErr)
 }
 
@@ -277,8 +295,20 @@ func (r *Runner) download(ctx context.Context, task *domain.Task, eff settings.S
 	}
 
 	dir := eff.DownloadDir.Value()
-	if task.Dir != "" {
+	switch {
+	case task.Dir != "":
 		dir = task.Dir
+	case eff.AutoCategorize.OrElse(false) && r.d.Categories != nil:
+		// The task has no directory of its own: its category (by extension or
+		// MIME type, known now that it is resolved) chooses one.
+		c, err := r.d.Categories.Match(ctx, task.Name, task.Source.Fingerprint.ContentType)
+		switch {
+		case err != nil:
+			r.d.Logger.WarnContext(ctx, "cannot match a category", "task_id", task.ID, "error", err)
+		case c != nil && dir != "":
+			dir = c.ResolveDir(dir)
+			r.d.Logger.InfoContext(ctx, "sorted into a category", "task_id", task.ID, "category", c.Name, "dir", dir)
+		}
 	}
 	if dir == "" || !filepath.IsAbs(dir) {
 		_ = probe.Close()
@@ -297,6 +327,15 @@ func (r *Runner) download(ctx context.Context, task *domain.Task, eff settings.S
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		_ = probe.Close()
 		return fmt.Errorf("service: load engine state of %q: %w", task.ID, err)
+	}
+
+	if len(segs) == 0 && state == nil {
+		// A download that starts from nothing meets whatever is at its
+		// destination under the file-exists policy.
+		if err := r.applyFileExists(ctx, task, eff); err != nil {
+			_ = probe.Close()
+			return err
+		}
 	}
 
 	var limiter engine.Limiter

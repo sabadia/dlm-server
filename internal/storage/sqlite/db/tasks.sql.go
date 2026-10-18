@@ -143,6 +143,113 @@ func (q *Queries) DeleteTask(ctx context.Context, id string) (int64, error) {
 	return result.RowsAffected()
 }
 
+const findTaskByChecksum = `-- name: FindTaskByChecksum :one
+SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at FROM tasks
+WHERE json_extract(settings, '$.checksum.expected') = ?1
+ORDER BY created_at, id
+LIMIT 1
+`
+
+func (q *Queries) FindTaskByChecksum(ctx context.Context, expected string) (Task, error) {
+	row := q.db.QueryRowContext(ctx, findTaskByChecksum, expected)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.QueueID,
+		&i.Status,
+		&i.Priority,
+		&i.Position,
+		&i.Engine,
+		&i.Name,
+		&i.Dir,
+		&i.Size,
+		&i.Downloaded,
+		&i.Source,
+		&i.Resource,
+		&i.Settings,
+		&i.Labels,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const findTaskByNameSize = `-- name: FindTaskByNameSize :one
+SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at FROM tasks
+WHERE name = ?1 AND size = ?2 AND status <> 'error'
+ORDER BY created_at, id
+LIMIT 1
+`
+
+type FindTaskByNameSizeParams struct {
+	Name string
+	Size int64
+}
+
+func (q *Queries) FindTaskByNameSize(ctx context.Context, arg FindTaskByNameSizeParams) (Task, error) {
+	row := q.db.QueryRowContext(ctx, findTaskByNameSize, arg.Name, arg.Size)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.QueueID,
+		&i.Status,
+		&i.Priority,
+		&i.Position,
+		&i.Engine,
+		&i.Name,
+		&i.Dir,
+		&i.Size,
+		&i.Downloaded,
+		&i.Source,
+		&i.Resource,
+		&i.Settings,
+		&i.Labels,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const findTaskBySourceURL = `-- name: FindTaskBySourceURL :one
+SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at FROM tasks
+WHERE json_extract(source, '$.currentUrl') = ?1 OR json_extract(source, '$.originalUrl') = ?1
+ORDER BY created_at, id
+LIMIT 1
+`
+
+func (q *Queries) FindTaskBySourceURL(ctx context.Context, url string) (Task, error) {
+	row := q.db.QueryRowContext(ctx, findTaskBySourceURL, url)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.QueueID,
+		&i.Status,
+		&i.Priority,
+		&i.Position,
+		&i.Engine,
+		&i.Name,
+		&i.Dir,
+		&i.Size,
+		&i.Downloaded,
+		&i.Source,
+		&i.Resource,
+		&i.Settings,
+		&i.Labels,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const getTask = `-- name: GetTask :one
 SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at FROM tasks WHERE id = ?1
 `

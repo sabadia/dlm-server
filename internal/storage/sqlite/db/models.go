@@ -8,6 +8,15 @@ import (
 	"database/sql"
 )
 
+type Category struct {
+	ID        string
+	Name      string
+	Position  int64
+	Data      string
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 type Cookie struct {
 	ID           string
 	Domain       string

@@ -61,6 +61,8 @@ type Deps struct {
 	// Cookies is the service behind the cookie operations; like the others
 	// it answers 503 while nil.
 	Cookies *service.CookieService
+	// Categories is the service behind the category operations; 503 while nil.
+	Categories *service.CategoryService
 	// Capture is the service behind capture-download; 503 while nil.
 	Capture *service.CaptureService
 	// Refresh is the service behind the refresh operations; 503 while nil.
@@ -83,13 +85,14 @@ type Server struct {
 	bootID    string
 	heartbeat time.Duration
 
-	settings *service.SettingsService
-	queues   *service.QueueService
-	tasks    *service.TaskService
-	cookies  *service.CookieService
-	capture  *service.CaptureService
-	refresh  *service.RefreshService
-	browser  *service.BrowserService
+	settings   *service.SettingsService
+	queues     *service.QueueService
+	tasks      *service.TaskService
+	cookies    *service.CookieService
+	categories *service.CategoryService
+	capture    *service.CaptureService
+	refresh    *service.RefreshService
+	browser    *service.BrowserService
 
 	mu     sync.RWMutex
 	public map[string]struct{} // mux patterns ("GET /v1/health") that need no token
@@ -137,13 +140,14 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		bootID:    bootID,
 		heartbeat: heartbeat,
 
-		settings: deps.Settings,
-		queues:   deps.Queues,
-		tasks:    deps.Tasks,
-		cookies:  deps.Cookies,
-		capture:  deps.Capture,
-		refresh:  deps.Refresh,
-		browser:  deps.Browser,
+		settings:   deps.Settings,
+		queues:     deps.Queues,
+		tasks:      deps.Tasks,
+		cookies:    deps.Cookies,
+		categories: deps.Categories,
+		capture:    deps.Capture,
+		refresh:    deps.Refresh,
+		browser:    deps.Browser,
 	}
 	s.api = humago.New(s.mux, humaConfig(version))
 
@@ -160,6 +164,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerQueues()
 	s.registerSettings()
 	s.registerCookies()
+	s.registerCategories()
 	s.registerCapture()
 	s.registerRefresh()
 	s.registerBrowser()

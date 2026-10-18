@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sabadia/dlm-server/internal/domain"
@@ -556,3 +557,148 @@ var (
 	_ storage.CookieRepository         = cookieRepo{}
 	_ storage.RefreshHistoryRepository = refreshRepo{}
 )
+
+// ---- categories ----
+
+type categoryRepo struct{ s *Store }
+
+// categoryData is the JSON document stored in categories.data.
+type categoryData struct {
+	Dir        string   `json:"dir"`
+	Extensions []string `json:"extensions,omitempty"`
+	MIMETypes  []string `json:"mimeTypes,omitempty"`
+}
+
+func encodeCategory(c *domain.Category) (string, error) {
+	b, err := marshalJSON("category", categoryData{Dir: c.Dir, Extensions: c.Extensions, MIMETypes: c.MIMETypes})
+	if err != nil {
+		return "", fmt.Errorf("storage: category %q: %w", c.ID, err)
+	}
+	return b, nil
+}
+
+func decodeCategory(row db.Category) (*domain.Category, error) {
+	var d categoryData
+	if err := unmarshalJSON("category", row.Data, &d); err != nil {
+		return nil, fmt.Errorf("storage: category %q: %w", row.ID, err)
+	}
+	return &domain.Category{ID: row.ID, Name: row.Name, Position: row.Position, Dir: d.Dir, Extensions: d.Extensions, MIMETypes: d.MIMETypes}, nil
+}
+
+func categoryWriteError(op string, c *domain.Category, err error) error {
+	switch {
+	case isPrimaryKeyViolation(err):
+		return domain.AlreadyExists("category", c.ID)
+	case isUniqueViolation(err):
+		return domain.AlreadyExists("category name", c.Name)
+	default:
+		return fmt.Errorf("storage: %s category %q: %w", op, c.ID, err)
+	}
+}
+
+func (r categoryRepo) Create(ctx context.Context, c *domain.Category) error {
+	data, err := encodeCategory(c)
+	if err != nil {
+		return err
+	}
+	now := toMillis(r.s.now())
+	if err := r.s.write().CreateCategory(ctx, db.CreateCategoryParams{
+		ID: c.ID, Name: c.Name, Position: c.Position, Data: data, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		return categoryWriteError("create", c, err)
+	}
+	return nil
+}
+
+func (r categoryRepo) Get(ctx context.Context, id string) (*domain.Category, error) {
+	row, err := r.s.read().GetCategory(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.NotFound("category", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("storage: get category %q: %w", id, err)
+	}
+	return decodeCategory(row)
+}
+
+func (r categoryRepo) List(ctx context.Context) ([]*domain.Category, error) {
+	rows, err := r.s.read().ListCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("storage: list categories: %w", err)
+	}
+	out := make([]*domain.Category, 0, len(rows))
+	for _, row := range rows {
+		c, err := decodeCategory(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+func (r categoryRepo) Update(ctx context.Context, c *domain.Category) error {
+	data, err := encodeCategory(c)
+	if err != nil {
+		return err
+	}
+	n, err := r.s.write().UpdateCategory(ctx, db.UpdateCategoryParams{
+		ID: c.ID, Name: c.Name, Position: c.Position, Data: data, UpdatedAt: toMillis(r.s.now()),
+	})
+	if err != nil {
+		return categoryWriteError("update", c, err)
+	}
+	if n == 0 {
+		return domain.NotFound("category", c.ID)
+	}
+	return nil
+}
+
+func (r categoryRepo) Delete(ctx context.Context, id string) error {
+	n, err := r.s.write().DeleteCategory(ctx, id)
+	if err != nil {
+		return fmt.Errorf("storage: delete category %q: %w", id, err)
+	}
+	if n == 0 {
+		return domain.NotFound("category", id)
+	}
+	return nil
+}
+
+func (r categoryRepo) NextPosition(ctx context.Context) (int64, error) {
+	n, err := r.s.read().NextCategoryPosition(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("storage: next category position: %w", err)
+	}
+	return n, nil
+}
+
+// FindDuplicate implements storage.TaskRepository.
+func (r taskRepo) FindDuplicate(ctx context.Context, q storage.DuplicateQuery) (*domain.Task, error) {
+	one := func(row db.Task, err error) (*domain.Task, error) {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil //nolint:nilnil // no duplicate is not an error
+		}
+		if err != nil {
+			return nil, fmt.Errorf("storage: find duplicate task: %w", err)
+		}
+		return decodeTask(&row)
+	}
+	for _, u := range q.URLs {
+		if u == "" {
+			continue
+		}
+		if t, err := one(r.s.read().FindTaskBySourceURL(ctx, u)); t != nil || err != nil {
+			return t, err
+		}
+	}
+	if q.Checksum != "" {
+		if t, err := one(r.s.read().FindTaskByChecksum(ctx, strings.ToLower(q.Checksum))); t != nil || err != nil {
+			return t, err
+		}
+	}
+	if q.Name != "" && q.Size > 0 {
+		return one(r.s.read().FindTaskByNameSize(ctx, db.FindTaskByNameSizeParams{Name: q.Name, Size: q.Size}))
+	}
+	return nil, nil //nolint:nilnil // no duplicate is not an error
+}
