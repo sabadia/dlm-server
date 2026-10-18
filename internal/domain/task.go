@@ -75,6 +75,9 @@ const (
 	ErrorCodeDiskFull = "disk_full"
 	// ErrorCodeChecksumMismatch: the downloaded file failed verification.
 	ErrorCodeChecksumMismatch = "checksum_mismatch"
+	// ErrorCodePostprocess: a step after the download (extraction, a
+	// post-action) failed; the downloaded file is in place.
+	ErrorCodePostprocess = "postprocess"
 	// ErrorCodeFatal: any other non-recoverable failure.
 	ErrorCodeFatal = "fatal"
 )

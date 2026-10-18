@@ -38,7 +38,7 @@ var transitions = map[TaskStatus][]TaskStatus{
 	StatusRunning:        {StatusQueued, StatusPaused, StatusAwaitingLink, StatusRefreshing, StatusPostprocessing, StatusError},
 	StatusRefreshing:     {StatusQueued, StatusRunning, StatusAwaitingLink, StatusPaused, StatusError},
 	StatusAwaitingLink:   {StatusQueued, StatusRefreshing, StatusPaused, StatusError},
-	StatusPostprocessing: {StatusCompleted, StatusError},
+	StatusPostprocessing: {StatusCompleted, StatusQueued, StatusError},
 	StatusPaused:         {StatusQueued},
 	StatusError:          {StatusQueued, StatusPaused, StatusAwaitingLink},
 	StatusCompleted:      {StatusQueued},

@@ -32,6 +32,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/logging"
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/platform"
+	"github.com/sabadia/dlm-server/internal/postproc"
 	"github.com/sabadia/dlm-server/internal/ratelimit"
 	"github.com/sabadia/dlm-server/internal/refresh"
 	"github.com/sabadia/dlm-server/internal/scheduler"
@@ -176,6 +177,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Logger:    log,
 		TaskLocks: locks,
 		Bytes:     quotas,
+		Post:      postproc.Default(log),
 		// The refresh service needs the scheduler, which needs the runner:
 		// the hook reaches it through services, assigned below.
 		LinkExpired: func(ctx context.Context, taskID string, cause error) error {
