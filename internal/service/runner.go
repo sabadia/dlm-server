@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -445,13 +446,13 @@ func (r *Runner) finish(runCtx context.Context, task *domain.Task, eff settings.
 func (r *Runner) postprocess(runCtx context.Context, task *domain.Task, eff settings.Settings) error {
 	ctx := context.WithoutCancel(runCtx)
 	if r.d.Post == nil {
-		return r.complete(ctx, task, "")
+		return r.complete(ctx, task, "", nil)
 	}
 	job, err := r.d.Post.Process(runCtx, task, eff)
 	var mm *postproc.MismatchError
 	switch {
 	case err == nil:
-		return r.complete(ctx, task, job.Path)
+		return r.complete(ctx, task, job.Path, job.Notes)
 	case errors.As(err, &mm):
 		return r.redownload(ctx, task, eff, mm)
 	case runCtx.Err() != nil:
@@ -467,15 +468,35 @@ func (r *Runner) postprocess(runCtx context.Context, task *domain.Task, eff sett
 	}
 }
 
+// PostprocessLabel is the label that keeps what the post actions did (and why
+// one could not) on a completed task.
+const PostprocessLabel = "postprocess"
+
+// maxNotesLength bounds the label.
+const maxNotesLength = 1000
+
 // complete marks the task completed; path, when it differs from where the
-// task says its file is, becomes the task's directory and name.
-func (r *Runner) complete(ctx context.Context, task *domain.Task, path string) error {
+// task says its file is, becomes the task's directory and name. notes are what
+// the post actions reported; they are kept in the postprocess label.
+func (r *Runner) complete(ctx context.Context, task *domain.Task, path string, notes []string) error {
 	r.mu.Lock()
 	delete(r.redownloads, task.ID)
 	r.mu.Unlock()
 	return r.mutate(ctx, task, func(fresh *domain.Task) error {
 		if path != "" && path != filepath.Join(fresh.Dir, fresh.Name) {
 			fresh.Dir, fresh.Name = filepath.Dir(path), filepath.Base(path)
+		}
+		if len(notes) > 0 {
+			text := strings.Join(notes, "; ")
+			if len(text) > maxNotesLength {
+				text = text[:maxNotesLength] + "…"
+			}
+			labels := maps.Clone(fresh.Labels)
+			if labels == nil {
+				labels = map[string]string{}
+			}
+			labels[PostprocessLabel] = text
+			fresh.Labels = labels
 		}
 		if err := fresh.TransitionTo(domain.StatusCompleted, r.d.Clock()); err != nil {
 			return fmt.Errorf("service: task %q: %w", fresh.ID, err)

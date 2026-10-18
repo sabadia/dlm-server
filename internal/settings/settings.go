@@ -257,8 +257,29 @@ const (
 	BrowserAlways BrowserUsage = "always"
 )
 
-// PostAction is an action run after a download completes. The available
-// kinds and their parameters are defined by the post-processing pipeline.
+// Post-action kinds.
+const (
+	// PostActionExtract unpacks an archive (zip, rar, 7z, tar and its
+	// compressed forms; multi-volume rar sets). Parameters: dir (where to
+	// unpack: default a folder named after the archive, "." for the archive's
+	// own folder), delete ("true" removes the archive after unpacking),
+	// password.
+	PostActionExtract = "extract"
+	// PostActionAddTorrent turns a downloaded .torrent file into a torrent
+	// task. Parameters: dir (download directory of the torrent; default the
+	// folder of the .torrent file), delete ("true" removes the .torrent file).
+	PostActionAddTorrent = "add-torrent"
+)
+
+// postActionParams lists, per kind, the parameters it understands.
+var postActionParams = map[string][]string{
+	PostActionExtract:    {"dir", "delete", "password"},
+	PostActionAddTorrent: {"dir", "delete"},
+}
+
+// PostAction is an action run after a download completes: Kind names it (see
+// the PostAction constants) and Params configure it. Actions run in order and
+// never fail the task: a failure is recorded as a warning on the task.
 type PostAction struct {
 	Kind   string            `json:"kind"`
 	Params map[string]string `json:"params,omitempty"`

@@ -49,7 +49,7 @@ func (f *fixture) createChecked(t *testing.T, url, sum string) *domain.Task {
 func TestRunnerVerifiesTheChecksum(t *testing.T) {
 	srv := newFileServer(t, 1<<20, 0)
 	sum := sha256.Sum256(srv.data)
-	f := withPost(t, postproc.Default(nil))
+	f := withPost(t, postproc.Default(postproc.Options{}))
 	task := f.createChecked(t, srv.URL+"/files/data.bin", hex.EncodeToString(sum[:]))
 	if err := f.runner.Run(t.Context(), task.ID); err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestRunnerVerifiesTheChecksum(t *testing.T) {
 
 func TestRunnerDownloadsAgainOnAChecksumMismatchThenGivesUp(t *testing.T) {
 	srv := newFileServer(t, 1<<20, 0)
-	f := withPost(t, postproc.Default(nil), func(s *settings.Settings) { s.Retry.MaxAttempts = settings.Some(2) })
+	f := withPost(t, postproc.Default(postproc.Options{}), func(s *settings.Settings) { s.Retry.MaxAttempts = settings.Some(2) })
 	task := f.createChecked(t, srv.URL+"/files/data.bin", hex.EncodeToString(make([]byte, 32)))
 	path := filepath.Join(f.dir, "data.bin")
 
@@ -188,4 +188,44 @@ type postProc func(*domain.Task, settings.Settings) (*postproc.Job, error)
 
 func (p postProc) Process(_ context.Context, t *domain.Task, eff settings.Settings) (*postproc.Job, error) {
 	return p(t, eff)
+}
+
+func TestRunnerKeepsPostActionNotesInALabel(t *testing.T) {
+	srv := newFileServer(t, 8<<10, 0)
+	f := withPost(t, postProc(func(tk *domain.Task, eff settings.Settings) (*postproc.Job, error) {
+		j := postproc.NewJob(tk, eff)
+		j.Note("extract: 3 files unpacked to /x")
+		j.Note("add-torrent: no engine")
+		return j, nil
+	}))
+	task := f.createTask(t.Context(), t, srv.URL+"/files/data.bin")
+	if err := f.runner.Run(t.Context(), task.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := f.task(t, task.ID)
+	if got.Status != domain.StatusCompleted || got.Labels[PostprocessLabel] != "extract: 3 files unpacked to /x; add-torrent: no engine" {
+		t.Errorf("task = %s labels %v", got.Status, got.Labels)
+	}
+	// Notes never grow the label without bound.
+	f = withPost(t, postProc(func(tk *domain.Task, eff settings.Settings) (*postproc.Job, error) {
+		j := postproc.NewJob(tk, eff)
+		j.Note("%s", string(make([]byte, 5000)))
+		return j, nil
+	}))
+	task = f.createTask(t.Context(), t, srv.URL+"/files/data.bin")
+	if err := f.runner.Run(t.Context(), task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if l := f.task(t, task.ID).Labels[PostprocessLabel]; len(l) > maxNotesLength+len("…") {
+		t.Errorf("label has %d bytes", len(l))
+	}
+	// Without notes there is no label.
+	f = withPost(t, fakePost{})
+	task = f.createTask(t.Context(), t, srv.URL+"/files/data.bin")
+	if err := f.runner.Run(t.Context(), task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.task(t, task.ID).Labels[PostprocessLabel]; ok {
+		t.Error("a label was added although the actions had nothing to say")
+	}
 }

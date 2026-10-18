@@ -177,7 +177,9 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Logger:    log,
 		TaskLocks: locks,
 		Bytes:     quotas,
-		Post:      postproc.Default(log),
+		Post: postproc.Default(postproc.Options{Logger: log, Torrents: postproc.TorrentAdderFunc(func(ctx context.Context, in postproc.NewTorrent) error {
+			return services.Tasks.AddTorrentFile(ctx, in)
+		})}),
 		// The runner sorts downloads into category directories; the service is
 		// stateless, so it can be a second instance.
 		Categories: service.NewCategoryService(service.Deps{Store: store}),
