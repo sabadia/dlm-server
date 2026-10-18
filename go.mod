@@ -19,6 +19,7 @@ require (
 	github.com/knadh/koanf/providers/posflag v1.0.2
 	github.com/knadh/koanf/providers/structs v1.0.1
 	github.com/knadh/koanf/v2 v2.4.0
+	github.com/monkeyWie/goed2k v0.0.0-20260602122456-f2a71d599dee
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10

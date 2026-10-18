@@ -13,6 +13,9 @@ func TestSourceValidate(t *testing.T) {
 	}{
 		{"http", Source{CurrentURL: "https://example.com/a"}, false},
 		{"magnet", Source{CurrentURL: "magnet:?xt=urn:btih:abc"}, false},
+		{"ed2k link", Source{CurrentURL: "ed2k://|file|a%20b.iso|1234|0123456789ABCDEF0123456789ABCDEF|/|sources,1.2.3.4:4662|/"}, false},
+		{"ed2k link upper case", Source{CurrentURL: "ED2K://|file|a|1|0123456789ABCDEF0123456789ABCDEF|/"}, false},
+		{"data url", Source{CurrentURL: "data:application/x-bittorrent;base64,AAAA"}, false},
 		{"ftp with all refs", Source{
 			CurrentURL: "ftp://example.com/a", OriginalURL: "https://example.com/a", RedirectURL: "https://cdn.example.com/a",
 			PageURL: "https://example.com/page", Referrer: "https://example.com/", Method: "POST",
