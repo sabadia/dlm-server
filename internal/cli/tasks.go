@@ -218,6 +218,7 @@ type taskAddFlags struct {
 	sets        []string
 	ytdlp       bool
 	format      string
+	checksum    string
 }
 
 // settings builds the task-level settings layer from the flags.
@@ -234,6 +235,15 @@ func (f *taskAddFlags) settings(cmd *cobra.Command) (settingsDoc, error) {
 			return nil, &usageError{err: err}
 		}
 		if err := doc.set("speedLimit", n); err != nil {
+			return nil, err
+		}
+	}
+	if f.checksum != "" {
+		cs, err := parseChecksum(f.checksum)
+		if err != nil {
+			return nil, &usageError{err: err}
+		}
+		if err := doc.set("checksum", cs); err != nil {
 			return nil, err
 		}
 	}
@@ -266,6 +276,7 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 		Example: "  dlm task add https://example.com/file.iso --queue <id> --speed-limit 1MB\n" +
 			"  dlm task add -f urls.txt --paused\n" +
 			"  dlm task add ./ubuntu.iso.torrent 'magnet:?xt=urn:btih:...'\n" +
+			"  dlm task add https://example.com/file.iso --checksum sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\n" +
 			"  dlm task add --ytdlp 'https://video.example/watch?v=abc' --format 'bv*[height<=720]+ba/b'\n" +
 			"  dlm task add https://example.com/a.bin --header 'Cookie=x=1' --set retry.maxAttempts=10",
 		Annotations: map[string]string{annotationOperationID: "create-task,create-tasks"},
@@ -335,6 +346,7 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 	fl.StringVar(&f.name, "name", "", "file name (single URL only; default: detected)")
 	fl.StringVar(&f.dir, "dir", "", "absolute download directory (default: the effective downloadDir)")
 	fl.BoolVar(&f.paused, "paused", false, "add the tasks paused")
+	fl.StringVar(&f.checksum, "checksum", "", "expected checksum ALGORITHM:HEX (md5, sha1, sha256 or blake3); a file that does not match is downloaded again")
 	fl.BoolVar(&f.ytdlp, "ytdlp", false, "download the URLs with yt-dlp (video and audio pages)")
 	fl.StringVar(&f.format, "format", "", "media format: a yt-dlp format selector with --ytdlp, or the quality of an HLS/DASH stream")
 	fl.StringVar(&f.priority, "priority", "", "priority: low, normal or high")

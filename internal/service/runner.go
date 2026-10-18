@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,7 +14,9 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
+	"github.com/sabadia/dlm-server/internal/engine/retry"
 	"github.com/sabadia/dlm-server/internal/events"
+	"github.com/sabadia/dlm-server/internal/postproc"
 	"github.com/sabadia/dlm-server/internal/ratelimit"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage"
@@ -77,6 +81,18 @@ type RunnerDeps struct {
 	// returns nil. ErrRefreshDisabled makes the Runner record the failure
 	// itself; a context error is treated like any cancellation.
 	LinkExpired func(ctx context.Context, taskID string, cause error) error
+	// Post, when set, runs the post-processing steps of a finished download
+	// while the task is postprocessing (verifying the checksum, …). Nil
+	// completes the task straight away.
+	Post PostProcessor
+}
+
+// PostProcessor runs the steps after a download (postproc.Pipeline).
+type PostProcessor interface {
+	// Process works on the finished task and returns the job as the steps
+	// left it (its Path says where the file is now). A *postproc.MismatchError
+	// asks for the download to be repeated.
+	Process(ctx context.Context, t *domain.Task, eff settings.Settings) (*postproc.Job, error)
 }
 
 // Runner executes one task end to end: it resolves the effective settings,
@@ -89,6 +105,9 @@ type Runner struct {
 
 	mu     sync.Mutex
 	probes map[string]*engine.Probe // attached resolve probes by task ID
+	// redownloads counts, by task ID, how often a download was repeated
+	// because its checksum did not match. It starts over with the daemon.
+	redownloads map[string]int
 }
 
 // NewRunner creates a Runner.
@@ -108,7 +127,7 @@ func NewRunner(d RunnerDeps) *Runner {
 	if d.Defaults == nil {
 		d.Defaults = func() settings.Settings { return settings.Settings{} }
 	}
-	return &Runner{d: d, probes: make(map[string]*engine.Probe)}
+	return &Runner{d: d, probes: make(map[string]*engine.Probe), redownloads: make(map[string]int)}
 }
 
 // AttachProbe hands a fresh resolve probe to the next Run of taskID, which
@@ -163,7 +182,7 @@ func (r *Runner) Run(ctx context.Context, taskID string) error {
 		return err
 	}
 	runErr := r.download(ctx, task, eff)
-	return r.finish(ctx, task, runErr)
+	return r.finish(ctx, task, eff, runErr)
 }
 
 // start re-reads the task under its lock and moves it from queued to
@@ -346,7 +365,7 @@ func applyProbe(task *domain.Task, p *engine.Probe) {
 // transition re-reads the task, so the counters the checkpointer persisted
 // and the fields services changed during the run (queue, order, priority,
 // labels, settings) are kept.
-func (r *Runner) finish(runCtx context.Context, task *domain.Task, runErr error) error {
+func (r *Runner) finish(runCtx context.Context, task *domain.Task, eff settings.Settings, runErr error) error {
 	ctx := context.WithoutCancel(runCtx) // the outcome is recorded even when the run was stopped
 	cause := context.Cause(runCtx)
 	kind := engine.Classify(runErr)
@@ -371,8 +390,7 @@ func (r *Runner) finish(runCtx context.Context, task *domain.Task, runErr error)
 		if err := r.transition(ctx, task, domain.StatusPostprocessing, nil); err != nil {
 			return err
 		}
-		// Post-download actions arrive in Phase 9; completion is immediate.
-		return r.transition(ctx, task, domain.StatusCompleted, nil)
+		return r.postprocess(runCtx, task, eff)
 	case kind == engine.KindCanceled || cause != nil:
 		return r.settleStopped(ctx, task, cause)
 	default:
@@ -380,6 +398,120 @@ func (r *Runner) finish(runCtx context.Context, task *domain.Task, runErr error)
 		r.d.Logger.WarnContext(ctx, "task failed", "task_id", task.ID, "code", te.Code, "error", runErr)
 		return r.transition(ctx, task, domain.StatusError, &te)
 	}
+}
+
+// postprocess runs the post-processing steps of a task that is in the
+// postprocessing state and records the outcome: completed, a repeated
+// download (checksum mismatch), or an error.
+func (r *Runner) postprocess(runCtx context.Context, task *domain.Task, eff settings.Settings) error {
+	ctx := context.WithoutCancel(runCtx)
+	if r.d.Post == nil {
+		return r.complete(ctx, task, "")
+	}
+	job, err := r.d.Post.Process(runCtx, task, eff)
+	var mm *postproc.MismatchError
+	switch {
+	case err == nil:
+		return r.complete(ctx, task, job.Path)
+	case errors.As(err, &mm):
+		return r.redownload(ctx, task, eff, mm)
+	case runCtx.Err() != nil:
+		// Stopped (paused, deleted, shutting down): a postprocessing task
+		// has no stopped state, so it is left as a retryable error like after
+		// a crash (RecoverInterrupted).
+		te := domain.TaskError{Code: domain.ErrorCodeFatal, Message: "interrupted during post-processing; retry to run it again", Retryable: true, At: r.d.Clock()}
+		return r.transition(ctx, task, domain.StatusError, &te)
+	default:
+		te := domain.TaskError{Code: domain.ErrorCodePostprocess, Message: err.Error(), Retryable: true, At: r.d.Clock()}
+		r.d.Logger.WarnContext(ctx, "post-processing failed", "task_id", task.ID, "error", err)
+		return r.transition(ctx, task, domain.StatusError, &te)
+	}
+}
+
+// complete marks the task completed; path, when it differs from where the
+// task says its file is, becomes the task's directory and name.
+func (r *Runner) complete(ctx context.Context, task *domain.Task, path string) error {
+	r.mu.Lock()
+	delete(r.redownloads, task.ID)
+	r.mu.Unlock()
+	return r.mutate(ctx, task, func(fresh *domain.Task) error {
+		if path != "" && path != filepath.Join(fresh.Dir, fresh.Name) {
+			fresh.Dir, fresh.Name = filepath.Dir(path), filepath.Base(path)
+		}
+		if err := fresh.TransitionTo(domain.StatusCompleted, r.d.Clock()); err != nil {
+			return fmt.Errorf("service: task %q: %w", fresh.ID, err)
+		}
+		return nil
+	})
+}
+
+// redownload deals with a file whose checksum did not match: the file is
+// deleted and the task starts over from nothing, until retry.maxAttempts
+// downloads in a row (counted per daemon run) have failed the check, when the
+// task fails with checksum_mismatch.
+func (r *Runner) redownload(ctx context.Context, task *domain.Task, eff settings.Settings, mm *postproc.MismatchError) error {
+	limit := max(eff.Retry.MaxAttempts.OrElse(retry.DefaultMaxAttempts), 1)
+	r.mu.Lock()
+	r.redownloads[task.ID]++
+	n := r.redownloads[task.ID]
+	if n > limit {
+		delete(r.redownloads, task.ID)
+	}
+	r.mu.Unlock()
+	// The file is wrong either way: it goes, so that a download (this one or a
+	// retry later) does not stop at "destination exists".
+	if err := os.Remove(mm.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		te := domain.TaskError{
+			Code: domain.ErrorCodeChecksumMismatch, Retryable: true, At: r.d.Clock(),
+			Message: fmt.Sprintf("%v; the file cannot be removed for a new download: %v", mm, err),
+		}
+		return r.transition(ctx, task, domain.StatusError, &te)
+	}
+	if n > limit {
+		te := domain.TaskError{
+			Code: domain.ErrorCodeChecksumMismatch, Retryable: true, At: r.d.Clock(),
+			Message: fmt.Sprintf("%v (downloaded %d times)", mm, n),
+		}
+		r.d.Logger.WarnContext(ctx, "checksum mismatch; giving up", "task_id", task.ID, "downloads", n)
+		return r.transition(ctx, task, domain.StatusError, &te)
+	}
+	r.d.Logger.WarnContext(ctx, "checksum mismatch; downloading again", "task_id", task.ID, "attempt", n, "expected", mm.Expected, "got", mm.Got)
+	return r.requeueFresh(ctx, task)
+}
+
+// requeueFresh puts a postprocessing task back in the queue with its download
+// progress cleared (segments, engine state, downloaded bytes).
+func (r *Runner) requeueFresh(ctx context.Context, task *domain.Task) error {
+	unlock, err := r.d.TaskLocks.Lock(ctx, task.ID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	var fresh *domain.Task
+	err = r.d.Store.WithTx(ctx, func(tx storage.Store) error {
+		var err error
+		if fresh, err = tx.Tasks().Get(ctx, task.ID); err != nil {
+			return fmt.Errorf("service: requeue task %q: %w", task.ID, err)
+		}
+		if err := fresh.TransitionTo(domain.StatusQueued, r.d.Clock()); err != nil {
+			return fmt.Errorf("service: requeue task %q: %w", task.ID, err)
+		}
+		fresh.Downloaded = 0
+		if err := tx.Segments().Replace(ctx, task.ID, nil); err != nil {
+			return fmt.Errorf("service: requeue task %q: %w", task.ID, err)
+		}
+		if err := tx.EngineState().Delete(ctx, task.ID); err != nil {
+			return fmt.Errorf("service: requeue task %q: %w", task.ID, err)
+		}
+		return tx.Tasks().Update(ctx, fresh) //nolint:wrapcheck // wrapped below
+	})
+	if err != nil {
+		return fmt.Errorf("service: requeue task %q: %w", task.ID, err)
+	}
+	from := task.Status
+	*task = *fresh
+	r.publishStatus(task, from)
+	return nil
 }
 
 // settleStopped leaves a stopped task paused (cause ErrPaused) or queued.

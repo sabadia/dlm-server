@@ -652,3 +652,18 @@ func TestTaskAddYtdlpAndFormatFlags(t *testing.T) {
 		t.Fatalf("stream task source = %+v", hls.Source)
 	}
 }
+
+func TestTaskAddChecksumFlag(t *testing.T) {
+	e := newE2E(t)
+	sum := strings.Repeat("ab", 32)
+	var task client.Task
+	e.ok(t, &task, "task", "add", e.url("a.bin"), "--checksum", "SHA256:"+strings.ToUpper(sum), "--paused", "-o", "json")
+	if got := settingValue(t, task.Settings, "checksum"); got != `{"algorithm":"sha256","expected":"`+sum+`"}` {
+		t.Errorf("checksum setting = %s", got)
+	}
+	for _, bad := range []string{"sha256", "sha256:", ":abcd", "sha256:xyz"} {
+		if r := e.run(t, "", "task", "add", e.url("b.bin"), "--checksum", bad); r.code == ExitOK {
+			t.Errorf("--checksum %q was accepted", bad)
+		}
+	}
+}
