@@ -80,6 +80,8 @@ type Download struct {
 	// that no checkpoint is written so a failed start never erases the
 	// stored resume state.
 	ckptReady bool
+	// mirrors spreads ranged requests over verified mirrors; nil without any.
+	mirrors *mirrorSet
 	// held is the 200 response kept for an onMismatch=restart switch to
 	// sequential mode.
 	held *stream
@@ -167,6 +169,7 @@ func (d *Download) run(ctx context.Context) error {
 		return err
 	}
 	if ranged {
+		d.verifyMirrors(ctx)
 		err = d.runRanged(ctx)
 		if err != nil && errors.Is(err, ErrRangeIgnored) && d.onMismatch() == settings.MismatchRestart && ctx.Err() == nil {
 			err = d.restartSequential(ctx)

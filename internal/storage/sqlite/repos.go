@@ -301,6 +301,32 @@ func (r taskRepo) CountByStatus(ctx context.Context, queueID string) (map[domain
 	return out, nil
 }
 
+func (r taskRepo) Stats(ctx context.Context, since []time.Time) (storage.TaskStats, error) {
+	var out storage.TaskStats
+	var err error
+	if out.ByStatus, err = r.CountByStatus(ctx, ""); err != nil {
+		return out, err
+	}
+	rows, err := r.s.read().StatsByEngine(ctx)
+	if err != nil {
+		return out, fmt.Errorf("storage: task stats by engine: %w", err)
+	}
+	for _, row := range rows {
+		out.ByEngine = append(out.ByEngine, storage.EngineStats{Engine: row.Engine, Tasks: int(row.N), DownloadedBytes: row.Bytes})
+	}
+	if out.DownloadedBytes, err = r.s.read().StatsTotalDownloaded(ctx); err != nil {
+		return out, fmt.Errorf("storage: task stats total: %w", err)
+	}
+	for _, t := range since {
+		row, err := r.s.read().StatsCompletedSince(ctx, sql.NullInt64{Int64: toMillis(t), Valid: true})
+		if err != nil {
+			return out, fmt.Errorf("storage: task stats completed since %s: %w", t.Format(time.RFC3339), err)
+		}
+		out.Completed = append(out.Completed, storage.CompletedStats{Since: t, Tasks: int(row.N), Bytes: row.Bytes})
+	}
+	return out, nil
+}
+
 // ---- segments ----
 
 type segmentRepo struct{ s *Store }
@@ -794,6 +820,80 @@ func (r webhookRepo) Delete(ctx context.Context, id string) error {
 	}
 	if n == 0 {
 		return domain.NotFound("webhook", id)
+	}
+	return nil
+}
+
+// ---- credentials ----
+
+type credentialRepo struct{ s *Store }
+
+func decodeCredential(row db.Credential) *storage.CredentialRecord {
+	return &storage.CredentialRecord{
+		ID: row.ID, Host: row.Host, Scheme: row.Scheme, Username: row.Username, SealedPassword: row.Password,
+		CreatedAt: fromMillis(row.CreatedAt), UpdatedAt: fromMillis(row.UpdatedAt),
+	}
+}
+
+func (r credentialRepo) Create(ctx context.Context, c *storage.CredentialRecord) error {
+	if err := r.s.write().CreateCredential(ctx, db.CreateCredentialParams{
+		ID: c.ID, Host: c.Host, Scheme: c.Scheme, Username: c.Username, Password: c.SealedPassword,
+		CreatedAt: toMillis(c.CreatedAt), UpdatedAt: toMillis(c.UpdatedAt),
+	}); err != nil {
+		if isPrimaryKeyViolation(err) || isUniqueViolation(err) {
+			return domain.AlreadyExists("credential", c.Host)
+		}
+		return fmt.Errorf("storage: create credential %q: %w", c.ID, err)
+	}
+	return nil
+}
+
+func (r credentialRepo) Get(ctx context.Context, id string) (*storage.CredentialRecord, error) {
+	row, err := r.s.read().GetCredential(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.NotFound("credential", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("storage: get credential %q: %w", id, err)
+	}
+	return decodeCredential(row), nil
+}
+
+func (r credentialRepo) List(ctx context.Context) ([]*storage.CredentialRecord, error) {
+	rows, err := r.s.read().ListCredentials(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("storage: list credentials: %w", err)
+	}
+	out := make([]*storage.CredentialRecord, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, decodeCredential(row))
+	}
+	return out, nil
+}
+
+func (r credentialRepo) Update(ctx context.Context, c *storage.CredentialRecord) error {
+	n, err := r.s.write().UpdateCredential(ctx, db.UpdateCredentialParams{
+		ID: c.ID, Host: c.Host, Scheme: c.Scheme, Username: c.Username, Password: c.SealedPassword, UpdatedAt: toMillis(c.UpdatedAt),
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			return domain.AlreadyExists("credential", c.Host)
+		}
+		return fmt.Errorf("storage: update credential %q: %w", c.ID, err)
+	}
+	if n == 0 {
+		return domain.NotFound("credential", c.ID)
+	}
+	return nil
+}
+
+func (r credentialRepo) Delete(ctx context.Context, id string) error {
+	n, err := r.s.write().DeleteCredential(ctx, id)
+	if err != nil {
+		return fmt.Errorf("storage: delete credential %q: %w", id, err)
+	}
+	if n == 0 {
+		return domain.NotFound("credential", id)
 	}
 	return nil
 }

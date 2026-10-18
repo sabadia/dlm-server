@@ -38,9 +38,17 @@ func (c *Client) CreateTask(ctx context.Context, req CreateTaskRequest) (*Task, 
 // CreateTasks calls create-tasks (POST /v1/tasks/batch). Items fail
 // independently; the result has one item per request, in order.
 func (c *Client) CreateTasks(ctx context.Context, reqs []CreateTaskRequest) ([]BatchItem, error) {
+	return c.CreateTasksExpanded(ctx, reqs, false)
+}
+
+// CreateTasksExpanded is CreateTasks with expandPatterns: with expand set a
+// range in a URL (file[001-100].jpg) becomes one task per value, and the
+// result has one item per expanded task.
+func (c *Client) CreateTasksExpanded(ctx context.Context, reqs []CreateTaskRequest, expand bool) ([]BatchItem, error) {
 	in := struct {
-		Items []CreateTaskRequest `json:"items"`
-	}{Items: reqs}
+		Items          []CreateTaskRequest `json:"items"`
+		ExpandPatterns bool                `json:"expandPatterns,omitempty"`
+	}{Items: reqs, ExpandPatterns: expand}
 	var out batchResponse
 	if err := c.do(ctx, http.MethodPost, "/v1/tasks/batch", in, &out); err != nil {
 		return nil, err

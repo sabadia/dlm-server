@@ -67,7 +67,8 @@ func newE2E(t *testing.T) *e2e {
 		Token: testToken, Version: testSrvVersion,
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh, Browser: service.NewBrowserService(fb, svc.Tasks), Categories: svc.Categories,
-		Webhooks: service.NewWebhookService(service.Deps{Store: store}, cipher, webhook.New(nil, nil, webhook.Options{})),
+		Webhooks:    service.NewWebhookService(service.Deps{Store: store}, cipher, webhook.New(nil, nil, webhook.Options{})),
+		Credentials: service.NewCredentialService(service.Deps{Store: store}, cipher),
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -777,5 +778,131 @@ func TestWebhookCommands(t *testing.T) {
 	}
 	if r := e.run(t, "", "webhook", "get", hook.ID); r.code == ExitOK {
 		t.Error("get after rm succeeded")
+	}
+}
+
+func TestCredentialCommands(t *testing.T) {
+	e := newE2E(t)
+	var cred client.Credential
+	// The password comes from stdin, so it never shows in the process list.
+	r := e.run(t, "s3cret\n", "credential", "add", "Files.Example.com", "--user", "ann", "--password-stdin", "-o", "json")
+	if r.code != ExitOK {
+		t.Fatalf("add: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if strings.Contains(r.stdout, "s3cret") {
+		t.Errorf("the password was printed: %s", r.stdout)
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &cred); err != nil || cred.Host != "files.example.com" || cred.Scheme != "auto" {
+		t.Fatalf("credential = %+v, %v", cred, err)
+	}
+	if r := e.run(t, "", "credential", "add", "x.example", "--user", "u"); r.code != ExitUsage {
+		t.Errorf("add without a password: exit %d, want usage error", r.code)
+	}
+	if r := e.run(t, "p\n", "credential", "add", "x.example", "--user", "u", "--password", "p", "--password-stdin"); r.code != ExitUsage {
+		t.Errorf("both password flags: exit %d, want usage error", r.code)
+	}
+	if r := e.run(t, "", "credential", "add", "x.example", "--password", "p"); r.code == ExitOK {
+		t.Error("add without --user succeeded")
+	}
+	if r := e.run(t, "", "credential", "add", "files.example.com", "--user", "u", "--password", "p"); r.code == ExitOK {
+		t.Error("a second login for the same host was accepted")
+	}
+	var list []client.Credential
+	e.ok(t, &list, "credential", "list", "-o", "json")
+	if len(list) != 1 || list[0].ID != cred.ID {
+		t.Fatalf("list = %+v", list)
+	}
+	var got client.Credential
+	e.ok(t, &got, "credential", "get", cred.ID, "-o", "json")
+	if got.Username != "ann" {
+		t.Errorf("get = %+v", got)
+	}
+	r = e.run(t, "new-pass\n", "credential", "set", cred.ID, "--scheme", "digest", "--password-stdin", "-o", "json")
+	if r.code != ExitOK || !strings.Contains(r.stdout, `"digest"`) {
+		t.Errorf("set: exit %d %s %s", r.code, r.stdout, r.stderr)
+	}
+	if r := e.run(t, "", "credential", "set", cred.ID); r.code != ExitUsage {
+		t.Errorf("set with nothing to change: exit %d, want usage error", r.code)
+	}
+	if r := e.run(t, "", "credential", "rm", cred.ID); r.code != ExitOK || !strings.Contains(r.stdout, "deleted") {
+		t.Errorf("rm: exit %d %q", r.code, r.stdout)
+	}
+	if r := e.run(t, "", "credential", "get", cred.ID); r.code == ExitOK {
+		t.Error("get after rm succeeded")
+	}
+}
+
+func TestTaskAddExpandAndMirror(t *testing.T) {
+	e := newE2E(t)
+	var items []client.BatchItem
+	e.ok(t, &items, "task", "add", e.url("img[08-10].jpg"), "--expand", "--paused", "-o", "json")
+	if len(items) != 3 || !items[0].OK || !strings.HasSuffix(items[2].Task.Source.CurrentURL, "img10.jpg") {
+		t.Fatalf("items = %+v", items)
+	}
+	if r := e.run(t, "", "task", "add", e.url("n[1-2].jpg"), "--expand", "--name", "x.jpg"); r.code != ExitUsage {
+		t.Errorf("--name with --expand: exit %d, want usage error", r.code)
+	}
+	var task client.Task
+	e.ok(t, &task, "task", "add", e.url("m.bin"), "--mirror", "https://m1.example/m.bin", "--mirror", "https://m2.example/m.bin", "--paused", "-o", "json")
+	if len(task.Source.Mirrors) != 2 {
+		t.Errorf("mirrors = %v", task.Source.Mirrors)
+	}
+	if r := e.run(t, "", "task", "add", e.url("a"), e.url("b"), "--mirror", "https://m.example/x"); r.code != ExitUsage {
+		t.Errorf("--mirror with two URLs: exit %d, want usage error", r.code)
+	}
+	if r := e.run(t, "", "task", "add", e.url("c.bin"), "--mirror", "ftp://m.example/x", "--allow-duplicate"); r.code == ExitOK {
+		t.Error("an ftp mirror was accepted")
+	}
+}
+
+func TestTaskExportImportAndStats(t *testing.T) {
+	e := newE2E(t)
+	e.ok(t, nil, "task", "add", e.url("one.bin"), e.url("two.bin"), "--paused")
+
+	r := e.run(t, "", "task", "export", "--format", "urls")
+	if r.code != ExitOK || strings.Count(r.stdout, "\n") != 2 || !strings.Contains(r.stdout, "one.bin") {
+		t.Fatalf("export urls: exit %d %q", r.code, r.stdout)
+	}
+	file := filepath.Join(t.TempDir(), "backup.json")
+	r = e.run(t, "", "task", "export", "-f", file)
+	if r.code != ExitOK || !strings.Contains(r.stderr, "exported 2 tasks") {
+		t.Fatalf("export to a file: exit %d %q", r.code, r.stderr)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil || !strings.Contains(string(data), `"version": 1`) {
+		t.Fatalf("file = %q, %v (the format follows the extension)", data, err)
+	}
+
+	// The same links again are duplicates; --allow-duplicate adds them.
+	var items []client.BatchItem
+	r = e.run(t, "", "task", "import", file, "-o", "json")
+	if r.code == ExitOK {
+		t.Fatalf("an import where every task failed exited 0: %s", r.stdout)
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &items); err != nil || len(items) != 2 || items[0].OK || items[1].OK {
+		t.Fatalf("duplicate import = %+v, %v", items, err)
+	}
+	e.ok(t, &items, "task", "import", file, "--allow-duplicate", "--paused", "-o", "json")
+	if len(items) != 2 || !items[0].OK || !items[1].OK {
+		t.Fatalf("import = %+v", items)
+	}
+	r = e.run(t, e.url("three.bin")+"\n", "task", "import", "-", "--format", "urls", "--paused", "-o", "json")
+	if r.code != ExitOK {
+		t.Fatalf("import from stdin: exit %d %s", r.code, r.stderr)
+	}
+	if r := e.run(t, "x", "task", "import", "-"); r.code != ExitUsage {
+		t.Errorf("import without a format: exit %d, want usage error", r.code)
+	}
+	if r := e.run(t, "{", "task", "import", "-", "--format", "json"); r.code == ExitOK {
+		t.Error("an unreadable list was accepted")
+	}
+
+	var st client.Stats
+	e.ok(t, &st, "stats", "-o", "json")
+	if st.Tasks != 5 || st.ByStatus["paused"] != 5 || len(st.Completed) != 3 {
+		t.Errorf("stats = %+v", st)
+	}
+	if r := e.run(t, "", "stats"); r.code != ExitOK || !strings.Contains(r.stdout, "all tasks") || !strings.Contains(r.stdout, "completed in 24h") {
+		t.Errorf("stats table: exit %d %q", r.code, r.stdout)
 	}
 }

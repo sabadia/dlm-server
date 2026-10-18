@@ -118,6 +118,35 @@ type TaskRepository interface {
 	// CountByStatus counts the tasks of a queue per status; an empty queueID
 	// counts across all queues. Statuses without tasks are absent.
 	CountByStatus(ctx context.Context, queueID string) (map[domain.TaskStatus]int, error)
+	// Stats summarizes every task: counts per status, tasks and bytes per
+	// engine, the bytes of all tasks, and for each time in since the tasks
+	// completed at or after it.
+	Stats(ctx context.Context, since []time.Time) (TaskStats, error)
+}
+
+// TaskStats is the result of TaskRepository.Stats.
+type TaskStats struct {
+	ByStatus map[domain.TaskStatus]int
+	// ByEngine is ordered by engine name.
+	ByEngine []EngineStats
+	// DownloadedBytes is the sum of the bytes downloaded by all tasks.
+	DownloadedBytes int64
+	// Completed has one entry per requested time, in the same order.
+	Completed []CompletedStats
+}
+
+// EngineStats are the tasks of one engine (the protocol).
+type EngineStats struct {
+	Engine          string
+	Tasks           int
+	DownloadedBytes int64
+}
+
+// CompletedStats are the tasks completed since a time.
+type CompletedStats struct {
+	Since time.Time
+	Tasks int
+	Bytes int64
 }
 
 // DuplicateQuery describes a download for TaskRepository.FindDuplicate. Empty
@@ -219,6 +248,37 @@ type WebhookRepository interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// CredentialRecord is the persisted login; the password is sealed.
+type CredentialRecord struct {
+	ID string
+	// Host is the host name the login is for: "example.com" or
+	// "*.example.com" (lower case, no port).
+	Host string
+	// Scheme is auto, basic or digest.
+	Scheme   string
+	Username string
+	// SealedPassword is the password, encrypted by the service.
+	SealedPassword []byte
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// CredentialRepository persists logins.
+type CredentialRepository interface {
+	// Create inserts the login; a duplicate ID or host returns
+	// domain.ErrAlreadyExists.
+	Create(ctx context.Context, c *CredentialRecord) error
+	// Get returns the login or an error matching domain.ErrNotFound.
+	Get(ctx context.Context, id string) (*CredentialRecord, error)
+	// List returns every login, ordered by host.
+	List(ctx context.Context) ([]*CredentialRecord, error)
+	// Update replaces host, scheme, username and password; a host used by
+	// another login returns domain.ErrAlreadyExists.
+	Update(ctx context.Context, c *CredentialRecord) error
+	// Delete removes the login; a missing one returns domain.ErrNotFound.
+	Delete(ctx context.Context, id string) error
+}
+
 // CookieRecord represents the persisted cookie row with encrypted value.
 type CookieRecord struct {
 	ID           string
@@ -263,6 +323,7 @@ type Store interface {
 	RefreshHistory() RefreshHistoryRepository
 	Categories() CategoryRepository
 	Webhooks() WebhookRepository
+	Credentials() CredentialRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

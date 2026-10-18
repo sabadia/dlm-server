@@ -33,6 +33,16 @@ type Cookie struct {
 	UpdatedAt    int64
 }
 
+type Credential struct {
+	ID        string
+	Host      string
+	Scheme    string
+	Username  string
+	Password  []byte
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 type EngineState struct {
 	TaskID    string
 	State     []byte

@@ -95,7 +95,9 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		return fmt.Errorf("daemon: %w", err)
 	}
 	jar := cookies.NewStore(store.Cookies(), cookieCipher, cookies.Options{Logger: log})
-	clients := netclient.New(netclient.Options{Logger: log, CookieJar: jar})
+	// Stored logins answer the Basic/Digest challenges of every client.
+	credentials := service.NewCredentialService(service.Deps{Store: store, Logger: log}, cookieCipher)
+	clients := netclient.New(netclient.Options{Logger: log, CookieJar: jar, Credentials: credentials})
 	defer func() { _ = clients.Close() }() // only releases idle connections
 	// The headless browser starts on demand; creating the manager costs nothing.
 	browsers := browser.NewManager(browser.Options{
@@ -223,6 +225,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Load:        func(ctx context.Context) ([]webhook.Target, error) { return services.Webhooks.Targets(ctx) },
 		VersionFunc: func() uint64 { return services.Webhooks.Version() },
 	}, webhook.Options{Logger: log})
+	services.Credentials = credentials
 	services.Webhooks = service.NewWebhookService(service.Deps{Store: store, Logger: log}, cookieCipher, webhooks)
 	if err := services.Settings.SyncLimits(ctx); err != nil {
 		bus.Close()
@@ -231,12 +234,13 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	srv, err := BuildServer(cfg, api.Deps{
 		Logger: log, Version: version, Token: token, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
-		Cookies:    service.NewCookieService(jar),
-		Capture:    service.NewCaptureService(services.Tasks, jar, services.Refresh),
-		Refresh:    services.Refresh,
-		Categories: services.Categories,
-		Webhooks:   services.Webhooks,
-		Browser:    services.Browser,
+		Cookies:     service.NewCookieService(jar),
+		Capture:     service.NewCaptureService(services.Tasks, jar, services.Refresh),
+		Refresh:     services.Refresh,
+		Categories:  services.Categories,
+		Webhooks:    services.Webhooks,
+		Credentials: services.Credentials,
+		Browser:     services.Browser,
 	})
 	if err != nil {
 		bus.Close()
@@ -295,6 +299,8 @@ type Services struct {
 	Categories *service.CategoryService
 	// Webhooks is nil until the daemon wires it (it needs the secret cipher).
 	Webhooks *service.WebhookService
+	// Credentials holds the stored site logins; wired by the daemon (it needs the secret cipher).
+	Credentials *service.CredentialService
 	// Browser is nil until the daemon wires it (it needs the headless browser).
 	Browser *service.BrowserService
 }

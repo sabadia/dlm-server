@@ -67,3 +67,14 @@ SELECT * FROM tasks
 WHERE json_extract(settings, '$.checksum.expected') = @expected
 ORDER BY created_at, id
 LIMIT 1;
+
+-- name: StatsByEngine :many
+SELECT engine, COUNT(*) AS n, CAST(COALESCE(SUM(downloaded), 0) AS INTEGER) AS bytes
+FROM tasks GROUP BY engine ORDER BY engine;
+
+-- name: StatsCompletedSince :one
+SELECT COUNT(*) AS n, CAST(COALESCE(SUM(downloaded), 0) AS INTEGER) AS bytes
+FROM tasks WHERE status = 'completed' AND completed_at >= @since;
+
+-- name: StatsTotalDownloaded :one
+SELECT CAST(COALESCE(SUM(downloaded), 0) AS INTEGER) AS bytes FROM tasks;

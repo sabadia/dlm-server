@@ -79,6 +79,9 @@ type Options struct {
 	Logger *slog.Logger
 	// CookieJar, when set, is shared by every client.
 	CookieJar http.CookieJar
+	// Credentials, when set, supplies the logins that answer HTTP Basic and
+	// Digest challenges.
+	Credentials CredentialSource
 
 	DialTimeout           time.Duration
 	TLSHandshakeTimeout   time.Duration
@@ -197,8 +200,12 @@ func (f *Factory) Client(s settings.Settings) (*http.Client, error) {
 	if rules := s.ProxyRules.Value(); len(rules) > 0 {
 		rt = &ruleTransport{factory: f, settings: s, tlsVerify: cfg.TLSVerify}
 	}
+	var out http.RoundTripper = newHeaderTransport(rt, s.UserAgent.OrElse(settings.DefaultUserAgent), s.Headers.Value(), f.log)
+	if f.opts.Credentials != nil {
+		out = newAuthTransport(out, f.opts.Credentials)
+	}
 	return &http.Client{
-		Transport:     newHeaderTransport(rt, s.UserAgent.OrElse(settings.DefaultUserAgent), s.Headers.Value(), f.log),
+		Transport:     out,
 		CheckRedirect: checkRedirect,
 		Jar:           f.opts.CookieJar,
 	}, nil

@@ -26,6 +26,7 @@ type SourceInput struct {
 	UserAgent     string              `json:"userAgent,omitempty" doc:"User agent captured with the link."`
 	CookieDomains []string            `json:"cookieDomains,omitempty" doc:"Domains whose stored cookies apply."`
 	MediaHint     string              `json:"mediaHint,omitempty" doc:"Manifest pattern or variant hint for streams."`
+	Mirrors       []string            `json:"mirrors,omitempty" maxItems:"16" doc:"Other http(s) links to the same file. A ranged download spreads its connections over the mirrors that serve a file of the same size and supports ranges; the others are ignored."`
 	ResolverKind  domain.ResolverKind `json:"resolverKind,omitempty" enum:"direct,browser,ytdlp,plugin" doc:"How the link was obtained (default direct)."`
 }
 
@@ -33,7 +34,7 @@ func (in *SourceInput) toDomain() domain.Source {
 	return domain.Source{
 		CurrentURL: in.CurrentURL, OriginalURL: in.OriginalURL, PageURL: in.PageURL, Referrer: in.Referrer,
 		Method: in.Method, Body: in.Body, Headers: in.Headers, UserAgent: in.UserAgent,
-		CookieDomains: in.CookieDomains, MediaHint: in.MediaHint, ResolverKind: in.ResolverKind,
+		CookieDomains: in.CookieDomains, MediaHint: in.MediaHint, Mirrors: in.Mirrors, ResolverKind: in.ResolverKind,
 	}
 }
 
@@ -333,6 +334,8 @@ func (s *Server) createTask(ctx context.Context, in *struct{ Body CreateTaskBody
 // CreateTasksBody is the request of create-tasks.
 type CreateTasksBody struct {
 	Items []CreateTaskBody `json:"items" minItems:"1" maxItems:"1000" doc:"Tasks to create."`
+	// ExpandPatterns turns a range in an item's URL into one task per value.
+	ExpandPatterns bool `json:"expandPatterns,omitempty" doc:"Expand ranges in the URLs: file[001-100].jpg becomes 100 tasks, [a-e] and [1-10:2] (step) work too, several ranges give every combination (at most 10000 per URL). Results are then one per expanded task, in order; without it the URLs are used as they are."`
 }
 
 func (s *Server) createTasks(ctx context.Context, in *struct{ Body CreateTasksBody }) (*BatchOutput, error) {
@@ -340,21 +343,31 @@ func (s *Server) createTasks(ctx context.Context, in *struct{ Body CreateTasksBo
 		return nil, errServicesUnavailable()
 	}
 	out := &BatchOutput{}
-	out.Body.Results = make([]BatchItem, len(in.Body.Items))
+	// slots has one entry per result; inputs are the ones that go to the
+	// service, valid their indexes in slots.
+	var slots []BatchItem
 	inputs := make([]service.CreateTaskInput, 0, len(in.Body.Items))
-	valid := make([]int, 0, len(in.Body.Items)) // indexes of items passed to the service
+	var valid []int
 	for i := range in.Body.Items {
 		ci, err := in.Body.Items[i].toInput()
+		items := []service.CreateTaskInput{ci}
+		if err == nil && in.Body.ExpandPatterns {
+			items, err = service.ExpandPatternInput(ci)
+		}
 		if err != nil {
-			out.Body.Results[i] = BatchItem{Error: s.asProblem(ctx, "create-tasks", err, locBodySettings)}
+			slots = append(slots, BatchItem{Error: s.asProblem(ctx, "create-tasks", err, locBodySettings)})
 			continue
 		}
-		inputs = append(inputs, ci)
-		valid = append(valid, i)
+		for _, it := range items {
+			valid = append(valid, len(slots))
+			slots = append(slots, BatchItem{})
+			inputs = append(inputs, it)
+		}
 	}
 	for j, r := range s.tasks.CreateBatch(ctx, inputs) {
-		out.Body.Results[valid[j]] = s.batchItem(ctx, "create-tasks", r)
+		slots[valid[j]] = s.batchItem(ctx, "create-tasks", r)
 	}
+	out.Body.Results = slots
 	return out, nil
 }
 
