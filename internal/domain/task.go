@@ -75,6 +75,9 @@ const (
 	ErrorCodeDiskFull = "disk_full"
 	// ErrorCodeChecksumMismatch: the downloaded file failed verification.
 	ErrorCodeChecksumMismatch = "checksum_mismatch"
+	// ErrorCodeFileExists: the destination exists and the file-exists policy
+	// is "ask".
+	ErrorCodeFileExists = "file_exists"
 	// ErrorCodePostprocess: a step after the download (extraction, a
 	// post-action) failed; the downloaded file is in place.
 	ErrorCodePostprocess = "postprocess"

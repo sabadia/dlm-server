@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -51,6 +52,8 @@ func TestCategoryValidate(t *testing.T) {
 		{"empty ext", func(c *Category) { c.Extensions = []string{""} }, true},
 		{"bad mime", func(c *Category) { c.MIMETypes = []string{"video"} }, true},
 		{"star mime", func(c *Category) { c.MIMETypes = []string{"*/*"} }, true},
+		{"relative dir escaping", func(c *Category) { c.Dir = "a/../../b" }, true},
+		{"absolute dir", func(c *Category) { c.Dir = filepath.Join(string(filepath.Separator), "data", "videos") }, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -127,5 +130,17 @@ func TestNewID(t *testing.T) {
 			t.Fatalf("ids not increasing: %q then %q", prev, id)
 		}
 		prev = id
+	}
+}
+
+func TestCategoryResolveDir(t *testing.T) {
+	base := t.TempDir()
+	abs := filepath.Join(t.TempDir(), "videos")
+	rel := Category{Dir: "Videos/Series"}
+	if got := rel.ResolveDir(base); got != filepath.Join(base, "Videos", "Series") {
+		t.Errorf("relative: %q", got)
+	}
+	if got := (&Category{Dir: abs}).ResolveDir(base); got != abs {
+		t.Errorf("absolute: %q", got)
 	}
 }

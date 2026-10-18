@@ -124,7 +124,7 @@ func TestPauseRacesWithSchedulerStart(t *testing.T) {
 
 	var ids []string
 	for i := range iterations {
-		task, err := tasks.Create(ctx, service.CreateTaskInput{Source: domain.Source{CurrentURL: srv.URL + "/f.bin"}})
+		task, err := tasks.Create(ctx, service.CreateTaskInput{Source: domain.Source{CurrentURL: srv.URL + "/f.bin"}, AllowDuplicate: true})
 		if err != nil {
 			t.Fatalf("iteration %d: Create: %v", i, err)
 		}

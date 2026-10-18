@@ -49,3 +49,21 @@ SELECT status, COUNT(*) AS n FROM tasks GROUP BY status;
 
 -- name: CountQueueTasksByStatus :many
 SELECT status, COUNT(*) AS n FROM tasks WHERE queue_id = @queue_id GROUP BY status;
+
+-- name: FindTaskBySourceURL :one
+SELECT * FROM tasks
+WHERE json_extract(source, '$.currentUrl') = @url OR json_extract(source, '$.originalUrl') = @url
+ORDER BY created_at, id
+LIMIT 1;
+
+-- name: FindTaskByNameSize :one
+SELECT * FROM tasks
+WHERE name = @name AND size = @size AND status <> 'error'
+ORDER BY created_at, id
+LIMIT 1;
+
+-- name: FindTaskByChecksum :one
+SELECT * FROM tasks
+WHERE json_extract(settings, '$.checksum.expected') = @expected
+ORDER BY created_at, id
+LIMIT 1;

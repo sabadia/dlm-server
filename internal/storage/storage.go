@@ -110,9 +110,26 @@ type TaskRepository interface {
 	// NextPosition returns one past the highest task position in the queue
 	// (0 for an empty queue).
 	NextPosition(ctx context.Context, queueID string) (int64, error)
+	// FindDuplicate returns an existing task that the query describes the same
+	// download as: first one with the same link (current or original URL),
+	// then one with the same expected checksum, then one that is not failed
+	// with the same name and size. It returns nil when there is none.
+	FindDuplicate(ctx context.Context, q DuplicateQuery) (*domain.Task, error)
 	// CountByStatus counts the tasks of a queue per status; an empty queueID
 	// counts across all queues. Statuses without tasks are absent.
 	CountByStatus(ctx context.Context, queueID string) (map[domain.TaskStatus]int, error)
+}
+
+// DuplicateQuery describes a download for TaskRepository.FindDuplicate. Empty
+// or non-positive fields are not compared.
+type DuplicateQuery struct {
+	// URLs are the links of the download.
+	URLs []string
+	// Checksum is the expected checksum, hex.
+	Checksum string
+	// Name and Size identify the file once it is resolved.
+	Name string
+	Size int64
 }
 
 // SegmentRepository persists a task's download segments.
@@ -153,6 +170,23 @@ type RefreshHistoryRepository interface {
 	// PendingAwaits returns, for every awaiting_link task whose newest entry
 	// is a wait with a deadline, that entry, ordered by deadline.
 	PendingAwaits(ctx context.Context) ([]*domain.RefreshAttempt, error)
+}
+
+// CategoryRepository persists the download categories.
+type CategoryRepository interface {
+	// Create inserts the category. A duplicate ID or name returns
+	// domain.ErrAlreadyExists.
+	Create(ctx context.Context, c *domain.Category) error
+	// Get returns the category or an error matching domain.ErrNotFound.
+	Get(ctx context.Context, id string) (*domain.Category, error)
+	// List returns every category ordered by position.
+	List(ctx context.Context) ([]*domain.Category, error)
+	// Update replaces the name, position and rules of the category.
+	Update(ctx context.Context, c *domain.Category) error
+	// Delete removes the category; a missing one returns domain.ErrNotFound.
+	Delete(ctx context.Context, id string) error
+	// NextPosition returns one past the highest category position.
+	NextPosition(ctx context.Context) (int64, error)
 }
 
 // CookieRecord represents the persisted cookie row with encrypted value.
@@ -197,6 +231,7 @@ type Store interface {
 	EngineState() EngineStateRepository
 	Cookies() CookieRepository
 	RefreshHistory() RefreshHistoryRepository
+	Categories() CategoryRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

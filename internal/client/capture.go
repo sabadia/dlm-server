@@ -50,6 +50,8 @@ type CaptureRequest struct {
 	Priority string            `json:"priority,omitempty"`
 	Labels   map[string]string `json:"labels,omitempty"`
 	Paused   bool              `json:"paused,omitempty"`
+	// AllowDuplicate adds the task even when it repeats another one.
+	AllowDuplicate bool `json:"allowDuplicate,omitempty"`
 }
 
 // CaptureResult is the response of capture-download.

@@ -74,6 +74,8 @@ type CaptureInput struct {
 	Priority domain.Priority
 	Labels   map[string]string
 	Paused   bool
+	// AllowDuplicate adds the task although another one has the same link.
+	AllowDuplicate bool
 }
 
 // CaptureResult is the outcome of CaptureService.Capture.
@@ -131,7 +133,7 @@ func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (*Capture
 	}
 	t, err := s.tasks.Create(ctx, CreateTaskInput{
 		Source: src, QueueID: in.QueueID, Name: captureName(in.Filename), Dir: in.Dir,
-		Settings: in.Settings, Priority: in.Priority, Labels: in.Labels, Paused: in.Paused,
+		Settings: in.Settings, Priority: in.Priority, Labels: in.Labels, Paused: in.Paused, AllowDuplicate: in.AllowDuplicate,
 	})
 	if err != nil {
 		return nil, err

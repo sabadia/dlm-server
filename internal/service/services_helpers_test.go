@@ -215,6 +215,7 @@ func (f *svcFixture) get(t *testing.T, id string) *domain.Task {
 // create adds a task through the service.
 func (f *svcFixture) create(t *testing.T, in CreateTaskInput) *domain.Task {
 	t.Helper()
+	in.AllowDuplicate = true // many tests make several tasks for one link
 	got, err := f.tasks.Create(t.Context(), in)
 	if err != nil {
 		t.Fatalf("Create: %v", err)

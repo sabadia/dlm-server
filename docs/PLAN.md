@@ -297,7 +297,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 
 ### Phase 9: Post-processing & organisation
 - [x] P9.1 Checksum verification (md5/sha1/sha256/blake3) + re-download on mismatch
-- [ ] P9.2 Categories/auto-sort, file-exists policy, duplicate detection
+- [x] P9.2 Categories/auto-sort, file-exists policy, duplicate detection
 - [ ] P9.3 Archive auto-extract, auto-torrent-from-.torrent
 - [ ] P9.4 Webhooks, run-command/AV-scan post-actions
 - [ ] P9.5 Mirrors/multi-source, pattern/batch URLs, import/export, history search & stats, stored credentials

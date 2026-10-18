@@ -72,6 +72,10 @@ type CreateTaskInput struct {
 	Labels   map[string]string
 	// Paused creates the task paused instead of queued.
 	Paused bool
+	// AllowDuplicate skips the duplicate check: without it a task for a link,
+	// a checksum, or (once resolved) a file name and size that another task
+	// already has is refused with domain.ErrConflict.
+	AllowDuplicate bool
 }
 
 // UpdateTaskInput changes a task. Nil / empty fields are left unchanged.
@@ -180,6 +184,11 @@ func (s *TaskService) Create(ctx context.Context, in CreateTaskInput) (*domain.T
 	if err != nil {
 		return nil, err
 	}
+	if !in.AllowDuplicate {
+		if err := s.checkDuplicate(ctx, t, in.Settings); err != nil {
+			return nil, err
+		}
+	}
 	var probe *engine.Probe
 	if in.ResolveID != "" {
 		// Take fails when the entry expired or another request took it.
@@ -203,6 +212,27 @@ func (s *TaskService) Create(ctx context.Context, in CreateTaskInput) (*domain.T
 		s.d.Scheduler.Wake()
 	}
 	return t, nil
+}
+
+// checkDuplicate refuses a task that repeats another one: the same link, the
+// same expected checksum, or (known only for a resolved task) the same file
+// name and size.
+func (s *TaskService) checkDuplicate(ctx context.Context, t *domain.Task, task settings.Settings) error {
+	q := storage.DuplicateQuery{URLs: []string{t.Source.CurrentURL, t.Source.OriginalURL}}
+	if cs, ok := task.Checksum.Get(); ok {
+		q.Checksum = cs.Expected
+	}
+	if t.Resource != nil {
+		q.Name, q.Size = t.Name, t.Size
+	}
+	dup, err := s.d.Store.Tasks().FindDuplicate(ctx, q)
+	if err != nil {
+		return fmt.Errorf("service: create task: %w", err)
+	}
+	if dup != nil {
+		return domain.Conflict("service: create task: duplicate of task %s (%q, %s); allow duplicates to add it anyway", dup.ID, dup.Name, dup.Status)
+	}
+	return nil
 }
 
 // buildTask builds a validated task; probe, when set, supplies the

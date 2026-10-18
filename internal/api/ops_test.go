@@ -77,7 +77,7 @@ func newOpsFixture(t *testing.T) *opsFixture {
 		Token: testToken, Version: testVersion,
 		Settings: service.NewSettingsService(d), Queues: service.NewQueueService(d), Tasks: tasks,
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(tasks, jar, refreshSvc), Refresh: refreshSvc,
-		Browser: service.NewBrowserService(fb, tasks),
+		Browser: service.NewBrowserService(fb, tasks), Categories: service.NewCategoryService(d),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +138,8 @@ func decodeProblem(t *testing.T, w *httptest.ResponseRecorder, status int) probl
 func (f *opsFixture) createTask(t *testing.T, body string) *domain.Task {
 	t.Helper()
 	var task domain.Task
+	// Many tests make several tasks for one link.
+	body = strings.Replace(strings.TrimSpace(body), "{", `{"allowDuplicate":true,`, 1)
 	f.call(t, http.MethodPost, "/v1/tasks", body, http.StatusCreated, &task)
 	return &task
 }

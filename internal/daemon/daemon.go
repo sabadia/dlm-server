@@ -178,6 +178,9 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		TaskLocks: locks,
 		Bytes:     quotas,
 		Post:      postproc.Default(log),
+		// The runner sorts downloads into category directories; the service is
+		// stateless, so it can be a second instance.
+		Categories: service.NewCategoryService(service.Deps{Store: store}),
 		// The refresh service needs the scheduler, which needs the runner:
 		// the hook reaches it through services, assigned below.
 		LinkExpired: func(ctx context.Context, taskID string, cause error) error {
@@ -218,10 +221,11 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	srv, err := BuildServer(cfg, api.Deps{
 		Logger: log, Version: version, Token: token, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
-		Cookies: service.NewCookieService(jar),
-		Capture: service.NewCaptureService(services.Tasks, jar, services.Refresh),
-		Refresh: services.Refresh,
-		Browser: services.Browser,
+		Cookies:    service.NewCookieService(jar),
+		Capture:    service.NewCaptureService(services.Tasks, jar, services.Refresh),
+		Refresh:    services.Refresh,
+		Categories: services.Categories,
+		Browser:    services.Browser,
 	})
 	if err != nil {
 		bus.Close()
@@ -275,6 +279,8 @@ type Services struct {
 	Queues   *service.QueueService
 	Tasks    *service.TaskService
 	Refresh  *service.RefreshService
+	// Categories sorts downloads into directories.
+	Categories *service.CategoryService
 	// Browser is nil until the daemon wires it (it needs the headless browser).
 	Browser *service.BrowserService
 }
@@ -284,10 +290,11 @@ type Services struct {
 // only the daemon has).
 func NewServices(d service.Deps, extra ...refresh.Strategy) *Services {
 	return &Services{
-		Settings: service.NewSettingsService(d),
-		Queues:   service.NewQueueService(d),
-		Tasks:    service.NewTaskService(d),
-		Refresh:  service.NewRefreshService(d, append([]refresh.Strategy{refresh.OriginRedirect{Engines: d.Engines}}, extra...)...),
+		Settings:   service.NewSettingsService(d),
+		Queues:     service.NewQueueService(d),
+		Tasks:      service.NewTaskService(d),
+		Refresh:    service.NewRefreshService(d, append([]refresh.Strategy{refresh.OriginRedirect{Engines: d.Engines}}, extra...)...),
+		Categories: service.NewCategoryService(d),
 	}
 }
 

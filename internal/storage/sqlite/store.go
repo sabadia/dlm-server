@@ -226,6 +226,9 @@ func (s *Store) Cookies() storage.CookieRepository { return cookieRepo{s} }
 // RefreshHistory returns the refresh history repository.
 func (s *Store) RefreshHistory() storage.RefreshHistoryRepository { return refreshRepo{s} }
 
+// Categories returns the category repository.
+func (s *Store) Categories() storage.CategoryRepository { return categoryRepo{s} }
+
 // WithTx implements storage.Store.
 func (s *Store) WithTx(ctx context.Context, fn func(tx storage.Store) error) error {
 	return s.inTx(ctx, func(tx *Store) error { return fn(tx) })

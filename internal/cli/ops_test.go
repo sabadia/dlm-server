@@ -65,7 +65,7 @@ func newE2E(t *testing.T) *e2e {
 	base := startAPIWith(t, api.Deps{
 		Token: testToken, Version: testSrvVersion,
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
-		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh, Browser: service.NewBrowserService(fb, svc.Tasks),
+		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh, Browser: service.NewBrowserService(fb, svc.Tasks), Categories: svc.Categories,
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -665,5 +665,70 @@ func TestTaskAddChecksumFlag(t *testing.T) {
 		if r := e.run(t, "", "task", "add", e.url("b.bin"), "--checksum", bad); r.code == ExitOK {
 			t.Errorf("--checksum %q was accepted", bad)
 		}
+	}
+}
+
+func TestCategoryCommands(t *testing.T) {
+	e := newE2E(t)
+	var cat client.Category
+	e.ok(t, &cat, "category", "add", "Videos", "--dir", "Videos", "--ext", "mp4", "--ext", ".MKV", "--mime", "video/*", "-o", "json")
+	if cat.Name != "Videos" || cat.Dir != "Videos" || strings.Join(cat.Extensions, ",") != "mp4,mkv" || strings.Join(cat.MIMETypes, ",") != "video/*" {
+		t.Fatalf("category = %+v", cat)
+	}
+	if r := e.run(t, "", "category", "add", "NoDir", "--ext", "a"); r.code == ExitOK {
+		t.Error("category add without --dir succeeded")
+	}
+	if r := e.run(t, "", "category", "add", "NoRules", "--dir", "x"); r.code == ExitOK {
+		t.Error("category add without rules succeeded")
+	}
+	var list []client.Category
+	e.ok(t, &list, "category", "list", "-o", "json")
+	if len(list) != 1 || list[0].ID != cat.ID {
+		t.Fatalf("list = %+v", list)
+	}
+	var got client.Category
+	e.ok(t, &got, "category", "get", cat.ID, "-o", "json")
+	if got.ID != cat.ID {
+		t.Errorf("get = %+v", got)
+	}
+	e.ok(t, &got, "category", "set", cat.ID, "--name", "Movies", "--ext", "avi", "--position", "3", "-o", "json")
+	if got.Name != "Movies" || strings.Join(got.Extensions, ",") != "avi" || got.Position != 3 || got.Dir != "Videos" {
+		t.Errorf("after set = %+v", got)
+	}
+	if r := e.run(t, "", "category", "set", cat.ID); r.code != ExitUsage {
+		t.Errorf("set with nothing to change: exit %d, want usage", r.code)
+	}
+	r := e.run(t, "", "category", "match", "--name", "clip.AVI")
+	if r.code != ExitOK || !strings.Contains(r.stdout, "Movies") {
+		t.Errorf("match: exit %d, stdout %q", r.code, r.stdout)
+	}
+	r = e.run(t, "", "category", "match", "--name", "data.bin")
+	if r.code != ExitOK || !strings.Contains(r.stdout, "no category matches") {
+		t.Errorf("match without a result: exit %d, stdout %q", r.code, r.stdout)
+	}
+	if r := e.run(t, "", "category", "match"); r.code != ExitUsage {
+		t.Errorf("match without input: exit %d", r.code)
+	}
+	r = e.run(t, "", "category", "rm", cat.ID)
+	if r.code != ExitOK || !strings.Contains(r.stdout, "deleted") {
+		t.Errorf("rm: exit %d %q", r.code, r.stdout)
+	}
+	if r := e.run(t, "", "category", "get", cat.ID); r.code == ExitOK {
+		t.Error("the deleted category is still there")
+	}
+}
+
+func TestTaskAddDuplicates(t *testing.T) {
+	e := newE2E(t)
+	var first client.Task
+	e.ok(t, &first, "task", "add", e.url("dup.bin"), "--paused", "-o", "json")
+	r := e.run(t, "", "task", "add", e.url("dup.bin"), "--paused")
+	if r.code == ExitOK || !strings.Contains(r.stderr, first.ID) {
+		t.Errorf("duplicate: exit %d, stderr %q (want a refusal naming the first task)", r.code, r.stderr)
+	}
+	var again client.Task
+	e.ok(t, &again, "task", "add", e.url("dup.bin"), "--paused", "--allow-duplicate", "-o", "json")
+	if again.ID == first.ID {
+		t.Error("--allow-duplicate did not create a new task")
 	}
 }

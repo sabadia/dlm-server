@@ -165,6 +165,8 @@ type CreateTaskRequest struct {
 	Priority  string            `json:"priority,omitempty"` // low, normal, high
 	Labels    map[string]string `json:"labels,omitempty"`
 	Paused    bool              `json:"paused,omitempty"`
+	// AllowDuplicate adds the task even when it repeats another one.
+	AllowDuplicate bool `json:"allowDuplicate,omitempty"`
 }
 
 // UpdateTaskRequest is the request of update-task. Nil fields are left
