@@ -95,6 +95,8 @@ func Default(o Options) *Pipeline {
 	return New(o.Logger, Checksum{}, NewActions(o.Logger, map[string]Action{
 		settings.PostActionExtract:    Extract{},
 		settings.PostActionAddTorrent: AddTorrent{Adder: o.Torrents},
+		settings.PostActionCommand:    Command{},
+		settings.PostActionAVScan:     AVScan{},
 	}))
 }
 

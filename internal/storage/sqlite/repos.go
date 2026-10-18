@@ -702,3 +702,98 @@ func (r taskRepo) FindDuplicate(ctx context.Context, q storage.DuplicateQuery) (
 	}
 	return nil, nil //nolint:nilnil // no duplicate is not an error
 }
+
+// ---- webhooks ----
+
+type webhookRepo struct{ s *Store }
+
+func decodeWebhook(row db.Webhook) (*storage.WebhookRecord, error) {
+	var events []string
+	if err := unmarshalJSON("webhook events", row.Events, &events); err != nil {
+		return nil, fmt.Errorf("storage: webhook %q: %w", row.ID, err)
+	}
+	return &storage.WebhookRecord{
+		ID: row.ID, URL: row.Url, Events: events, Enabled: row.Enabled != 0, SealedSecret: row.Secret,
+		CreatedAt: fromMillis(row.CreatedAt), UpdatedAt: fromMillis(row.UpdatedAt),
+	}, nil
+}
+
+func (r webhookRepo) Create(ctx context.Context, w *storage.WebhookRecord) error {
+	events, err := marshalJSON("webhook events", w.Events)
+	if err != nil {
+		return err
+	}
+	secret := w.SealedSecret
+	if secret == nil {
+		secret = []byte{}
+	}
+	if err := r.s.write().CreateWebhook(ctx, db.CreateWebhookParams{
+		ID: w.ID, Url: w.URL, Events: events, Enabled: boolToInt(w.Enabled), Secret: secret,
+		CreatedAt: toMillis(w.CreatedAt), UpdatedAt: toMillis(w.UpdatedAt),
+	}); err != nil {
+		if isPrimaryKeyViolation(err) || isUniqueViolation(err) {
+			return domain.AlreadyExists("webhook", w.ID)
+		}
+		return fmt.Errorf("storage: create webhook %q: %w", w.ID, err)
+	}
+	return nil
+}
+
+func (r webhookRepo) Get(ctx context.Context, id string) (*storage.WebhookRecord, error) {
+	row, err := r.s.read().GetWebhook(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.NotFound("webhook", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("storage: get webhook %q: %w", id, err)
+	}
+	return decodeWebhook(row)
+}
+
+func (r webhookRepo) List(ctx context.Context) ([]*storage.WebhookRecord, error) {
+	rows, err := r.s.read().ListWebhooks(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("storage: list webhooks: %w", err)
+	}
+	out := make([]*storage.WebhookRecord, 0, len(rows))
+	for _, row := range rows {
+		w, err := decodeWebhook(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, nil
+}
+
+func (r webhookRepo) Update(ctx context.Context, w *storage.WebhookRecord) error {
+	events, err := marshalJSON("webhook events", w.Events)
+	if err != nil {
+		return err
+	}
+	secret := w.SealedSecret
+	if secret == nil {
+		secret = []byte{}
+	}
+	n, err := r.s.write().UpdateWebhook(ctx, db.UpdateWebhookParams{
+		ID: w.ID, Url: w.URL, Events: events, Enabled: boolToInt(w.Enabled), Secret: secret, UpdatedAt: toMillis(w.UpdatedAt),
+	})
+	if err != nil {
+		return fmt.Errorf("storage: update webhook %q: %w", w.ID, err)
+	}
+	if n == 0 {
+		return domain.NotFound("webhook", w.ID)
+	}
+	return nil
+}
+
+func (r webhookRepo) Delete(ctx context.Context, id string) error {
+	n, err := r.s.write().DeleteWebhook(ctx, id)
+	if err != nil {
+		return fmt.Errorf("storage: delete webhook %q: %w", id, err)
+	}
+	if n == 0 {
+		return domain.NotFound("webhook", id)
+	}
+	return nil
+}

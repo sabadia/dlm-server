@@ -99,3 +99,13 @@ type TaskSegment struct {
 	End    int64
 	Done   int64
 }
+
+type Webhook struct {
+	ID        string
+	Url       string
+	Events    string
+	Enabled   int64
+	Secret    []byte
+	CreatedAt int64
+	UpdatedAt int64
+}

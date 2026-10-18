@@ -23,6 +23,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage/sqlite"
+	"github.com/sabadia/dlm-server/internal/webhook"
 )
 
 // e2e is a CLI test environment: a real API server with real services on a
@@ -66,6 +67,7 @@ func newE2E(t *testing.T) *e2e {
 		Token: testToken, Version: testSrvVersion,
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh, Browser: service.NewBrowserService(fb, svc.Tasks), Categories: svc.Categories,
+		Webhooks: service.NewWebhookService(service.Deps{Store: store}, cipher, webhook.New(nil, nil, webhook.Options{})),
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -730,5 +732,50 @@ func TestTaskAddDuplicates(t *testing.T) {
 	e.ok(t, &again, "task", "add", e.url("dup.bin"), "--paused", "--allow-duplicate", "-o", "json")
 	if again.ID == first.ID {
 		t.Error("--allow-duplicate did not create a new task")
+	}
+}
+
+func TestWebhookCommands(t *testing.T) {
+	e := newE2E(t)
+	var hook client.Webhook
+	e.ok(t, &hook, "webhook", "add", e.url("hook"), "--event", "task.status", "--event", "queue.completed", "--secret", "s3cret", "-o", "json")
+	if hook.ID == "" || !hook.HasSecret || !hook.Enabled || len(hook.Events) != 2 {
+		t.Fatalf("webhook = %+v", hook)
+	}
+	if r := e.run(t, "", "webhook", "add", e.url("x")); r.code == ExitOK {
+		t.Error("webhook add without --event succeeded")
+	}
+	if r := e.run(t, "", "webhook", "add", "ftp://x.example/", "--event", "task.status"); r.code == ExitOK {
+		t.Error("webhook add with an ftp URL succeeded")
+	}
+	var list []client.Webhook
+	e.ok(t, &list, "webhook", "list", "-o", "json")
+	if len(list) != 1 || list[0].ID != hook.ID {
+		t.Fatalf("list = %+v", list)
+	}
+	var got client.Webhook
+	e.ok(t, &got, "webhook", "get", hook.ID, "-o", "json")
+	if got.URL != hook.URL {
+		t.Errorf("get = %+v", got)
+	}
+	e.ok(t, &got, "webhook", "set", hook.ID, "--event", "task.deleted", "--enabled=false", "--secret", "", "-o", "json")
+	if len(got.Events) != 1 || got.Enabled || got.HasSecret {
+		t.Errorf("set = %+v", got)
+	}
+	if r := e.run(t, "", "webhook", "set", hook.ID); r.code != ExitUsage {
+		t.Errorf("set with nothing to change: exit %d, want usage error", r.code)
+	}
+	if r := e.run(t, "", "webhook", "test", hook.ID); r.code != ExitOK || !strings.Contains(r.stdout, "delivered") {
+		t.Errorf("test: exit %d %q %q", r.code, r.stdout, r.stderr)
+	}
+	e.ok(t, nil, "webhook", "set", hook.ID, "--url", "http://127.0.0.1:1/dead")
+	if r := e.run(t, "", "webhook", "test", hook.ID); r.code == ExitOK {
+		t.Error("test of an unreachable endpoint succeeded")
+	}
+	if r := e.run(t, "", "webhook", "rm", hook.ID); r.code != ExitOK || !strings.Contains(r.stdout, "deleted") {
+		t.Errorf("rm: exit %d %q", r.code, r.stdout)
+	}
+	if r := e.run(t, "", "webhook", "get", hook.ID); r.code == ExitOK {
+		t.Error("get after rm succeeded")
 	}
 }
