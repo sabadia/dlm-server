@@ -1,0 +1,50 @@
+schema_version: 1
+id: 01a14c69-4c11-72f1-b594-a43f70f68e87
+status: draft
+created_at: '2026-10-18T00:28:51Z'
+updated_at: '2026-10-18T00:28:51Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'Download video and audio pages with yt-dlp: managed binary, -J resolve, progress template, cookies file'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/engine/ytdlp
+  start_line: null
+  end_line: null
+- path: internal/ytdlp
+  start_line: null
+  end_line: null
+- path: internal/platform
+  start_line: null
+  end_line: null
+- path: internal/cli
+  start_line: null
+  end_line: null
+- path: internal/config
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+- path: go.mod
+  start_line: null
+  end_line: null
+- path: go.sum
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

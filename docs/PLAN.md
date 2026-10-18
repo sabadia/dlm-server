@@ -293,7 +293,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P8.1 FTP/FTPS engine (resume via REST command)
 - [x] P8.2 BitTorrent engine (magnet/.torrent/base64, file select, trackers, DHT/PEX, seeding rules), instance-owned client
 - [x] P8.3 ed2k engine
-- [ ] P8.4 yt-dlp engine (managed binary, `-J` formats, progress template, cookies file)
+- [x] P8.4 yt-dlp engine (managed binary, `-J` formats, progress template, cookies file)
 
 ### Phase 9: Post-processing & organisation
 - [ ] P9.1 Checksum verification (md5/sha1/sha256/blake3) + re-download on mismatch

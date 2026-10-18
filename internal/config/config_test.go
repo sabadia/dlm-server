@@ -255,3 +255,18 @@ func TestED2KConfig(t *testing.T) {
 		t.Errorf("ed2k config from the environment = %+v", got)
 	}
 }
+
+func TestYtdlpConfig(t *testing.T) {
+	if d := Default().Ytdlp; !d.AutoDownload || d.Path != "" {
+		t.Errorf("default ytdlp config = %+v", d)
+	}
+	cfg, err := Load(LoadOptions{Environ: func() []string {
+		return []string{"DLM_HOME=" + t.TempDir(), "DLM_YTDLP_PATH=/opt/yt-dlp", "DLM_YTDLP_AUTO_DOWNLOAD=false"}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Ytdlp.Path != "/opt/yt-dlp" || cfg.Ytdlp.AutoDownload {
+		t.Errorf("ytdlp config from the environment = %+v", cfg.Ytdlp)
+	}
+}
