@@ -134,12 +134,13 @@ func TestNewID(t *testing.T) {
 }
 
 func TestCategoryResolveDir(t *testing.T) {
-	abs := filepath.Join(string(filepath.Separator), "data", "videos")
+	base := t.TempDir()
+	abs := filepath.Join(t.TempDir(), "videos")
 	rel := Category{Dir: "Videos/Series"}
-	if got := rel.ResolveDir(filepath.Join(string(filepath.Separator), "dl")); got != filepath.Join(string(filepath.Separator), "dl", "Videos", "Series") {
+	if got := rel.ResolveDir(base); got != filepath.Join(base, "Videos", "Series") {
 		t.Errorf("relative: %q", got)
 	}
-	if got := (&Category{Dir: abs}).ResolveDir("/dl"); got != abs {
+	if got := (&Category{Dir: abs}).ResolveDir(base); got != abs {
 		t.Errorf("absolute: %q", got)
 	}
 }
