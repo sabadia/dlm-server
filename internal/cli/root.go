@@ -140,6 +140,7 @@ func newApp(version string, opts ...Option) *app {
 		a.newSettingsCommand(),
 		a.newCookiesCommand(),
 		a.newCategoryCommand(),
+		a.newWebhookCommand(),
 		a.newCaptureCommand(),
 		a.newNativeHostCommand(),
 		a.newBrowserCommand(),

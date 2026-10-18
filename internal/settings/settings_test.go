@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -346,6 +347,7 @@ func TestTorrentSettingsLayering(t *testing.T) {
 }
 
 func TestPostActionValidation(t *testing.T) {
+	prog := filepath.Join(t.TempDir(), "scanner")
 	for name, c := range map[string]struct {
 		action PostAction
 		want   string // the path of the expected error; empty means valid
@@ -359,6 +361,17 @@ func TestPostActionValidation(t *testing.T) {
 		"parameter of another":  {PostAction{Kind: PostActionAddTorrent, Params: map[string]string{"password": "x"}}, "postActions[0].params.password"},
 		"delete is a boolean":   {PostAction{Kind: PostActionExtract, Params: map[string]string{"delete": "yes"}}, "postActions[0].params.delete"},
 		"dir must not be empty": {PostAction{Kind: PostActionExtract, Params: map[string]string{"dir": ""}}, "postActions[0].params.dir"},
+
+		"command":                     {PostAction{Kind: PostActionCommand, Params: map[string]string{"cmd": prog, "args": `["{path}","-x"]`, "timeout": "30s"}}, ""},
+		"command needs cmd":           {PostAction{Kind: PostActionCommand}, "postActions[0].params.cmd"},
+		"command cmd is absolute":     {PostAction{Kind: PostActionCommand, Params: map[string]string{"cmd": "rm"}}, "postActions[0].params.cmd"},
+		"command args are JSON":       {PostAction{Kind: PostActionCommand, Params: map[string]string{"cmd": prog, "args": "-x {path}"}}, "postActions[0].params.args"},
+		"command args are strings":    {PostAction{Kind: PostActionCommand, Params: map[string]string{"cmd": prog, "args": `[1]`}}, "postActions[0].params.args"},
+		"command timeout is valid":    {PostAction{Kind: PostActionCommand, Params: map[string]string{"cmd": prog, "timeout": "-5s"}}, "postActions[0].params.timeout"},
+		"command has no infectedExit": {PostAction{Kind: PostActionCommand, Params: map[string]string{"cmd": prog, "infectedExit": "1"}}, "postActions[0].params.infectedExit"},
+		"av-scan":                     {PostAction{Kind: PostActionAVScan, Params: map[string]string{"cmd": prog, "infectedExit": "2", "onInfected": "keep"}}, ""},
+		"av-scan infectedExit range":  {PostAction{Kind: PostActionAVScan, Params: map[string]string{"cmd": prog, "infectedExit": "0"}}, "postActions[0].params.infectedExit"},
+		"av-scan onInfected":          {PostAction{Kind: PostActionAVScan, Params: map[string]string{"cmd": prog, "onInfected": "move"}}, "postActions[0].params.onInfected"},
 	} {
 		s := Settings{PostActions: Some([]PostAction{c.action})}
 		err := s.Validate(LevelGlobal)

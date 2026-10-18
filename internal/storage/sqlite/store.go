@@ -229,6 +229,9 @@ func (s *Store) RefreshHistory() storage.RefreshHistoryRepository { return refre
 // Categories returns the category repository.
 func (s *Store) Categories() storage.CategoryRepository { return categoryRepo{s} }
 
+// Webhooks returns the webhook repository.
+func (s *Store) Webhooks() storage.WebhookRepository { return webhookRepo{s} }
+
 // WithTx implements storage.Store.
 func (s *Store) WithTx(ctx context.Context, fn func(tx storage.Store) error) error {
 	return s.inTx(ctx, func(tx *Store) error { return fn(tx) })

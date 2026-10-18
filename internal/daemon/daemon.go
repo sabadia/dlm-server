@@ -39,6 +39,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage/sqlite"
+	"github.com/sabadia/dlm-server/internal/webhook"
 	"github.com/sabadia/dlm-server/internal/ytdlp"
 )
 
@@ -216,6 +217,13 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		TaskLocks: locks,
 	}, refresh.PageReload{Resolver: resolver})
 	services.Browser = service.NewBrowserService(resolver, services.Tasks)
+	// The dispatcher reads its endpoints through the webhook service, which in
+	// turn tests endpoints through the dispatcher.
+	webhooks := webhook.New(bus, webhook.FuncSource{
+		Load:        func(ctx context.Context) ([]webhook.Target, error) { return services.Webhooks.Targets(ctx) },
+		VersionFunc: func() uint64 { return services.Webhooks.Version() },
+	}, webhook.Options{Logger: log})
+	services.Webhooks = service.NewWebhookService(service.Deps{Store: store, Logger: log}, cookieCipher, webhooks)
 	if err := services.Settings.SyncLimits(ctx); err != nil {
 		bus.Close()
 		return fmt.Errorf("daemon: %w", err)
@@ -227,6 +235,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Capture:    service.NewCaptureService(services.Tasks, jar, services.Refresh),
 		Refresh:    services.Refresh,
 		Categories: services.Categories,
+		Webhooks:   services.Webhooks,
 		Browser:    services.Browser,
 	})
 	if err != nil {
@@ -256,6 +265,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	g.Go(func() error { return jar.Run(sweepCtx, time.Hour) })
 	g.Go(func() error { return services.Refresh.Run(sweepCtx) })
 	g.Go(func() error { return resolver.Run(sweepCtx) })
+	g.Go(func() error { return webhooks.Run(sweepCtx) })
 	// The scheduler starts queued tasks, including the ones recovered
 	// above; on shutdown it requeues its running tasks and waits for them
 	// (the store stays open until g.Wait returns).
@@ -283,6 +293,8 @@ type Services struct {
 	Refresh  *service.RefreshService
 	// Categories sorts downloads into directories.
 	Categories *service.CategoryService
+	// Webhooks is nil until the daemon wires it (it needs the secret cipher).
+	Webhooks *service.WebhookService
 	// Browser is nil until the daemon wires it (it needs the headless browser).
 	Browser *service.BrowserService
 }

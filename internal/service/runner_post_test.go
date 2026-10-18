@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -159,6 +160,17 @@ func TestRunnerPostprocessOutcomes(t *testing.T) {
 		t.Errorf("failing step: task = %s %+v", got.Status, got.Error)
 	}
 	sameContent(t, filepath.Join(f.dir, "data.bin"), srv.data) // the download stays
+
+	// A file the virus scan flagged: a final error of its own, not retryable.
+	f = withPost(t, fakePost{err: fmt.Errorf("postproc: actions: %w", &postproc.InfectedError{Path: "x.exe", Deleted: true})})
+	task = f.createTask(t.Context(), t, srv.URL+"/files/data.bin")
+	if err := f.runner.Run(t.Context(), task.ID); err != nil {
+		t.Fatal(err)
+	}
+	got = f.task(t, task.ID)
+	if got.Status != domain.StatusError || got.Error.Code != domain.ErrorCodeInfected || got.Error.Retryable {
+		t.Errorf("infected: task = %s %+v", got.Status, got.Error)
+	}
 
 	// A stop during post-processing leaves a retryable error, like a crash does.
 	f = withPost(t, fakePost{block: true})

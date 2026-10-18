@@ -450,11 +450,16 @@ func (r *Runner) postprocess(runCtx context.Context, task *domain.Task, eff sett
 	}
 	job, err := r.d.Post.Process(runCtx, task, eff)
 	var mm *postproc.MismatchError
+	var inf *postproc.InfectedError
 	switch {
 	case err == nil:
 		return r.complete(ctx, task, job.Path, job.Notes)
 	case errors.As(err, &mm):
 		return r.redownload(ctx, task, eff, mm)
+	case errors.As(err, &inf):
+		te := domain.TaskError{Code: domain.ErrorCodeInfected, Message: inf.Error(), At: r.d.Clock()}
+		r.d.Logger.WarnContext(ctx, "virus scan flagged a download", "task_id", task.ID, "error", inf)
+		return r.transition(ctx, task, domain.StatusError, &te)
 	case runCtx.Err() != nil:
 		// Stopped (paused, deleted, shutting down): a postprocessing task
 		// has no stopped state, so it is left as a retryable error like after

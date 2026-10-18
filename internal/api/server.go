@@ -63,6 +63,8 @@ type Deps struct {
 	Cookies *service.CookieService
 	// Categories is the service behind the category operations; 503 while nil.
 	Categories *service.CategoryService
+	// Webhooks is the service behind the webhook operations; 503 while nil.
+	Webhooks *service.WebhookService
 	// Capture is the service behind capture-download; 503 while nil.
 	Capture *service.CaptureService
 	// Refresh is the service behind the refresh operations; 503 while nil.
@@ -90,6 +92,7 @@ type Server struct {
 	tasks      *service.TaskService
 	cookies    *service.CookieService
 	categories *service.CategoryService
+	webhooks   *service.WebhookService
 	capture    *service.CaptureService
 	refresh    *service.RefreshService
 	browser    *service.BrowserService
@@ -145,6 +148,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		tasks:      deps.Tasks,
 		cookies:    deps.Cookies,
 		categories: deps.Categories,
+		webhooks:   deps.Webhooks,
 		capture:    deps.Capture,
 		refresh:    deps.Refresh,
 		browser:    deps.Browser,
@@ -165,6 +169,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerSettings()
 	s.registerCookies()
 	s.registerCategories()
+	s.registerWebhooks()
 	s.registerCapture()
 	s.registerRefresh()
 	s.registerBrowser()

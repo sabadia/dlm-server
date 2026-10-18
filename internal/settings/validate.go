@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	_ "time/tzdata" // embed zone data so schedules validate on every OS
@@ -353,5 +355,36 @@ func (v *validator) postAction(path string, a PostAction) {
 		if k == "dir" && val == "" {
 			v.add(path+".params.dir", "must not be empty")
 		}
+	}
+	if a.Kind == PostActionCommand || a.Kind == PostActionAVScan {
+		v.programParams(path, a)
+	}
+}
+
+// programParams validates the parameters of the actions that run a program.
+func (v *validator) programParams(path string, a PostAction) {
+	if p := a.Params["cmd"]; p == "" {
+		v.add(path+".params.cmd", "is required")
+	} else if !filepath.IsAbs(p) {
+		v.add(path+".params.cmd", "must be an absolute path")
+	}
+	if raw, ok := a.Params["args"]; ok {
+		var args []string
+		if err := json.Unmarshal([]byte(raw), &args); err != nil {
+			v.add(path+".params.args", "must be a JSON array of strings")
+		}
+	}
+	if raw, ok := a.Params["timeout"]; ok {
+		if d, err := time.ParseDuration(raw); err != nil || d <= 0 {
+			v.add(path+".params.timeout", "must be a positive duration such as 30s")
+		}
+	}
+	if raw, ok := a.Params["infectedExit"]; ok {
+		if n, err := strconv.Atoi(raw); err != nil || n < 1 || n > 255 {
+			v.add(path+".params.infectedExit", "must be an exit status between 1 and 255")
+		}
+	}
+	if raw, ok := a.Params["onInfected"]; ok && raw != "delete" && raw != "keep" {
+		v.add(path+".params.onInfected", `must be "delete" or "keep"`)
 	}
 }

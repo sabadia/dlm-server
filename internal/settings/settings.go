@@ -269,12 +269,24 @@ const (
 	// task. Parameters: dir (download directory of the torrent; default the
 	// folder of the .torrent file), delete ("true" removes the .torrent file).
 	PostActionAddTorrent = "add-torrent"
+	// PostActionCommand runs a program on the downloaded file. Parameters:
+	// cmd (absolute path of the program, required; run directly, not through
+	// a shell), args (JSON array of strings; {path}, {dir}, {name}, {taskId},
+	// {url} and {size} are replaced; default [{path}]), timeout (default 5m).
+	PostActionCommand = "command"
+	// PostActionAVScan runs a virus scanner on the downloaded file.
+	// Parameters: cmd, args, timeout as for command, infectedExit (exit status
+	// that means "infected", default 1), onInfected ("delete", the default, or
+	// "keep"). An infected file fails the task with the error code infected.
+	PostActionAVScan = "av-scan"
 )
 
 // postActionParams lists, per kind, the parameters it understands.
 var postActionParams = map[string][]string{
 	PostActionExtract:    {"dir", "delete", "password"},
 	PostActionAddTorrent: {"dir", "delete"},
+	PostActionCommand:    {"cmd", "args", "timeout"},
+	PostActionAVScan:     {"cmd", "args", "timeout", "infectedExit", "onInfected"},
 }
 
 // PostAction is an action run after a download completes: Kind names it (see

@@ -2,6 +2,7 @@ package postproc
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
 
@@ -48,6 +49,10 @@ func (a Actions) Run(ctx context.Context, j *Job) error {
 		if err := impl.Run(ctx, j, pa.Params); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err() //nolint:wrapcheck // cancellation is reported as is
+			}
+			var inf *InfectedError
+			if errors.As(err, &inf) {
+				return err // a flagged file must not complete
 			}
 			a.log.Warn("post action failed", "task_id", j.Task.ID, "action", pa.Kind, "error", err)
 			j.Note("%s: %v", pa.Kind, err)

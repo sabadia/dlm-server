@@ -189,6 +189,36 @@ type CategoryRepository interface {
 	NextPosition(ctx context.Context) (int64, error)
 }
 
+// WebhookRecord is the persisted webhook; the secret is sealed.
+type WebhookRecord struct {
+	ID string
+	// URL receives the events.
+	URL string
+	// Events are the event types the webhook wants.
+	Events  []string
+	Enabled bool
+	// SealedSecret is the signing secret, encrypted by the service; empty
+	// when the webhook is not signed.
+	SealedSecret []byte
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// WebhookRepository persists webhooks.
+type WebhookRepository interface {
+	// Create inserts the webhook; a duplicate ID returns
+	// domain.ErrAlreadyExists.
+	Create(ctx context.Context, w *WebhookRecord) error
+	// Get returns the webhook or an error matching domain.ErrNotFound.
+	Get(ctx context.Context, id string) (*WebhookRecord, error)
+	// List returns every webhook, oldest first.
+	List(ctx context.Context) ([]*WebhookRecord, error)
+	// Update replaces the URL, events, enabled flag and secret.
+	Update(ctx context.Context, w *WebhookRecord) error
+	// Delete removes the webhook; a missing one returns domain.ErrNotFound.
+	Delete(ctx context.Context, id string) error
+}
+
 // CookieRecord represents the persisted cookie row with encrypted value.
 type CookieRecord struct {
 	ID           string
@@ -232,6 +262,7 @@ type Store interface {
 	Cookies() CookieRepository
 	RefreshHistory() RefreshHistoryRepository
 	Categories() CategoryRepository
+	Webhooks() WebhookRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

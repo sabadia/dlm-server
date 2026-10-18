@@ -81,6 +81,8 @@ const (
 	// ErrorCodePostprocess: a step after the download (extraction, a
 	// post-action) failed; the downloaded file is in place.
 	ErrorCodePostprocess = "postprocess"
+	// ErrorCodeInfected: the virus scan flagged the file; not retryable.
+	ErrorCodeInfected = "infected"
 	// ErrorCodeFatal: any other non-recoverable failure.
 	ErrorCodeFatal = "fatal"
 )
