@@ -636,3 +636,19 @@ func TestRefreshSettingsPerLevel(t *testing.T) {
 		t.Errorf("bad onMismatch: exit %d stderr %s", r.code, r.stderr)
 	}
 }
+
+func TestTaskAddYtdlpAndFormatFlags(t *testing.T) {
+	e := newE2E(t)
+	// --ytdlp and --format become the resolver and the media hint of the source.
+	var yt client.Task
+	e.ok(t, &yt, "task", "add", "https://video.example/watch?v=1", "--ytdlp", "--format", "bv*+ba/b", "--paused", "-o", "json")
+	if yt.Source.ResolverKind != "ytdlp" || yt.Source.MediaHint != "bv*+ba/b" || yt.Source.CurrentURL != "https://video.example/watch?v=1" {
+		t.Fatalf("yt-dlp task source = %+v", yt.Source)
+	}
+	// --format alone is a hint for a stream, not a resolver choice.
+	var hls client.Task
+	e.ok(t, &hls, "task", "add", e.url("x.m3u8"), "--format", "720", "--paused", "-o", "json")
+	if hls.Source.ResolverKind != "direct" || hls.Source.MediaHint != "720" {
+		t.Fatalf("stream task source = %+v", hls.Source)
+	}
+}

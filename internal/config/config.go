@@ -42,6 +42,8 @@ type Config struct {
 	Torrent TorrentConfig `koanf:"torrent"`
 	// ED2K configures the eDonkey2000 client shared by all ed2k tasks.
 	ED2K ED2KConfig `koanf:"ed2k"`
+	// Ytdlp configures the yt-dlp the ytdlp engine runs.
+	Ytdlp YtdlpConfig `koanf:"ytdlp"`
 }
 
 // ServerConfig controls the HTTP listener.
@@ -164,6 +166,19 @@ type ED2KConfig struct {
 	UploadLimitKB int `koanf:"upload_limit_kb"`
 }
 
+// YtdlpConfig configures where dlm gets yt-dlp, which downloads video and
+// audio pages (tasks created with the ytdlp resolver). It is run as a
+// separate program.
+type YtdlpConfig struct {
+	// Path is the yt-dlp executable. Empty means: yt-dlp on PATH, else a
+	// downloaded build. Sites change often, so a yt-dlp you keep up to date
+	// is better than the pinned download.
+	Path string `koanf:"path"`
+	// AutoDownload lets dlm download a pinned yt-dlp build into the cache
+	// directory when none is installed.
+	AutoDownload bool `koanf:"auto_download"`
+}
+
 // Default returns the configuration used when nothing else is specified.
 func Default() Config {
 	return Config{
@@ -186,7 +201,8 @@ func Default() Config {
 			Enabled: true, DHT: true, PEX: true, PortForwarding: true,
 			MetadataTimeout: 2 * time.Minute,
 		},
-		ED2K: ED2KConfig{Enabled: true},
+		ED2K:  ED2KConfig{Enabled: true},
+		Ytdlp: YtdlpConfig{AutoDownload: true},
 	}
 }
 

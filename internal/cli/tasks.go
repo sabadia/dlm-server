@@ -216,6 +216,8 @@ type taskAddFlags struct {
 	speedLimit  string
 	headers     []string
 	sets        []string
+	ytdlp       bool
+	format      string
 }
 
 // settings builds the task-level settings layer from the flags.
@@ -258,10 +260,13 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 		Long: "Add one task per URL (and per line of --file; '-' reads stdin, blank lines and # comments are skipped).\n\n" +
 			"One URL creates a single task (create-task); several URLs or a file create them in one batch " +
 			"(create-tasks) and print one result per URL. Settings flags apply to every task.\n\n" +
-			"A URL can be a magnet link, or the path of a local .torrent file, which is sent to the daemon as a data URL.",
+			"A URL can be a magnet link, an ed2k:// link, or the path of a local .torrent file, which is sent to the daemon as a data URL.\n\n" +
+			"--ytdlp downloads a video or audio page with yt-dlp instead of fetching the URL itself; --format picks the " +
+			"yt-dlp format (for example 'bv*[height<=720]+ba/b') or the quality of an HLS/DASH stream (for example 720).",
 		Example: "  dlm task add https://example.com/file.iso --queue <id> --speed-limit 1MB\n" +
 			"  dlm task add -f urls.txt --paused\n" +
 			"  dlm task add ./ubuntu.iso.torrent 'magnet:?xt=urn:btih:...'\n" +
+			"  dlm task add --ytdlp 'https://video.example/watch?v=abc' --format 'bv*[height<=720]+ba/b'\n" +
 			"  dlm task add https://example.com/a.bin --header 'Cookie=x=1' --set retry.maxAttempts=10",
 		Annotations: map[string]string{annotationOperationID: "create-task,create-tasks"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -298,6 +303,13 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 					URL: u, QueueID: f.queue, Name: f.name, Dir: f.dir, Settings: layer,
 					Priority: f.priority, Paused: f.paused,
 				}
+				if f.ytdlp || f.format != "" {
+					src := &client.Source{CurrentURL: u, MediaHint: f.format}
+					if f.ytdlp {
+						src.ResolverKind = "ytdlp"
+					}
+					reqs[i].URL, reqs[i].Source = "", src
+				}
 			}
 			c, err := a.newClient(cmd, client.DefaultTimeout)
 			if err != nil {
@@ -323,6 +335,8 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 	fl.StringVar(&f.name, "name", "", "file name (single URL only; default: detected)")
 	fl.StringVar(&f.dir, "dir", "", "absolute download directory (default: the effective downloadDir)")
 	fl.BoolVar(&f.paused, "paused", false, "add the tasks paused")
+	fl.BoolVar(&f.ytdlp, "ytdlp", false, "download the URLs with yt-dlp (video and audio pages)")
+	fl.StringVar(&f.format, "format", "", "media format: a yt-dlp format selector with --ytdlp, or the quality of an HLS/DASH stream")
 	fl.StringVar(&f.priority, "priority", "", "priority: low, normal or high")
 	fl.IntVar(&f.connections, "connections", 0, "maximum connections per task (setting maxConnections)")
 	fl.StringVar(&f.speedLimit, "speed-limit", "", "speed limit per task in bytes/s: "+sizeHelp)

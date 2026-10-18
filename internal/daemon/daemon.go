@@ -26,6 +26,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/engine/ftp"
 	"github.com/sabadia/dlm-server/internal/engine/hls"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
+	ytdlpengine "github.com/sabadia/dlm-server/internal/engine/ytdlp"
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/ffmpeg"
 	"github.com/sabadia/dlm-server/internal/logging"
@@ -37,6 +38,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage/sqlite"
+	"github.com/sabadia/dlm-server/internal/ytdlp"
 )
 
 // Run starts the daemon and blocks until ctx is cancelled. It returns nil
@@ -137,6 +139,12 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		defer func() { _ = ed2kEngine.Close() }()
 		list = append(list, ed2kEngine)
 	}
+	// yt-dlp is found (or downloaded) the first time a task of the ytdlp
+	// resolver runs; the engine only takes sources that ask for it.
+	ytdlpLocator := ytdlp.NewLocator(ytdlp.Options{
+		Path: cfg.Ytdlp.Path, CacheDir: cfg.Paths.CacheDir, AutoDownload: cfg.Ytdlp.AutoDownload, Logger: log,
+	})
+	list = append(list, ytdlpengine.New(env, ytdlpLocator, ffmpegLocator, ytdlpengine.WithCookies(jar.ForURL)))
 	list = append(list, httpx.New(env))
 	engines, err := engine.NewRegistry(list...)
 	if err != nil {
