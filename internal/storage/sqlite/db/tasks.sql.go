@@ -294,6 +294,68 @@ func (q *Queries) NextTaskPosition(ctx context.Context, queueID string) (int64, 
 	return next, err
 }
 
+const statsByEngine = `-- name: StatsByEngine :many
+SELECT engine, COUNT(*) AS n, CAST(COALESCE(SUM(downloaded), 0) AS INTEGER) AS bytes
+FROM tasks GROUP BY engine ORDER BY engine
+`
+
+type StatsByEngineRow struct {
+	Engine string
+	N      int64
+	Bytes  int64
+}
+
+func (q *Queries) StatsByEngine(ctx context.Context) ([]StatsByEngineRow, error) {
+	rows, err := q.db.QueryContext(ctx, statsByEngine)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StatsByEngineRow{}
+	for rows.Next() {
+		var i StatsByEngineRow
+		if err := rows.Scan(&i.Engine, &i.N, &i.Bytes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const statsCompletedSince = `-- name: StatsCompletedSince :one
+SELECT COUNT(*) AS n, CAST(COALESCE(SUM(downloaded), 0) AS INTEGER) AS bytes
+FROM tasks WHERE status = 'completed' AND completed_at >= ?1
+`
+
+type StatsCompletedSinceRow struct {
+	N     int64
+	Bytes int64
+}
+
+func (q *Queries) StatsCompletedSince(ctx context.Context, since sql.NullInt64) (StatsCompletedSinceRow, error) {
+	row := q.db.QueryRowContext(ctx, statsCompletedSince, since)
+	var i StatsCompletedSinceRow
+	err := row.Scan(&i.N, &i.Bytes)
+	return i, err
+}
+
+const statsTotalDownloaded = `-- name: StatsTotalDownloaded :one
+SELECT CAST(COALESCE(SUM(downloaded), 0) AS INTEGER) AS bytes FROM tasks
+`
+
+func (q *Queries) StatsTotalDownloaded(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, statsTotalDownloaded)
+	var bytes int64
+	err := row.Scan(&bytes)
+	return bytes, err
+}
+
 const updateTask = `-- name: UpdateTask :execrows
 UPDATE tasks
 SET queue_id = ?1,

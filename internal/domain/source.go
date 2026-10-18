@@ -53,6 +53,10 @@ type Source struct {
 	CookieDomains []string          `json:"cookieDomains,omitempty"`
 	// MediaHint identifies the stream to pick (manifest pattern / variant).
 	MediaHint string `json:"mediaHint,omitempty"`
+	// Mirrors are other http(s) links to the same file. A ranged download
+	// spreads its connections over the ones that serve a file of the same
+	// size; the others are ignored.
+	Mirrors []string `json:"mirrors,omitempty"`
 	// ResolverKind defaults to direct when empty.
 	ResolverKind ResolverKind `json:"resolverKind,omitempty"`
 	Fingerprint  Fingerprint  `json:"fingerprint"`
@@ -100,6 +104,14 @@ func (s *Source) validate() error {
 			return fmt.Errorf("source: %s: %w", f.name, err)
 		}
 	}
+	if len(s.Mirrors) > MaxMirrors {
+		return fmt.Errorf("source: at most %d mirrors are allowed", MaxMirrors)
+	}
+	for _, m := range s.Mirrors {
+		if err := checkMirror(m); err != nil {
+			return fmt.Errorf("source: mirror %q: %w", m, err)
+		}
+	}
 	if s.Method != "" && !isToken(s.Method) {
 		return fmt.Errorf("source: invalid method %q", s.Method)
 	}
@@ -124,6 +136,24 @@ func (s *Source) validate() error {
 	}
 	if s.Fingerprint.Size < -1 {
 		return errors.New("source: fingerprint size must be >= -1")
+	}
+	return nil
+}
+
+// MaxMirrors bounds Source.Mirrors.
+const MaxMirrors = 16
+
+// checkMirror requires an absolute http or https URL with a host.
+func checkMirror(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if s := strings.ToLower(u.Scheme); s != "http" && s != "https" {
+		return errors.New("a mirror must be an http or https URL")
+	}
+	if u.Hostname() == "" {
+		return errors.New("a mirror needs a host")
 	}
 	return nil
 }

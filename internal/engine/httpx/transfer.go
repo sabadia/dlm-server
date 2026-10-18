@@ -65,6 +65,11 @@ type stream struct {
 
 	once    sync.Once
 	release func()
+
+	// url is where the stream was requested; mirror is set when that is a
+	// mirror rather than the primary link.
+	url    string
+	mirror bool
 }
 
 // close closes the body and releases the request context. It is
@@ -144,13 +149,28 @@ func (d *Download) openRange(runCtx, ctx context.Context, next, end int64) (*str
 	stop := context.AfterFunc(ctx, cancel)
 	release := func() { stop(); cancel() }
 
-	req, err := newRequest(reqCtx, d.source(), d.spec.Settings, d.requestURL())
+	reqURL, mirror := d.mirrors.pick(d.requestURL())
+	src := d.source()
+	if mirror {
+		src = d.mirrorSource(src, reqURL)
+	}
+	// fail reports an error of this request; a mirror's errors only make the
+	// connection try another URL.
+	fail := func(err error) error {
+		if mirror {
+			return d.mirrorErr(ctx, reqURL, err)
+		}
+		return err
+	}
+	req, err := newRequest(reqCtx, src, d.spec.Settings, reqURL)
 	if err != nil {
 		release()
 		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("httpx: %w", err))
 	}
 	req.Header.Set("Range", "bytes="+strconv.FormatInt(next, 10)+"-"+strconv.FormatInt(end-1, 10))
-	if v := d.ifRange(); v != "" {
+	// A mirror's validators differ from the primary's: its size was checked
+	// at the start and every Content-Range is checked below.
+	if v := d.ifRange(); v != "" && !mirror {
 		req.Header.Set("If-Range", v)
 	}
 	wd := newWatchdog(d.e.opts.stallTimeout, cancel)
@@ -159,13 +179,13 @@ func (d *Download) openRange(runCtx, ctx context.Context, next, end int64) (*str
 	wd.disarm()
 	if err != nil {
 		release()
-		return nil, d.streamErr(ctx, wd, err)
+		return nil, fail(d.streamErr(ctx, wd, err))
 	}
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
-		if err := htmlInsteadOfFile(resp, d.source()); err != nil {
+		if err := htmlInsteadOfFile(resp, src); err != nil {
 			_ = resp.Body.Close() // an error page, not the file
 			release()
-			return nil, err
+			return nil, fail(err)
 		}
 	}
 	size := d.res.Size
@@ -176,18 +196,27 @@ func (d *Download) openRange(runCtx, ctx context.Context, next, end int64) (*str
 		if !ok || start != next || last >= end || total != size || isCompressed(resp.Header) {
 			_ = resp.Body.Close() // invalid response; its body cannot be placed
 			release()
-			return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf(
+			var err error = engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf(
 				"%w: requested bytes %d-%d/%d, got Content-Range %q", ErrRangeMismatch, next, end-1, size, cr))
+			return nil, fail(err)
 		}
 		body := resp.Body
-		return d.newStream(reqCtx, resp, wd, last+1-next, func() { _ = body.Close(); release() }), nil
+		st := d.newStream(reqCtx, resp, wd, last+1-next, func() { _ = body.Close(); release() })
+		st.url, st.mirror = reqURL, mirror
+		return st, nil
 	case http.StatusOK:
+		if mirror {
+			// Not the file's range: drop the mirror instead of expiring the link.
+			_ = resp.Body.Close()
+			release()
+			return nil, fail(ErrRangeIgnored)
+		}
 		return nil, d.rangeIgnored(reqCtx, resp, wd, stop, cancel)
 	default:
 		se := NewStatusError(resp)
 		_ = resp.Body.Close() // error response; status and headers suffice
 		release()
-		return nil, d.e.classifier.Classify(se)
+		return nil, fail(d.e.classifier.Classify(se))
 	}
 }
 
@@ -320,7 +349,11 @@ func (d *Download) copySegment(ctx context.Context, t *segTable, seg *segment, s
 			return engine.Transient(domain.ErrorCodeNetwork, fmt.Errorf("httpx: body ended early: %w", io.ErrUnexpectedEOF))
 		}
 		if rerr != nil {
-			return d.streamErr(ctx, st.wd, rerr)
+			err := d.streamErr(ctx, st.wd, rerr)
+			if st.mirror && ctx.Err() == nil {
+				d.mirrors.fail(st.url)
+			}
+			return err
 		}
 	}
 }

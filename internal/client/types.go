@@ -60,6 +60,7 @@ type Source struct {
 	UserAgent     string            `json:"userAgent,omitempty"`
 	CookieDomains []string          `json:"cookieDomains,omitempty"`
 	MediaHint     string            `json:"mediaHint,omitempty"`
+	Mirrors       []string          `json:"mirrors,omitempty"`
 	ResolverKind  string            `json:"resolverKind,omitempty"`
 	Fingerprint   *Fingerprint      `json:"fingerprint,omitempty"`
 }

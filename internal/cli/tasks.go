@@ -187,6 +187,8 @@ func (a *app) newTaskCommand() *cobra.Command {
 	}
 	cmd.AddCommand(
 		a.newTaskAddCommand(),
+		a.newTaskExportCommand(),
+		a.newTaskImportCommand(),
 		a.newTaskListCommand(),
 		a.newTaskGetCommand(),
 		a.newTaskSetCommand(),
@@ -220,6 +222,8 @@ type taskAddFlags struct {
 	format      string
 	checksum    string
 	allowDup    bool
+	expand      bool
+	mirrors     []string
 }
 
 // settings builds the task-level settings layer from the flags.
@@ -276,6 +280,8 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 			"yt-dlp format (for example 'bv*[height<=720]+ba/b') or the quality of an HLS/DASH stream (for example 720).",
 		Example: "  dlm task add https://example.com/file.iso --queue <id> --speed-limit 1MB\n" +
 			"  dlm task add -f urls.txt --paused\n" +
+			"  dlm task add 'https://example.com/img[001-100].jpg' --expand\n" +
+			"  dlm task add https://a.example/f.iso --mirror https://b.example/f.iso --mirror https://c.example/f.iso\n" +
 			"  dlm task add ./ubuntu.iso.torrent 'magnet:?xt=urn:btih:...'\n" +
 			"  dlm task add https://example.com/file.iso --checksum sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\n" +
 			"  dlm task add --ytdlp 'https://video.example/watch?v=abc' --format 'bv*[height<=720]+ba/b'\n" +
@@ -293,9 +299,12 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 			if len(urls) == 0 {
 				return &usageError{err: errors.New("give at least one URL or --file")}
 			}
-			batch := len(urls) > 1 || f.file != ""
+			batch := len(urls) > 1 || f.file != "" || f.expand
 			if batch && f.name != "" {
 				return &usageError{err: errors.New("--name can only be used with a single URL")}
+			}
+			if batch && len(f.mirrors) > 0 {
+				return &usageError{err: errors.New("--mirror can only be used with a single URL")}
 			}
 			doc, err := f.settings(cmd)
 			if err != nil {
@@ -315,8 +324,8 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 					URL: u, QueueID: f.queue, Name: f.name, Dir: f.dir, Settings: layer,
 					Priority: f.priority, Paused: f.paused, AllowDuplicate: f.allowDup,
 				}
-				if f.ytdlp || f.format != "" {
-					src := &client.Source{CurrentURL: u, MediaHint: f.format}
+				if f.ytdlp || f.format != "" || len(f.mirrors) > 0 {
+					src := &client.Source{CurrentURL: u, MediaHint: f.format, Mirrors: f.mirrors}
 					if f.ytdlp {
 						src.ResolverKind = "ytdlp"
 					}
@@ -334,7 +343,7 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 				}
 				return a.printTask(cmd, t)
 			}
-			items, err := c.CreateTasks(cmd.Context(), reqs)
+			items, err := c.CreateTasksExpanded(cmd.Context(), reqs, f.expand)
 			if err != nil {
 				return err //nolint:wrapcheck // client errors are already user-facing
 			}
@@ -347,6 +356,8 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 	fl.StringVar(&f.name, "name", "", "file name (single URL only; default: detected)")
 	fl.StringVar(&f.dir, "dir", "", "absolute download directory (default: the effective downloadDir)")
 	fl.BoolVar(&f.paused, "paused", false, "add the tasks paused")
+	fl.StringArrayVar(&f.mirrors, "mirror", nil, "another http(s) link to the same file (repeatable, single URL only)")
+	fl.BoolVar(&f.expand, "expand", false, "expand ranges in the URLs: file[001-100].jpg is 100 tasks ([a-e] and [1-10:2] work too)")
 	fl.BoolVar(&f.allowDup, "allow-duplicate", false, "add the tasks even when another task has the same link, checksum, or file name and size")
 	fl.StringVar(&f.checksum, "checksum", "", "expected checksum ALGORITHM:HEX (md5, sha1, sha256 or blake3); a file that does not match is downloaded again")
 	fl.BoolVar(&f.ytdlp, "ytdlp", false, "download the URLs with yt-dlp (video and audio pages)")

@@ -79,7 +79,7 @@ func newOpsFixture(t *testing.T) *opsFixture {
 		Settings: service.NewSettingsService(d), Queues: service.NewQueueService(d), Tasks: tasks,
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(tasks, jar, refreshSvc), Refresh: refreshSvc,
 		Browser: service.NewBrowserService(fb, tasks), Categories: service.NewCategoryService(d),
-		Webhooks: service.NewWebhookService(d, cipher, webhook.New(nil, nil, webhook.Options{})),
+		Webhooks: service.NewWebhookService(d, cipher, webhook.New(nil, nil, webhook.Options{})), Credentials: service.NewCredentialService(d, cipher),
 	})
 	if err != nil {
 		t.Fatal(err)

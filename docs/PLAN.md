@@ -300,7 +300,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P9.2 Categories/auto-sort, file-exists policy, duplicate detection
 - [x] P9.3 Archive auto-extract, auto-torrent-from-.torrent
 - [x] P9.4 Webhooks, run-command/AV-scan post-actions
-- [ ] P9.5 Mirrors/multi-source, pattern/batch URLs, import/export, history search & stats, stored credentials
+- [x] P9.5 Mirrors/multi-source, pattern/batch URLs, import/export, history search & stats, stored credentials
 
 ### Phase 10: Integrations
 - [ ] P10.1 MCP server (tools for tasks, queues, settings; progress via notifications)

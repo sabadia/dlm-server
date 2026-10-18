@@ -83,3 +83,25 @@ func TestFingerprintMatches(t *testing.T) {
 		})
 	}
 }
+
+func TestSourceMirrorValidation(t *testing.T) {
+	ok := Source{CurrentURL: "https://a.example/f", Mirrors: []string{"https://b.example/f", "http://c.example:8080/f?x=1"}}
+	if err := ok.Validate(); err != nil {
+		t.Fatalf("valid mirrors: %v", err)
+	}
+	for name, m := range map[string]string{
+		"ftp": "ftp://b.example/f", "relative": "/f", "no host": "https:///f", "garbage": "::", "magnet": "magnet:?xt=urn:btih:abc",
+	} {
+		s := Source{CurrentURL: "https://a.example/f", Mirrors: []string{m}}
+		if err := s.Validate(); !errors.Is(err, ErrInvalidArgument) {
+			t.Errorf("%s: err = %v, want ErrInvalidArgument", name, err)
+		}
+	}
+	many := Source{CurrentURL: "https://a.example/f"}
+	for i := 0; i <= MaxMirrors; i++ {
+		many.Mirrors = append(many.Mirrors, "https://m.example/f")
+	}
+	if err := many.Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("too many mirrors: %v", err)
+	}
+}
