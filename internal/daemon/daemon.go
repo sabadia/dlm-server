@@ -22,6 +22,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/engine/browserx"
 	"github.com/sabadia/dlm-server/internal/engine/bt"
 	"github.com/sabadia/dlm-server/internal/engine/dash"
+	"github.com/sabadia/dlm-server/internal/engine/ed2k"
 	"github.com/sabadia/dlm-server/internal/engine/ftp"
 	"github.com/sabadia/dlm-server/internal/engine/hls"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
@@ -126,6 +127,15 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		})
 		defer func() { _ = torrents.Close() }()
 		list = append(list, torrents)
+	}
+	if cfg.ED2K.Enabled {
+		// Like the BitTorrent client, the ed2k client starts with the first task.
+		ed2kEngine := ed2k.New(env, ed2k.Config{
+			ListenPort: cfg.ED2K.ListenPort, Servers: cfg.ED2K.Servers, ServerMet: cfg.ED2K.ServerMet,
+			EnableKad: cfg.ED2K.Kad, EnableUPnP: cfg.ED2K.UPnP, UploadLimitKB: cfg.ED2K.UploadLimitKB,
+		})
+		defer func() { _ = ed2kEngine.Close() }()
+		list = append(list, ed2kEngine)
 	}
 	list = append(list, httpx.New(env))
 	engines, err := engine.NewRegistry(list...)

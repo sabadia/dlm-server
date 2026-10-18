@@ -129,6 +129,11 @@ func (s *Source) validate() error {
 }
 
 func checkAbsURL(raw string) error {
+	// An ed2k link is not a URL ("|" is not allowed in a host name); its
+	// engine checks the rest.
+	if len(raw) > len("ed2k://|") && strings.EqualFold(raw[:len("ed2k://|")], "ed2k://|") {
+		return nil
+	}
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)

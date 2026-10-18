@@ -40,6 +40,8 @@ type Config struct {
 	FFmpeg FFmpegConfig `koanf:"ffmpeg"`
 	// Torrent configures the BitTorrent client shared by all torrent tasks.
 	Torrent TorrentConfig `koanf:"torrent"`
+	// ED2K configures the eDonkey2000 client shared by all ed2k tasks.
+	ED2K ED2KConfig `koanf:"ed2k"`
 }
 
 // ServerConfig controls the HTTP listener.
@@ -141,6 +143,27 @@ type TorrentConfig struct {
 	MetadataTimeout time.Duration `koanf:"metadata_timeout"`
 }
 
+// ED2KConfig configures the one eDonkey2000 client the daemon runs for all
+// ed2k:// tasks. The client starts when the first task needs it. Without
+// Servers, ServerMet or Kad a download only finds the sources its link names.
+type ED2KConfig struct {
+	// Enabled turns the ed2k engine on; ed2k links are refused when it is off.
+	Enabled bool `koanf:"enabled"`
+	// ListenPort is the TCP port for incoming connections (UDP uses the next
+	// one); 0 picks free ports.
+	ListenPort int `koanf:"listen_port"`
+	// Servers are ed2k servers (host:port) used to find sources.
+	Servers []string `koanf:"servers"`
+	// ServerMet is the path of a server.met file whose servers are used too.
+	ServerMet string `koanf:"server_met"`
+	// Kad turns on the Kad network for finding sources without a server.
+	Kad bool `koanf:"kad"`
+	// UPnP asks the router to forward the listen port.
+	UPnP bool `koanf:"upnp"`
+	// UploadLimitKB caps the upload in kilobytes per second; 0 is unlimited.
+	UploadLimitKB int `koanf:"upload_limit_kb"`
+}
+
 // Default returns the configuration used when nothing else is specified.
 func Default() Config {
 	return Config{
@@ -163,6 +186,7 @@ func Default() Config {
 			Enabled: true, DHT: true, PEX: true, PortForwarding: true,
 			MetadataTimeout: 2 * time.Minute,
 		},
+		ED2K: ED2KConfig{Enabled: true},
 	}
 }
 

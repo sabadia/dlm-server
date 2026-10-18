@@ -239,3 +239,19 @@ func TestTorrentConfig(t *testing.T) {
 		t.Errorf("torrent config from the environment = %+v", got)
 	}
 }
+
+func TestED2KConfig(t *testing.T) {
+	if d := Default().ED2K; !d.Enabled || d.Kad || d.UPnP || len(d.Servers) != 0 || d.ServerMet != "" || d.UploadLimitKB != 0 {
+		t.Errorf("default ed2k config = %+v", d)
+	}
+	cfg, err := Load(LoadOptions{Environ: func() []string {
+		return []string{"DLM_HOME=" + t.TempDir(), "DLM_ED2K_ENABLED=false", "DLM_ED2K_LISTEN_PORT=4662", "DLM_ED2K_KAD=true", "DLM_ED2K_UPLOAD_LIMIT_KB=50", "DLM_ED2K_SERVER_MET=/etc/server.met"}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.ED2K
+	if got.Enabled || got.ListenPort != 4662 || !got.Kad || got.UploadLimitKB != 50 || got.ServerMet != "/etc/server.met" {
+		t.Errorf("ed2k config from the environment = %+v", got)
+	}
+}
