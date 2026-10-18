@@ -344,3 +344,33 @@ func TestTorrentSettingsLayering(t *testing.T) {
 		t.Errorf("after unsetting seedRatio: %+v, %v", got.Torrent, err)
 	}
 }
+
+func TestPostActionValidation(t *testing.T) {
+	for name, c := range map[string]struct {
+		action PostAction
+		want   string // the path of the expected error; empty means valid
+	}{
+		"extract":               {PostAction{Kind: PostActionExtract}, ""},
+		"extract with params":   {PostAction{Kind: PostActionExtract, Params: map[string]string{"dir": ".", "delete": "true", "password": "pw"}}, ""},
+		"add-torrent":           {PostAction{Kind: PostActionAddTorrent, Params: map[string]string{"dir": "/x", "delete": "false"}}, ""},
+		"no kind":               {PostAction{}, "postActions[0].kind"},
+		"unknown kind":          {PostAction{Kind: "format-disk"}, "postActions[0].kind"},
+		"unknown parameter":     {PostAction{Kind: PostActionExtract, Params: map[string]string{"cmd": "rm"}}, "postActions[0].params.cmd"},
+		"parameter of another":  {PostAction{Kind: PostActionAddTorrent, Params: map[string]string{"password": "x"}}, "postActions[0].params.password"},
+		"delete is a boolean":   {PostAction{Kind: PostActionExtract, Params: map[string]string{"delete": "yes"}}, "postActions[0].params.delete"},
+		"dir must not be empty": {PostAction{Kind: PostActionExtract, Params: map[string]string{"dir": ""}}, "postActions[0].params.dir"},
+	} {
+		s := Settings{PostActions: Some([]PostAction{c.action})}
+		err := s.Validate(LevelGlobal)
+		if c.want == "" {
+			if err != nil {
+				t.Errorf("%s: unexpected error %v", name, err)
+			}
+			continue
+		}
+		var ve *ValidationError
+		if !errors.As(err, &ve) || !slices.ContainsFunc(ve.Fields, func(f *FieldError) bool { return f.Path == c.want }) {
+			t.Errorf("%s: err = %v, want a field error at %s", name, err, c.want)
+		}
+	}
+}

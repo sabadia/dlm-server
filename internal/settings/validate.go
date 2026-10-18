@@ -151,9 +151,7 @@ func (s *Settings) Validate(level Level) error {
 	enum(v, "browserUsage", s.BrowserUsage, BrowserNever, BrowserAuto, BrowserAlways)
 	if actions, ok := s.PostActions.Get(); ok {
 		for i, a := range actions {
-			if strings.TrimSpace(a.Kind) == "" {
-				v.add(fmt.Sprintf("postActions[%d].kind", i), "is required")
-			}
+			v.postAction(fmt.Sprintf("postActions[%d]", i), a)
 		}
 	}
 	if sch, ok := s.Schedule.Get(); ok {
@@ -331,5 +329,29 @@ func isTokenChar(r rune) bool {
 		return true
 	default:
 		return strings.ContainsRune("!#$%&'*+-.^_`|~", r)
+	}
+}
+
+// postAction validates one post action: a known kind with known parameters.
+func (v *validator) postAction(path string, a PostAction) {
+	if strings.TrimSpace(a.Kind) == "" {
+		v.add(path+".kind", "is required")
+		return
+	}
+	known, ok := postActionParams[a.Kind]
+	if !ok {
+		v.add(path+".kind", fmt.Sprintf("unknown post action %q", a.Kind))
+		return
+	}
+	for k, val := range a.Params {
+		if !slices.Contains(known, k) {
+			v.add(path+".params."+k, fmt.Sprintf("is not a parameter of %s", a.Kind))
+		}
+		if k == "delete" && val != "true" && val != "false" {
+			v.add(path+".params.delete", `must be "true" or "false"`)
+		}
+		if k == "dir" && val == "" {
+			v.add(path+".params.dir", "must not be empty")
+		}
 	}
 }

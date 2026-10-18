@@ -71,7 +71,7 @@ func task(dir, name string, cs *settings.Checksum) (*domain.Task, settings.Setti
 
 func TestChecksumStep(t *testing.T) {
 	dir, name := writeFile(t, "abc")
-	p := Default(nil)
+	p := Default(Options{})
 	// No checksum: nothing to do.
 	tk, eff := task(dir, name, nil)
 	if _, err := p.Process(t.Context(), tk, eff); err != nil {

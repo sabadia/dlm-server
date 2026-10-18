@@ -30,6 +30,14 @@ type Job struct {
 	// Path is where the downloaded file (or directory) is now. A step that
 	// moves or renames it must update Path.
 	Path string
+	// Notes collect what the post actions did, and what went wrong in them
+	// (they must not fail the task); the task keeps them in its labels.
+	Notes []string
+}
+
+// Note records what a post action did, or why it could not.
+func (j *Job) Note(format string, args ...any) {
+	j.Notes = append(j.Notes, fmt.Sprintf(format, args...))
 }
 
 // NewJob prepares a job for a finished task.
@@ -73,9 +81,21 @@ func New(log *slog.Logger, steps ...Step) *Pipeline {
 	return &Pipeline{steps: steps, log: log}
 }
 
-// Default returns the pipeline of all the steps dlm runs after a download.
-func Default(log *slog.Logger) *Pipeline {
-	return New(log, Checksum{})
+// Options are the dependencies of the default pipeline.
+type Options struct {
+	Logger *slog.Logger
+	// Torrents creates the tasks of downloaded .torrent files (action
+	// add-torrent); without it that action reports a warning.
+	Torrents TorrentAdder
+}
+
+// Default returns the pipeline of all the steps dlm runs after a download: the
+// checksum check, then the configured post actions.
+func Default(o Options) *Pipeline {
+	return New(o.Logger, Checksum{}, NewActions(o.Logger, map[string]Action{
+		settings.PostActionExtract:    Extract{},
+		settings.PostActionAddTorrent: AddTorrent{Adder: o.Torrents},
+	}))
 }
 
 // Process runs the pipeline for a finished task and returns the job as the
