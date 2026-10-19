@@ -304,7 +304,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 
 ### Phase 10: Integrations
 - [x] P10.1 MCP server (tools for tasks, queues, settings; progress via notifications)
-- [ ] P10.2 JS plugin runtime (goja, timeouts, resolve/start/error/done hooks, `plugin` refresh strategy), plugin install from git/folder
+- [x] P10.2 JS plugin runtime (goja, timeouts, resolve/start/error/done hooks, `plugin` refresh strategy), plugin install from git/folder
 
 ### Phase 11: Release
 - [ ] P11.1 GoReleaser v2 (archives, checksums, Homebrew/Scoop/winget, deb/rpm), versioned OpenAPI artifact

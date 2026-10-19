@@ -18,6 +18,8 @@ import (
 const (
 	// DefaultTimeout bounds a single request unless overridden by WithTimeout.
 	DefaultTimeout = 30 * time.Second
+	// InstallTimeout bounds installing a plugin, which may clone a repository.
+	InstallTimeout = 3 * time.Minute
 	// DefaultUserAgent is sent unless overridden by WithUserAgent.
 	DefaultUserAgent = "dlm-cli"
 

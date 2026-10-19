@@ -897,3 +897,75 @@ func (r credentialRepo) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// ---- plugins ----
+
+type pluginRepo struct{ s *Store }
+
+func decodePlugin(row db.Plugin) *storage.PluginRecord {
+	return &storage.PluginRecord{
+		Name: row.Name, Version: row.Version, Title: row.Title, Description: row.Description, Source: row.Source,
+		Enabled: row.Enabled != 0, InstalledAt: fromMillis(row.InstalledAt), UpdatedAt: fromMillis(row.UpdatedAt),
+	}
+}
+
+func (r pluginRepo) Create(ctx context.Context, p *storage.PluginRecord) error {
+	if err := r.s.write().CreatePlugin(ctx, db.CreatePluginParams{
+		Name: p.Name, Version: p.Version, Title: p.Title, Description: p.Description, Source: p.Source,
+		Enabled: boolToInt(p.Enabled), InstalledAt: toMillis(p.InstalledAt), UpdatedAt: toMillis(p.UpdatedAt),
+	}); err != nil {
+		if isPrimaryKeyViolation(err) || isUniqueViolation(err) {
+			return domain.AlreadyExists("plugin", p.Name)
+		}
+		return fmt.Errorf("storage: create plugin %q: %w", p.Name, err)
+	}
+	return nil
+}
+
+func (r pluginRepo) Get(ctx context.Context, name string) (*storage.PluginRecord, error) {
+	row, err := r.s.read().GetPlugin(ctx, name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.NotFound("plugin", name)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("storage: get plugin %q: %w", name, err)
+	}
+	return decodePlugin(row), nil
+}
+
+func (r pluginRepo) List(ctx context.Context) ([]*storage.PluginRecord, error) {
+	rows, err := r.s.read().ListPlugins(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("storage: list plugins: %w", err)
+	}
+	out := make([]*storage.PluginRecord, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, decodePlugin(row))
+	}
+	return out, nil
+}
+
+func (r pluginRepo) Update(ctx context.Context, p *storage.PluginRecord) error {
+	n, err := r.s.write().UpdatePlugin(ctx, db.UpdatePluginParams{
+		Name: p.Name, Version: p.Version, Title: p.Title, Description: p.Description, Source: p.Source,
+		Enabled: boolToInt(p.Enabled), UpdatedAt: toMillis(p.UpdatedAt),
+	})
+	if err != nil {
+		return fmt.Errorf("storage: update plugin %q: %w", p.Name, err)
+	}
+	if n == 0 {
+		return domain.NotFound("plugin", p.Name)
+	}
+	return nil
+}
+
+func (r pluginRepo) Delete(ctx context.Context, name string) error {
+	n, err := r.s.write().DeletePlugin(ctx, name)
+	if err != nil {
+		return fmt.Errorf("storage: delete plugin %q: %w", name, err)
+	}
+	if n == 0 {
+		return domain.NotFound("plugin", name)
+	}
+	return nil
+}

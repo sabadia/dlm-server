@@ -49,6 +49,17 @@ type EngineState struct {
 	UpdatedAt int64
 }
 
+type Plugin struct {
+	Name        string
+	Version     string
+	Title       string
+	Description string
+	Source      string
+	Enabled     int64
+	InstalledAt int64
+	UpdatedAt   int64
+}
+
 type Queue struct {
 	ID        string
 	Name      string

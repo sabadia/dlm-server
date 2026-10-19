@@ -235,6 +235,9 @@ func (s *Store) Webhooks() storage.WebhookRepository { return webhookRepo{s} }
 // Credentials returns the credential repository.
 func (s *Store) Credentials() storage.CredentialRepository { return credentialRepo{s} }
 
+// Plugins returns the plugin repository.
+func (s *Store) Plugins() storage.PluginRepository { return pluginRepo{s} }
+
 // WithTx implements storage.Store.
 func (s *Store) WithTx(ctx context.Context, fn func(tx storage.Store) error) error {
 	return s.inTx(ctx, func(tx *Store) error { return fn(tx) })

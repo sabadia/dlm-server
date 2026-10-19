@@ -21,6 +21,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/netclient"
+	"github.com/sabadia/dlm-server/internal/plugin"
 	"github.com/sabadia/dlm-server/internal/refresh"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
@@ -64,6 +65,8 @@ func newOpsFixture(t *testing.T) *opsFixture {
 		Store: store, Engines: reg, Resolves: resolves,
 		Defaults: func() settings.Settings { return defaults },
 	}
+	plugins := plugin.NewManager(plugin.Options{Dir: filepath.Join(t.TempDir(), "plugins"), Store: store})
+	d.Plugins = plugins
 	cipher, err := cookies.NewCipher(bytes.Repeat([]byte{1}, 32))
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +83,7 @@ func newOpsFixture(t *testing.T) *opsFixture {
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(tasks, jar, refreshSvc), Refresh: refreshSvc,
 		Browser: service.NewBrowserService(fb, tasks), Categories: service.NewCategoryService(d),
 		Webhooks: service.NewWebhookService(d, cipher, webhook.New(nil, nil, webhook.Options{})), Credentials: service.NewCredentialService(d, cipher),
+		Plugins: service.NewPluginService(plugins),
 	})
 	if err != nil {
 		t.Fatal(err)

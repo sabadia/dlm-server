@@ -279,6 +279,33 @@ type CredentialRepository interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// PluginRecord is the persisted part of an installed plugin; its manifest is
+// read from the plugin's files.
+type PluginRecord struct {
+	Name        string
+	Version     string
+	Title       string
+	Description string
+	Source      string
+	Enabled     bool
+	InstalledAt time.Time
+	UpdatedAt   time.Time
+}
+
+// PluginRepository persists installed plugins.
+type PluginRepository interface {
+	// Create inserts the plugin; a duplicate name returns domain.ErrAlreadyExists.
+	Create(ctx context.Context, p *PluginRecord) error
+	// Get returns the plugin or an error matching domain.ErrNotFound.
+	Get(ctx context.Context, name string) (*PluginRecord, error)
+	// List returns every plugin ordered by name.
+	List(ctx context.Context) ([]*PluginRecord, error)
+	// Update replaces everything but the name and installation time.
+	Update(ctx context.Context, p *PluginRecord) error
+	// Delete removes the plugin; a missing one returns domain.ErrNotFound.
+	Delete(ctx context.Context, name string) error
+}
+
 // CookieRecord represents the persisted cookie row with encrypted value.
 type CookieRecord struct {
 	ID           string
@@ -324,6 +351,7 @@ type Store interface {
 	Categories() CategoryRepository
 	Webhooks() WebhookRepository
 	Credentials() CredentialRepository
+	Plugins() PluginRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

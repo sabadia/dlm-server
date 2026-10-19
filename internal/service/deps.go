@@ -49,6 +49,16 @@ type Deps struct {
 	// every service; nil gives this service a private instance, which only
 	// protects against itself.
 	TaskLocks *TaskLocks
+	// Plugins, when set, may turn a link into the one to download (plugin
+	// resolve hooks).
+	Plugins PluginHooks
+}
+
+// PluginHooks is what the task service asks of the plugins (plugin.Manager).
+type PluginHooks interface {
+	// Resolve returns the source a plugin gives for src, with the file name it
+	// suggests; handled is false when no plugin takes the link.
+	Resolve(ctx context.Context, src domain.Source) (next domain.Source, name string, handled bool)
 }
 
 func (d Deps) withDefaults() Deps {
