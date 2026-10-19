@@ -117,6 +117,7 @@ func (s *TaskService) Resolve(ctx context.Context, in ResolveInput) (*ResolveRes
 	if err != nil {
 		return nil, err
 	}
+	in.Source, _ = s.applyPlugins(ctx, in.Source)
 	eng, err := s.d.Engines.Select(in.Source)
 	if err != nil {
 		return nil, fmt.Errorf("service: resolve: %w", err)
@@ -151,6 +152,12 @@ func (s *TaskService) Create(ctx context.Context, in CreateTaskInput) (*domain.T
 		return nil, err
 	}
 	queueID := cmpOr(in.QueueID, domain.MainQueueID)
+	if in.ResolveID == "" {
+		var name string
+		if in.Source, name = s.applyPlugins(ctx, in.Source); in.Name == "" {
+			in.Name = name
+		}
+	}
 	if err := validateName(in.Name); err != nil {
 		return nil, err
 	}
@@ -212,6 +219,27 @@ func (s *TaskService) Create(ctx context.Context, in CreateTaskInput) (*domain.T
 		s.d.Scheduler.Wake()
 	}
 	return t, nil
+}
+
+// applyPlugins lets the plugins turn a plain link into the one to download. A
+// result that is not a valid source is ignored, and so is a name that is not
+// a valid file name: a plugin can improve a download, not break it.
+func (s *TaskService) applyPlugins(ctx context.Context, src domain.Source) (domain.Source, string) {
+	if s.d.Plugins == nil || (src.ResolverKind != "" && src.ResolverKind != domain.ResolverDirect) {
+		return src, ""
+	}
+	next, name, ok := s.d.Plugins.Resolve(ctx, src)
+	if !ok {
+		return src, ""
+	}
+	if err := next.Validate(); err != nil {
+		s.d.Logger.WarnContext(ctx, "ignoring a plugin's source", "error", err)
+		return src, ""
+	}
+	if name = strings.TrimSpace(name); validateName(name) != nil {
+		name = ""
+	}
+	return next, name
 }
 
 // checkDuplicate refuses a task that repeats another one: the same link, the

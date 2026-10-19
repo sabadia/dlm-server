@@ -212,6 +212,9 @@ func (c *Config) TokenFile() string { return filepath.Join(c.Paths.ConfigDir, "t
 // DatabaseFile is the path of the SQLite database.
 func (c *Config) DatabaseFile() string { return filepath.Join(c.Paths.DataDir, AppName+".db") }
 
+// PluginsDir is where installed plugins live.
+func (c *Config) PluginsDir() string { return filepath.Join(c.Paths.DataDir, "plugins") }
+
 // BrowserProfilesDir holds the browser profiles (one per site group), which
 // keep the logins of the pages the browser opened.
 func (c *Config) BrowserProfilesDir() string {

@@ -33,6 +33,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/mcp"
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/platform"
+	"github.com/sabadia/dlm-server/internal/plugin"
 	"github.com/sabadia/dlm-server/internal/postproc"
 	"github.com/sabadia/dlm-server/internal/ratelimit"
 	"github.com/sabadia/dlm-server/internal/refresh"
@@ -207,6 +208,20 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 			return err
 		},
 	})
+	// Plugins make their own requests through a client that has no cookie jar
+	// and no stored logins.
+	pluginClients := netclient.New(netclient.Options{Logger: log})
+	defer func() { _ = pluginClients.Close() }()
+	pluginHTTP, err := pluginClients.Client(defaults())
+	if err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
+	plugins := plugin.NewManager(plugin.Options{Dir: cfg.PluginsDir(), Store: store, Bus: bus, Logger: log, HTTP: pluginHTTP})
+	if err := plugins.Load(ctx); err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
 	services = NewServices(service.Deps{
 		Store:     store,
 		Engines:   engines,
@@ -218,7 +233,9 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Defaults:  defaults,
 		Logger:    log,
 		TaskLocks: locks,
-	}, refresh.PageReload{Resolver: resolver})
+		Plugins:   plugins,
+	}, refresh.PageReload{Resolver: resolver}, refresh.Plugin{Plugins: plugins})
+	services.Plugins = service.NewPluginService(plugins)
 	services.Browser = service.NewBrowserService(resolver, services.Tasks)
 	// The dispatcher reads its endpoints through the webhook service, which in
 	// turn tests endpoints through the dispatcher.
@@ -241,6 +258,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Categories:  services.Categories,
 		Webhooks:    services.Webhooks,
 		Credentials: services.Credentials,
+		Plugins:     services.Plugins,
 		MCP: mcp.Handler(mcp.New(mcp.Deps{
 			Tasks: services.Tasks, Queues: services.Queues, Settings: services.Settings, Bus: bus, Version: version, Logger: log,
 		})),
@@ -274,6 +292,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	g.Go(func() error { return services.Refresh.Run(sweepCtx) })
 	g.Go(func() error { return resolver.Run(sweepCtx) })
 	g.Go(func() error { return webhooks.Run(sweepCtx) })
+	g.Go(func() error { return plugins.Run(sweepCtx) })
 	// The scheduler starts queued tasks, including the ones recovered
 	// above; on shutdown it requeues its running tasks and waits for them
 	// (the store stays open until g.Wait returns).
@@ -305,6 +324,8 @@ type Services struct {
 	Webhooks *service.WebhookService
 	// Credentials holds the stored site logins; wired by the daemon (it needs the secret cipher).
 	Credentials *service.CredentialService
+	// Plugins manages the installed plugins; wired by the daemon (it needs the plugin manager).
+	Plugins *service.PluginService
 	// Browser is nil until the daemon wires it (it needs the headless browser).
 	Browser *service.BrowserService
 }

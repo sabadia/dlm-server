@@ -20,6 +20,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/netclient"
+	"github.com/sabadia/dlm-server/internal/plugin"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage/sqlite"
@@ -69,6 +70,7 @@ func newE2E(t *testing.T) *e2e {
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh, Browser: service.NewBrowserService(fb, svc.Tasks), Categories: svc.Categories,
 		Webhooks:    service.NewWebhookService(service.Deps{Store: store}, cipher, webhook.New(nil, nil, webhook.Options{})),
 		Credentials: service.NewCredentialService(service.Deps{Store: store}, cipher),
+		Plugins:     service.NewPluginService(plugin.NewManager(plugin.Options{Dir: filepath.Join(t.TempDir(), "plugins"), Store: store})),
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -904,5 +906,59 @@ func TestTaskExportImportAndStats(t *testing.T) {
 	}
 	if r := e.run(t, "", "stats"); r.code != ExitOK || !strings.Contains(r.stdout, "all tasks") || !strings.Contains(r.stdout, "completed in 24h") {
 		t.Errorf("stats table: exit %d %q", r.code, r.stdout)
+	}
+}
+
+func TestPluginCommands(t *testing.T) {
+	e := newE2E(t)
+	dir := t.TempDir()
+	for file, content := range map[string]string{
+		"manifest.json": `{"name":"demo","version":"1.0.0","hooks":{"resolve":{}},"net":["api.example.com"]}`,
+		"index.js":      `dlm.on("resolve", function () { return null; });`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var p client.Plugin
+	e.ok(t, &p, "plugin", "install", dir, "-o", "json")
+	if p.Name != "demo" || !p.Enabled || len(p.Hooks) != 1 {
+		t.Fatalf("plugin = %+v", p)
+	}
+	if r := e.run(t, "", "plugin", "install", dir); r.code == ExitOK {
+		t.Error("a second install succeeded")
+	}
+	e.ok(t, &p, "plugin", "install", dir, "--replace", "--disabled", "-o", "json")
+	if p.Enabled {
+		t.Errorf("replaced disabled = %+v", p)
+	}
+	if r := e.run(t, "", "plugin", "install", filepath.Join(t.TempDir(), "missing")); r.code == ExitOK {
+		t.Error("a missing directory was accepted")
+	}
+	var list []client.Plugin
+	e.ok(t, &list, "plugin", "list", "-o", "json")
+	if len(list) != 1 || list[0].Name != "demo" {
+		t.Fatalf("list = %+v", list)
+	}
+	if r := e.run(t, "", "plugin", "list"); r.code != ExitOK || !strings.Contains(r.stdout, "demo") || !strings.Contains(r.stdout, "off") {
+		t.Errorf("list table: exit %d %q", r.code, r.stdout)
+	}
+	e.ok(t, &p, "plugin", "enable", "demo", "-o", "json")
+	if !p.Enabled {
+		t.Errorf("enable = %+v", p)
+	}
+	e.ok(t, &p, "plugin", "disable", "demo", "-o", "json")
+	if p.Enabled {
+		t.Errorf("disable = %+v", p)
+	}
+	e.ok(t, &p, "plugin", "get", "demo", "-o", "json")
+	if p.Version != "1.0.0" {
+		t.Errorf("get = %+v", p)
+	}
+	if r := e.run(t, "", "plugin", "rm", "demo"); r.code != ExitOK || !strings.Contains(r.stdout, "deleted") {
+		t.Errorf("rm: exit %d %q", r.code, r.stdout)
+	}
+	if r := e.run(t, "", "plugin", "get", "demo"); r.code == ExitOK {
+		t.Error("get after rm succeeded")
 	}
 }

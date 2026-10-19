@@ -67,6 +67,8 @@ type Deps struct {
 	Webhooks *service.WebhookService
 	// Credentials is the service behind the credential operations; 503 while nil.
 	Credentials *service.CredentialService
+	// Plugins is the service behind the plugin operations; 503 while nil.
+	Plugins *service.PluginService
 	// MCP, when set, is served at /mcp (the Model Context Protocol endpoint)
 	// behind the same bearer token as /v1.
 	MCP http.Handler
@@ -99,6 +101,7 @@ type Server struct {
 	categories  *service.CategoryService
 	webhooks    *service.WebhookService
 	credentials *service.CredentialService
+	plugins     *service.PluginService
 	capture     *service.CaptureService
 	refresh     *service.RefreshService
 	browser     *service.BrowserService
@@ -156,6 +159,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		categories:  deps.Categories,
 		webhooks:    deps.Webhooks,
 		credentials: deps.Credentials,
+		plugins:     deps.Plugins,
 		capture:     deps.Capture,
 		refresh:     deps.Refresh,
 		browser:     deps.Browser,
@@ -179,6 +183,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerWebhooks()
 	s.registerCredentials()
 	s.registerPortable()
+	s.registerPlugins()
 	s.registerCapture()
 	s.registerRefresh()
 	s.registerBrowser()

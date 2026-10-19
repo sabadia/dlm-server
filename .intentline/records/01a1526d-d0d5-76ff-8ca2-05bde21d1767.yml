@@ -1,0 +1,113 @@
+schema_version: 1
+id: 01a1526d-d0d5-76ff-8ca2-05bde21d1767
+status: draft
+created_at: '2026-10-19T04:31:31Z'
+updated_at: '2026-10-19T04:31:31Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: Add a sandboxed JS plugin runtime (goja) with hooks, a plugin refresh strategy, and install from a folder or git
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+- path: go.mod
+  start_line: null
+  end_line: null
+- path: go.sum
+  start_line: null
+  end_line: null
+- path: internal/api/ops_test.go
+  start_line: null
+  end_line: null
+- path: internal/api/server.go
+  start_line: null
+  end_line: null
+- path: internal/cli/ops_test.go
+  start_line: null
+  end_line: null
+- path: internal/cli/root.go
+  start_line: null
+  end_line: null
+- path: internal/client/client.go
+  start_line: null
+  end_line: null
+- path: internal/config/config.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: internal/service/deps.go
+  start_line: null
+  end_line: null
+- path: internal/service/task.go
+  start_line: null
+  end_line: null
+- path: internal/storage/sqlite/db/models.go
+  start_line: null
+  end_line: null
+- path: internal/storage/sqlite/repos.go
+  start_line: null
+  end_line: null
+- path: internal/storage/sqlite/store.go
+  start_line: null
+  end_line: null
+- path: internal/storage/storage.go
+  start_line: null
+  end_line: null
+- path: internal/api/plugins.go
+  start_line: null
+  end_line: null
+- path: internal/api/plugins_test.go
+  start_line: null
+  end_line: null
+- path: internal/cli/plugins.go
+  start_line: null
+  end_line: null
+- path: internal/client/plugins.go
+  start_line: null
+  end_line: null
+- path: internal/domain/plugin.go
+  start_line: null
+  end_line: null
+- path: internal/plugin
+  start_line: null
+  end_line: null
+- path: internal/refresh/plugin.go
+  start_line: null
+  end_line: null
+- path: internal/refresh/plugin_test.go
+  start_line: null
+  end_line: null
+- path: internal/service/plugin.go
+  start_line: null
+  end_line: null
+- path: internal/service/plugin_hooks_test.go
+  start_line: null
+  end_line: null
+- path: internal/storage/sqlite/db/plugins.sql.go
+  start_line: null
+  end_line: null
+- path: internal/storage/sqlite/migrations/00007_plugins.sql
+  start_line: null
+  end_line: null
+- path: internal/storage/sqlite/plugins_test.go
+  start_line: null
+  end_line: null
+- path: internal/storage/sqlite/queries/plugins.sql
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
