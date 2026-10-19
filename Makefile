@@ -4,7 +4,7 @@ BINARY  ?= dlm
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: all build generate generate-check fmt lint vet test race vuln tidy cross snapshot openapi clean
+.PHONY: all build generate generate-check docs fmt lint vet test race vuln tidy cross snapshot openapi clean
 
 all: fmt lint test build
 
@@ -16,6 +16,12 @@ generate:
 
 generate-check:
 	sqlc diff -f internal/storage/sqlite/sqlc.yaml
+
+# Regenerate the reference documents: the command reference and the OpenAPI
+# document (a test fails when they are stale).
+docs:
+	go run ./cmd/dlm docs > docs/CLI.md
+	go run ./cmd/dlm openapi > docs/openapi.json
 
 fmt:
 	golangci-lint fmt ./...

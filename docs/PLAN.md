@@ -308,7 +308,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 
 ### Phase 11: Release
 - [x] P11.1 GoReleaser v2 (archives, checksums, Homebrew/Scoop/winget, deb/rpm), versioned OpenAPI artifact
-- [ ] P11.2 Docs: API guide, CLI reference (generated), architecture doc
+- [x] P11.2 Docs: API guide, CLI reference (generated), architecture doc
 
 ## Verification
 - **Unit tests:** settings resolution/provenance, FSM, scheduler (fake clock), limiter, refresh validation, filename parsing.

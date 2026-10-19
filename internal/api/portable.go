@@ -59,6 +59,13 @@ type CompletedStatsRow struct {
 	Bytes  int64  `json:"bytes" doc:"Their size."`
 }
 
+const (
+	importPath = "/v1/tasks/import"
+	// MaxImportBodyBytes is the request body limit of import-tasks: a list of
+	// up to 8 MiB, which JSON escaping can roughly double.
+	MaxImportBodyBytes int64 = 16 << 20
+)
+
 func (s *Server) registerPortable() {
 	Register(s, huma.Operation{
 		OperationID: "export-tasks",
@@ -71,13 +78,14 @@ func (s *Server) registerPortable() {
 	}, s.exportTasks)
 
 	Register(s, huma.Operation{
-		OperationID: "import-tasks",
-		Method:      http.MethodPost,
-		Path:        "/v1/tasks/import",
-		Summary:     "Import a list of downloads",
-		Description: "Creates one task per entry of a dlm JSON, URL list, or aria2 input file, independently: one failure does not stop the others. Returns one result per created task. An unreadable list is refused with 422 and creates nothing.",
-		Tags:        []string{tagTasks},
-		Errors:      []int{http.StatusUnprocessableEntity, http.StatusServiceUnavailable},
+		OperationID:  "import-tasks",
+		Method:       http.MethodPost,
+		Path:         importPath,
+		Summary:      "Import a list of downloads",
+		Description:  "Creates one task per entry of a dlm JSON, URL list, or aria2 input file, independently: one failure does not stop the others. Returns one result per created task. An unreadable list is refused with 422 and creates nothing.",
+		Tags:         []string{tagTasks},
+		MaxBodyBytes: MaxImportBodyBytes,
+		Errors:       []int{http.StatusUnprocessableEntity, http.StatusRequestEntityTooLarge, http.StatusServiceUnavailable},
 	}, s.importTasks)
 
 	Register(s, huma.Operation{

@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -175,3 +176,28 @@ func TestNewOperationsUnavailableWithoutServices(t *testing.T) {
 		})
 	}
 }
+
+func TestImportAcceptsListsOverTheDefaultBodyLimit(t *testing.T) {
+	f := newOpsFixture(t)
+	// About 1.2 MB of long links (a few of them, so the test is quick): over the 1 MiB limit of other operations.
+	var list strings.Builder
+	for i := range 100 {
+		list.WriteString(f.origin.URL + "/f" + strings.Repeat("x", 12000) + "-" + itoaTest(i) + "\n")
+	}
+	if list.Len() <= int(MaxBodyBytes) {
+		t.Fatalf("test list is only %d bytes", list.Len())
+	}
+	var res batchBody
+	f.call(t, http.MethodPost, "/v1/tasks/import", `{"format":"urls","paused":true,"content":`+quoteJSON(list.String())+`}`, http.StatusOK, &res)
+	if len(res.Results) != 100 || !res.Results[0].OK || !res.Results[99].OK {
+		t.Fatalf("%d results; first %+v", len(res.Results), res.Results[0])
+	}
+	// Past the limit the request is refused before it is read.
+	big := `{"format":"urls","content":"` + strings.Repeat("a", int(MaxImportBodyBytes)) + `"}`
+	assertProblem(t, do(t, f.s, request{method: http.MethodPost, path: "/v1/tasks/import", body: big, headers: bearer(testToken)}), http.StatusRequestEntityTooLarge)
+	// Other operations keep the default limit.
+	small := `{"url":"` + strings.Repeat("a", int(MaxBodyBytes)) + `"}`
+	assertProblem(t, do(t, f.s, request{method: http.MethodPost, path: "/v1/tasks", body: small, headers: bearer(testToken)}), http.StatusRequestEntityTooLarge)
+}
+
+func itoaTest(i int) string { return strconv.Itoa(i) }
