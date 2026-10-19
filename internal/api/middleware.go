@@ -100,7 +100,7 @@ func (s *Server) requiresAuth(r *http.Request) bool {
 			path = pattern
 		}
 	}
-	return path == "/v1" || strings.HasPrefix(path, PathPrefix)
+	return path == "/v1" || strings.HasPrefix(path, PathPrefix) || path == MCPPath
 }
 
 func (s *Server) validToken(header string) bool {

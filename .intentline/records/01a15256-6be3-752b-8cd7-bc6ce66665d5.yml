@@ -1,0 +1,62 @@
+schema_version: 1
+id: 01a15256-6be3-752b-8cd7-bc6ce66665d5
+status: draft
+created_at: '2026-10-19T04:05:57Z'
+updated_at: '2026-10-19T04:05:57Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: Expose downloads, queues and settings to AI assistants over the Model Context Protocol
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+- path: go.mod
+  start_line: null
+  end_line: null
+- path: go.sum
+  start_line: null
+  end_line: null
+- path: internal/api/middleware.go
+  start_line: null
+  end_line: null
+- path: internal/api/register.go
+  start_line: null
+  end_line: null
+- path: internal/api/server.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: internal/mcp/doc.go
+  start_line: null
+  end_line: null
+- path: internal/mcp/mcp_test.go
+  start_line: null
+  end_line: null
+- path: internal/mcp/queues.go
+  start_line: null
+  end_line: null
+- path: internal/mcp/server.go
+  start_line: null
+  end_line: null
+- path: internal/mcp/settings.go
+  start_line: null
+  end_line: null
+- path: internal/mcp/tasks.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

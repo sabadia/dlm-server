@@ -303,7 +303,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P9.5 Mirrors/multi-source, pattern/batch URLs, import/export, history search & stats, stored credentials
 
 ### Phase 10: Integrations
-- [ ] P10.1 MCP server (tools for tasks, queues, settings; progress via notifications)
+- [x] P10.1 MCP server (tools for tasks, queues, settings; progress via notifications)
 - [ ] P10.2 JS plugin runtime (goja, timeouts, resolve/start/error/done hooks, `plugin` refresh strategy), plugin install from git/folder
 
 ### Phase 11: Release
