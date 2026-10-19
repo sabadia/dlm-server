@@ -1,0 +1,71 @@
+schema_version: 1
+id: 01a1542f-1121-778d-b34b-9e5f96d658a0
+status: draft
+created_at: '2026-10-19T12:42:13Z'
+updated_at: '2026-10-19T12:42:13Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'Document dlm: how to use the API, how the code fits together, how to write plugins, and a generated command reference'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: Makefile
+  start_line: null
+  end_line: null
+- path: README.md
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+- path: go.mod
+  start_line: null
+  end_line: null
+- path: go.sum
+  start_line: null
+  end_line: null
+- path: internal/api/middleware.go
+  start_line: null
+  end_line: null
+- path: internal/api/portable.go
+  start_line: null
+  end_line: null
+- path: internal/api/portable_test.go
+  start_line: null
+  end_line: null
+- path: internal/cli/root.go
+  start_line: null
+  end_line: null
+- path: docs/API.md
+  start_line: null
+  end_line: null
+- path: docs/ARCHITECTURE.md
+  start_line: null
+  end_line: null
+- path: docs/CLI.md
+  start_line: null
+  end_line: null
+- path: docs/PLUGINS.md
+  start_line: null
+  end_line: null
+- path: docs/openapi.json
+  start_line: null
+  end_line: null
+- path: internal/cli/docs.go
+  start_line: null
+  end_line: null
+- path: internal/cli/docs_test.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

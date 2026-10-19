@@ -152,8 +152,12 @@ func corsMiddleware(next http.Handler, allowed map[string]struct{}) http.Handler
 
 // --- request size ---------------------------------------------------------
 
-func bodyLimitMiddleware(next http.Handler, limit int64) http.Handler {
+func bodyLimitMiddleware(next http.Handler, defaultLimit int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limit := defaultLimit
+		if r.Method == http.MethodPost && r.URL.Path == importPath {
+			limit = MaxImportBodyBytes
+		}
 		if r.ContentLength > limit {
 			writeProblem(w, http.StatusRequestEntityTooLarge,
 				"request body is too large, limit="+strconv.FormatInt(limit, 10)+" bytes")
