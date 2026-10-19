@@ -1,0 +1,56 @@
+schema_version: 1
+id: 01a1541c-d890-7583-83cb-36a5a9617a1b
+status: draft
+created_at: '2026-10-19T12:22:19Z'
+updated_at: '2026-10-19T12:22:19Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'Release dlm with GoReleaser: archives, checksums, deb/rpm, Homebrew/Scoop/winget, versioned OpenAPI'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: .github/workflows/ci.yml
+  start_line: null
+  end_line: null
+- path: .gitignore
+  start_line: null
+  end_line: null
+- path: Makefile
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+- path: internal/cli/ops_test.go
+  start_line: null
+  end_line: null
+- path: internal/cli/root.go
+  start_line: null
+  end_line: null
+- path: .github/workflows/release.yml
+  start_line: null
+  end_line: null
+- path: .goreleaser.yaml
+  start_line: null
+  end_line: null
+- path: docs/RELEASING.md
+  start_line: null
+  end_line: null
+- path: internal/cli/openapi.go
+  start_line: null
+  end_line: null
+- path: packaging
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

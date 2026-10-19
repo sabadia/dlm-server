@@ -144,6 +144,7 @@ func newApp(version string, opts ...Option) *app {
 		a.newCredentialCommand(),
 		a.newStatsCommand(),
 		a.newPluginCommand(),
+		a.newOpenAPICommand(),
 		a.newCaptureCommand(),
 		a.newNativeHostCommand(),
 		a.newBrowserCommand(),

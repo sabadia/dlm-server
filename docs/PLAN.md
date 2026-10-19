@@ -307,7 +307,7 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P10.2 JS plugin runtime (goja, timeouts, resolve/start/error/done hooks, `plugin` refresh strategy), plugin install from git/folder
 
 ### Phase 11: Release
-- [ ] P11.1 GoReleaser v2 (archives, checksums, Homebrew/Scoop/winget, deb/rpm), versioned OpenAPI artifact
+- [x] P11.1 GoReleaser v2 (archives, checksums, Homebrew/Scoop/winget, deb/rpm), versioned OpenAPI artifact
 - [ ] P11.2 Docs: API guide, CLI reference (generated), architecture doc
 
 ## Verification

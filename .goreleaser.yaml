@@ -1,0 +1,156 @@
+# GoReleaser v2 configuration. See docs/RELEASING.md for the release procedure
+# and the repositories and secrets the publishers below need.
+version: 2
+
+project_name: dlm
+
+before:
+  hooks:
+    # Shell completions and the versioned OpenAPI document, built from this
+    # very commit (the document carries the release version).
+    - sh -c 'rm -rf completions release-assets && mkdir -p completions release-assets'
+    - sh -c 'go run ./cmd/dlm completion bash > completions/dlm.bash'
+    - sh -c 'go run ./cmd/dlm completion zsh > completions/_dlm'
+    - sh -c 'go run ./cmd/dlm completion fish > completions/dlm.fish'
+    - sh -c 'go run -ldflags "-X main.version={{ .Version }}" ./cmd/dlm openapi > "release-assets/dlm_{{ .Version }}_openapi.json"'
+
+builds:
+  - id: dlm
+    main: ./cmd/dlm
+    binary: dlm
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: dlm
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - src: completions/*
+        dst: completions
+        strip_parent: true
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+nfpms:
+  - id: packages
+    package_name: dlm
+    formats: [deb, rpm]
+    maintainer: sabadia <https://github.com/sabadia>
+    vendor: sabadia
+    homepage: https://github.com/sabadia/dlm-server
+    description: Cross-platform download manager daemon and command-line client
+    license: Apache-2.0
+    section: net
+    contents:
+      - src: completions/dlm.bash
+        dst: /usr/share/bash-completion/completions/dlm
+      - src: completions/_dlm
+        dst: /usr/share/zsh/vendor-completions/_dlm
+      - src: completions/dlm.fish
+        dst: /usr/share/fish/vendor_completions.d/dlm.fish
+      - src: packaging/dlm.service
+        dst: /usr/lib/systemd/user/dlm.service
+      - src: LICENSE
+        dst: /usr/share/doc/dlm/LICENSE
+      - src: NOTICE
+        dst: /usr/share/doc/dlm/NOTICE
+
+# macOS and Linux: brew install sabadia/tap/dlm
+homebrew_casks:
+  - name: dlm
+    repository:
+      owner: sabadia
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/sabadia/dlm-server
+    description: Cross-platform download manager daemon and command-line client
+    license: Apache-2.0
+    completions:
+      bash: completions/dlm.bash
+      zsh: completions/_dlm
+      fish: completions/dlm.fish
+    # Pre-release tags (v1.0.0-rc1) are not published to the tap.
+    skip_upload: auto
+
+# Windows: scoop bucket add sabadia https://github.com/sabadia/scoop-bucket
+scoops:
+  - name: dlm
+    repository:
+      owner: sabadia
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+    homepage: https://github.com/sabadia/dlm-server
+    description: Cross-platform download manager daemon and command-line client
+    license: Apache-2.0
+    skip_upload: auto
+
+# Windows: winget install sabadia.dlm (a pull request to microsoft/winget-pkgs
+# from the sabadia/winget-pkgs fork).
+winget:
+  - name: dlm
+    publisher: sabadia
+    package_identifier: sabadia.dlm
+    short_description: Cross-platform download manager daemon and command-line client
+    license: Apache-2.0
+    homepage: https://github.com/sabadia/dlm-server
+    license_url: https://github.com/sabadia/dlm-server/blob/main/LICENSE
+    publisher_url: https://github.com/sabadia
+    release_notes_url: "https://github.com/sabadia/dlm-server/releases/tag/{{ .Tag }}"
+    repository:
+      owner: sabadia
+      name: winget-pkgs
+      branch: "dlm-{{ .Version }}"
+      token: "{{ .Env.WINGET_GITHUB_TOKEN }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+    skip_upload: auto
+
+release:
+  github:
+    owner: sabadia
+    name: dlm-server
+  prerelease: auto
+  # The REST API's OpenAPI 3.1 document of this version, for client generators.
+  extra_files:
+    - glob: release-assets/dlm_{{ .Version }}_openapi.json
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs?(\\(.+\\))?:"
+      - "^test(s)?(\\(.+\\))?:"
+      - "^chore(\\(.+\\))?:"
+      - "^ci(\\(.+\\))?:"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Other changes
+      order: 999
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"

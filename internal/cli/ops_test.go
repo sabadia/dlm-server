@@ -962,3 +962,30 @@ func TestPluginCommands(t *testing.T) {
 		t.Error("get after rm succeeded")
 	}
 }
+
+func TestOpenAPICommand(t *testing.T) {
+	r := runCLI(t.Context(), t, "", "openapi")
+	if r.code != ExitOK {
+		t.Fatalf("exit %d: %s", r.code, r.stderr)
+	}
+	var doc struct {
+		OpenAPI string `json:"openapi"`
+		Info    struct{ Version string }
+		Paths   map[string]json.RawMessage
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &doc); err != nil {
+		t.Fatalf("not JSON: %v\n%.200s", err, r.stdout)
+	}
+	if !strings.HasPrefix(doc.OpenAPI, "3.1") || len(doc.Paths) < 20 || doc.Info.Version == "" {
+		t.Errorf("document = openapi %q, %d paths, version %q", doc.OpenAPI, len(doc.Paths), doc.Info.Version)
+	}
+	for _, path := range []string{"/v1/tasks", "/v1/plugins", "/v1/credentials", "/v1/stats"} {
+		if _, ok := doc.Paths[path]; !ok {
+			t.Errorf("path %s missing", path)
+		}
+	}
+	y := runCLI(t.Context(), t, "", "openapi", "-o", "yaml")
+	if y.code != ExitOK || !strings.Contains(y.stdout, "\nopenapi: 3.1") {
+		t.Errorf("yaml: exit %d %.80q", y.code, y.stdout)
+	}
+}
