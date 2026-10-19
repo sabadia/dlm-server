@@ -1,0 +1,46 @@
+name: Release
+
+# Pushing a tag v* builds the archives, deb/rpm packages, checksums and the
+# versioned OpenAPI document, creates the GitHub release, and updates the
+# Homebrew tap, Scoop bucket and winget manifest whose tokens are configured
+# (see docs/RELEASING.md).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the changelog reads the history since the last tag
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Choose the publishers that are configured
+        id: publishers
+        env:
+          HOMEBREW: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          SCOOP: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+          WINGET: ${{ secrets.WINGET_GITHUB_TOKEN }}
+        run: |
+          skip=""
+          [ -n "$HOMEBREW" ] || skip="$skip,homebrew"
+          [ -n "$SCOOP" ] || skip="$skip,scoop"
+          [ -n "$WINGET" ] || skip="$skip,winget"
+          echo "skip=${skip#,}" >> "$GITHUB_OUTPUT"
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean ${{ steps.publishers.outputs.skip != '' && format('--skip={0}', steps.publishers.outputs.skip) || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}

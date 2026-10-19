@@ -1,0 +1,18 @@
+# systemd user unit: run the dlm daemon for your login session.
+#
+#   systemctl --user enable --now dlm
+#
+# The API token is created on first start; `dlm token show` prints its location.
+[Unit]
+Description=dlm download manager daemon
+Documentation=https://github.com/sabadia/dlm-server
+
+[Service]
+ExecStart=/usr/bin/dlm serve
+Restart=on-failure
+RestartSec=5
+# Give running downloads time to write their resume state on shutdown.
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

@@ -4,7 +4,7 @@ BINARY  ?= dlm
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: all build generate generate-check fmt lint vet test race vuln tidy cross clean
+.PHONY: all build generate generate-check fmt lint vet test race vuln tidy cross snapshot openapi clean
 
 all: fmt lint test build
 
@@ -46,5 +46,13 @@ cross:
 			-o bin/$(BINARY)-$$os-$$arch$$ext ./cmd/dlm || exit 1; \
 	done; done
 
+# Build every release artifact locally into dist/ without publishing.
+snapshot:
+	goreleaser release --snapshot --clean --skip=publish
+
+# Print the OpenAPI document of this checkout.
+openapi:
+	go run -ldflags "$(LDFLAGS)" ./cmd/dlm openapi
+
 clean:
-	rm -rf bin dist coverage.*
+	rm -rf bin dist completions release-assets coverage.*
