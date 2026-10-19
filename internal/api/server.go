@@ -67,6 +67,9 @@ type Deps struct {
 	Webhooks *service.WebhookService
 	// Credentials is the service behind the credential operations; 503 while nil.
 	Credentials *service.CredentialService
+	// MCP, when set, is served at /mcp (the Model Context Protocol endpoint)
+	// behind the same bearer token as /v1.
+	MCP http.Handler
 	// Capture is the service behind capture-download; 503 while nil.
 	Capture *service.CaptureService
 	// Refresh is the service behind the refresh operations; 503 while nil.
@@ -179,6 +182,9 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerCapture()
 	s.registerRefresh()
 	s.registerBrowser()
+	if deps.MCP != nil {
+		s.mux.Handle(MCPPath, deps.MCP)
+	}
 	return s, nil
 }
 

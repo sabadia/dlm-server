@@ -14,6 +14,9 @@ import (
 // PathPrefix is the prefix of every API operation path.
 const PathPrefix = "/v1/"
 
+// MCPPath is where the Model Context Protocol endpoint is served.
+const MCPPath = "/mcp"
+
 var operationIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 // Register adds an operation that requires the bearer token. It panics if op

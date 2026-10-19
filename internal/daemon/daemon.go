@@ -30,6 +30,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/ffmpeg"
 	"github.com/sabadia/dlm-server/internal/logging"
+	"github.com/sabadia/dlm-server/internal/mcp"
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/platform"
 	"github.com/sabadia/dlm-server/internal/postproc"
@@ -240,7 +241,10 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Categories:  services.Categories,
 		Webhooks:    services.Webhooks,
 		Credentials: services.Credentials,
-		Browser:     services.Browser,
+		MCP: mcp.Handler(mcp.New(mcp.Deps{
+			Tasks: services.Tasks, Queues: services.Queues, Settings: services.Settings, Bus: bus, Version: version, Logger: log,
+		})),
+		Browser: services.Browser,
 	})
 	if err != nil {
 		bus.Close()
