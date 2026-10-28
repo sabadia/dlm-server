@@ -84,6 +84,15 @@ the same segment table: each is probed first and kept only if it serves the same
 size with ranges, and a failing mirror is dropped without failing the task.
 `engine/segmented` is the shared machinery of the HLS and DASH engines.
 
+Some sites refuse Go's TLS fingerprint (a handshake failure, or a Cloudflare
+challenge page). With `http.tls_impersonation: true` (boot config, off by default)
+`netclient` retries such a request, if it is idempotent and replayable, through a
+transport whose ClientHello copies Chrome's (uTLS), over HTTP/2 or HTTP/1.1 as the
+server picks, through the same proxy and with the same TLS verification. Hosts that
+needed it are remembered for `http.impersonation_ttl` (default 1h) so their later
+requests skip the failing attempt. Challenges that need JavaScript are not solved
+here: that is what the internal browser is for.
+
 ## Settings
 
 One `Settings` struct is used at every layer, with `Optional[T]` fields. Resolution

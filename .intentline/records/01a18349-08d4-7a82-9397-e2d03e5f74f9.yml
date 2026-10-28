@@ -1,0 +1,35 @@
+schema_version: 1
+id: 01a18349-08d4-7a82-9397-e2d03e5f74f9
+status: draft
+created_at: '2026-10-28T16:12:44Z'
+updated_at: '2026-10-28T16:12:44Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: Optional browser TLS impersonation fallback for the HTTP clients, for sites that refuse Go's TLS fingerprint
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/netclient/impersonate.go
+  start_line: null
+  end_line: null
+- path: internal/config/config.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

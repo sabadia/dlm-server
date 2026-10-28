@@ -270,3 +270,23 @@ func TestYtdlpConfig(t *testing.T) {
 		t.Errorf("ytdlp config from the environment = %+v", cfg.Ytdlp)
 	}
 }
+
+func TestHTTPConfig(t *testing.T) {
+	if d := Default().HTTP; d.TLSImpersonation || d.ImpersonationTTL != time.Hour {
+		t.Errorf("default http config = %+v (impersonation must be off)", d)
+	}
+	cfg, err := Load(LoadOptions{Environ: func() []string {
+		return []string{"DLM_HOME=" + t.TempDir(), "DLM_HTTP_TLS_IMPERSONATION=true", "DLM_HTTP_IMPERSONATION_TTL=30m"}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.HTTP.TLSImpersonation || cfg.HTTP.ImpersonationTTL != 30*time.Minute {
+		t.Errorf("http config from the environment = %+v", cfg.HTTP)
+	}
+	if _, err := Load(LoadOptions{Environ: func() []string {
+		return []string{"DLM_HOME=" + t.TempDir(), "DLM_HTTP_IMPERSONATION_TTL=0s"}
+	}}); err == nil {
+		t.Error("a zero impersonation ttl was accepted")
+	}
+}

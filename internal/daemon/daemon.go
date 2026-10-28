@@ -99,7 +99,11 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	jar := cookies.NewStore(store.Cookies(), cookieCipher, cookies.Options{Logger: log})
 	// Stored logins answer the Basic/Digest challenges of every client.
 	credentials := service.NewCredentialService(service.Deps{Store: store, Logger: log}, cookieCipher)
-	clients := netclient.New(netclient.Options{Logger: log, CookieJar: jar, Credentials: credentials})
+	netOpts := netclient.Options{Logger: log, CookieJar: jar, Credentials: credentials}
+	if cfg.HTTP.TLSImpersonation {
+		netOpts.Fallback = netclient.NewImpersonation(netclient.ImpersonationOptions{Logger: log, TTL: cfg.HTTP.ImpersonationTTL})
+	}
+	clients := netclient.New(netOpts)
 	defer func() { _ = clients.Close() }() // only releases idle connections
 	// The headless browser starts on demand; creating the manager costs nothing.
 	browsers := browser.NewManager(browser.Options{

@@ -310,6 +310,9 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 - [x] P11.1 GoReleaser v2 (archives, checksums, Homebrew/Scoop/winget, deb/rpm), versioned OpenAPI artifact
 - [x] P11.2 Docs: API guide, CLI reference (generated), architecture doc
 
+### Phase 12: Follow-ups
+- [x] P12.1 HTTP: optional browser TLS impersonation fallback (utls) for sites that block Go's TLS fingerprint
+
 ## Verification
 - **Unit tests:** settings resolution/provenance, FSM, scheduler (fake clock), limiter, refresh validation, filename parsing.
 - **Integration tests:** `httptest` servers covering ranges, no-range, 200-on-range, `Retry-After`/429, slow/dying connections, expiring signed URLs (refresh), cookie-gated files, Content-Disposition edge cases. Local HLS/DASH fixtures, a local FTP server, a local BT swarm with two in-process clients.
