@@ -78,8 +78,10 @@ homebrew_casks:
       name: homebrew-tap
       # Pushed over SSH with a deploy key that can write to this repository only.
       git:
+        # index: a missing variable is an empty string (a snapshot or a dry run
+        # has no key), not a template error; a real release skips the publisher.
         url: git@github.com:sabadia/homebrew-tap.git
-        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
+        private_key: '{{ index .Env "HOMEBREW_TAP_DEPLOY_KEY" }}'
     homepage: https://github.com/sabadia/dlm-server
     description: Cross-platform download manager daemon and command-line client
     license: Apache-2.0
@@ -98,7 +100,7 @@ scoops:
       name: scoop-bucket
       git:
         url: git@github.com:sabadia/scoop-bucket.git
-        private_key: "{{ .Env.SCOOP_BUCKET_DEPLOY_KEY }}"
+        private_key: '{{ index .Env "SCOOP_BUCKET_DEPLOY_KEY" }}'
     homepage: https://github.com/sabadia/dlm-server
     description: Cross-platform download manager daemon and command-line client
     license: Apache-2.0
