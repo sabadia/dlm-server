@@ -1,0 +1,26 @@
+schema_version: 1
+id: 01a183a0-450f-7a38-af05-b6161eee6c68
+status: draft
+created_at: '2026-10-28T17:48:01Z'
+updated_at: '2026-10-28T17:48:01Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'Add Phase 13 (frontend enablers) to the plan: backend changes the desktop app needs'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
