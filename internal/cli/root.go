@@ -16,6 +16,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/cli/output"
 	"github.com/sabadia/dlm-server/internal/client"
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/instance"
 )
 
 // Exit codes returned by Execute.
@@ -131,6 +132,7 @@ func newApp(version string, opts ...Option) *app {
 	root.AddCommand(
 		a.newServeCommand(),
 		a.newHealthCommand(),
+		a.newSystemCommand(),
 		a.newVersionCommand(),
 		a.newTokenCommand(),
 		a.newWatchCommand(),
@@ -198,6 +200,27 @@ func (a *app) loadConfig(cmd *cobra.Command) (*config.Config, error) {
 	return cfg, nil
 }
 
+// runningDaemonURL returns the base URL of the daemon running for cfg's
+// configuration directory (it publishes the address it really listens on, so
+// a daemon started with --address 127.0.0.1:0 is found without flags), or ""
+// when none runs or the address was chosen explicitly with --address or
+// DLM_SERVER_ADDRESS.
+func (a *app) runningDaemonURL(cmd *cobra.Command, cfg *config.Config) string {
+	if cmd.Flags().Changed("address") {
+		return ""
+	}
+	for _, kv := range a.environ() {
+		if strings.HasPrefix(kv, config.EnvPrefix+"SERVER_ADDRESS=") {
+			return ""
+		}
+	}
+	info, err := instance.Discover(cfg.Paths.ConfigDir)
+	if err != nil {
+		return ""
+	}
+	return info.URL
+}
+
 // newClient builds an API client. The base URL comes from --server or the
 // configured address; the token from --token or the daemon's token file. A
 // missing token file is not an error (public operations still work): the
@@ -210,8 +233,10 @@ func (a *app) newClient(cmd *cobra.Command, timeout time.Duration) (*client.Clie
 			return nil, err
 		}
 		if baseURL == "" {
-			if baseURL, err = client.BaseURL(cfg); err != nil {
-				return nil, fmt.Errorf("cli: %w", err)
+			if baseURL = a.runningDaemonURL(cmd, cfg); baseURL == "" {
+				if baseURL, err = client.BaseURL(cfg); err != nil {
+					return nil, fmt.Errorf("cli: %w", err)
+				}
 			}
 		}
 		if !cmd.Flags().Changed("token") {

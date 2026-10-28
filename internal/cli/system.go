@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -151,4 +153,103 @@ func (a *app) newTokenCommand() *cobra.Command {
 	show.Flags().BoolVar(&reveal, "reveal", false, "also print the token (keep it secret)")
 	tokenCmd.AddCommand(show)
 	return tokenCmd
+}
+
+// newSystemCommand builds `dlm system`: information about, and control of,
+// the running daemon.
+func (a *app) newSystemCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "system",
+		Short: "Inspect and control the running daemon",
+		Args:  cobra.NoArgs,
+		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	}
+	cmd.AddCommand(a.newSystemInfoCommand(), a.newSystemLifecycleCommand("stop", "shutdown-daemon", (*client.Client).Shutdown), a.newSystemLifecycleCommand("restart", "restart-daemon", (*client.Client).Restart))
+	return cmd
+}
+
+func (a *app) newSystemInfoCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "info",
+		Short: "Describe the daemon: version, directories, engines, tools",
+		Long: "Report the daemon's version, API version, build, process, listen address, directories, enabled engines, " +
+			"the status of the external tools (ffmpeg, yt-dlp, browser) and the database size.",
+		Args:        cobra.NoArgs,
+		Annotations: map[string]string{annotationOperationID: "get-system-info"},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			c, err := a.newClient(cmd, client.DefaultTimeout)
+			if err != nil {
+				return err
+			}
+			info, err := c.SystemInfo(cmd.Context())
+			if err != nil {
+				return err //nolint:wrapcheck // client errors are already user-facing
+			}
+			return a.printer(cmd).Print(info, func() output.Table { return systemInfoTable(info) })
+		},
+	}
+}
+
+func systemInfoTable(i *client.SystemInfo) output.Table {
+	rows := [][]string{
+		{"version", i.Version},
+		{"api", strconv.Itoa(i.APIVersion)},
+		{"commit", i.Commit},
+		{"platform", i.OS + "/" + i.Arch + " (" + i.GoVersion + ")"},
+		{"pid", strconv.Itoa(i.PID)},
+		{"started", i.StartedAt},
+		{"uptime", (time.Duration(i.UptimeSeconds) * time.Second).String()},
+		{"address", i.Address},
+		{"tls", strconv.FormatBool(i.TLS)},
+		{"local", strconv.FormatBool(i.Local)},
+		{"config dir", i.Paths.Config},
+		{"data dir", i.Paths.Data},
+		{"cache dir", i.Paths.Cache},
+		{"log dir", i.Paths.Log},
+		{"database", i.Paths.Database + " (" + strconv.FormatInt(i.DatabaseBytes, 10) + " bytes)"},
+		{"downloads", i.Paths.Downloads},
+		{"engines", strings.Join(i.Engines, ", ")},
+	}
+	for _, t := range i.Tools {
+		state := "missing"
+		if t.Available {
+			state = strings.TrimSpace(t.Version + " " + t.Source + " " + t.Path)
+		} else if t.Error != "" {
+			state = "missing: " + t.Error
+		}
+		rows = append(rows, []string{t.Name, state})
+	}
+	return output.Table{Columns: []string{"key", "value"}, Rows: rows}
+}
+
+// newSystemLifecycleCommand builds `system stop` or `system restart`.
+func (a *app) newSystemLifecycleCommand(use, op string, call func(*client.Client, context.Context) (string, error)) *cobra.Command {
+	short, long := "Stop the daemon gracefully", "Stop the daemon gracefully: running downloads are stopped and requeued, then it exits."
+	if use == "restart" {
+		short = "Restart the daemon"
+		long = "Stop the daemon gracefully and start it again with the same arguments."
+	}
+	return &cobra.Command{
+		Use:         use,
+		Short:       short,
+		Long:        long,
+		Args:        cobra.NoArgs,
+		Annotations: map[string]string{annotationOperationID: op},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			c, err := a.newClient(cmd, client.DefaultTimeout)
+			if err != nil {
+				return err
+			}
+			status, err := call(c, cmd.Context())
+			if err != nil {
+				return err //nolint:wrapcheck // client errors are already user-facing
+			}
+			res := struct {
+				Status string `json:"status"`
+			}{Status: status}
+			return a.printer(cmd).Print(res, func() output.Table {
+				return output.Table{Columns: []string{"status"}, Rows: [][]string{{status}}}
+			})
+		},
+	}
 }

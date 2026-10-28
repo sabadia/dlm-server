@@ -151,3 +151,20 @@ func TestLocateOrder(t *testing.T) {
 		t.Errorf("no cache dir: err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestProbeNeverDownloads(t *testing.T) {
+	lookNone := func(string) (string, error) { return "", errors.New("not found") }
+	l := NewLocator(Options{LookPath: lookNone, Version: okVersion, CacheDir: t.TempDir(), AutoDownload: true})
+	if _, err := l.Probe(t.Context()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Probe with nothing installed = %v, want ErrNotFound", err)
+	}
+	if _, ok := l.fetcher().Cached(); ok {
+		t.Error("Probe left a download in the cache")
+	}
+	onPath := func(string) (string, error) { return "/usr/bin/yt-dlp", nil }
+	pl := NewLocator(Options{LookPath: onPath, Version: okVersion})
+	b, err := pl.Probe(t.Context())
+	if err != nil || b.Source != "path" {
+		t.Errorf("Probe = %+v, %v", b, err)
+	}
+}

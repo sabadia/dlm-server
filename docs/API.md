@@ -25,6 +25,36 @@ The token is created on first start. Without it, requests get `401` with a
 origin is listed in `server.allowed_origins` (the extension's origin, for
 example); requests from other origins are refused, and there is no wildcard.
 
+### Finding and controlling a daemon
+
+A program that starts the daemon itself (a desktop app, a service manager) should
+not fight over port 17171: start it with `--address 127.0.0.1:0` and the operating
+system picks a free port. While it runs, the daemon holds an exclusive lock on
+`dlm.lock` in its config directory (a second daemon for the same config directory
+refuses to start) and publishes `runtime.json` there, written atomically:
+
+```json
+{"pid": 4242, "address": "127.0.0.1:50321", "url": "http://127.0.0.1:50321",
+ "version": "0.3.0", "apiVersion": 1, "startedAt": "2026-10-29T12:00:00Z",
+ "tlsFingerprint": "sha256:…"}
+```
+
+`tlsFingerprint` (the SHA-256 of the leaf certificate) is present only when the API
+is served over TLS; remote clients pin it. The file is removed on a clean stop; a
+file left behind by a crash is not trustworthy unless the lock is held, which is
+what `dlm` checks before using its address. So `dlm --home <dir> …` reaches a
+daemon on a random port without `--address`; an explicit `--address`,
+`DLM_SERVER_ADDRESS` or `--server` always wins.
+
+`GET /v1/system/info` describes the daemon (version, API version, commit, OS and
+architecture, pid, uptime, listen address, directories, enabled engines, database
+size, and the status of ffmpeg, yt-dlp and the browser — found or not, never
+downloaded by this call). `local` is true when the request came from the daemon's
+own machine. `POST /v1/system/shutdown` stops the daemon gracefully (running
+downloads are requeued); `POST /v1/system/restart` stops it and starts it again with
+the same arguments, keeping the pid on Linux and macOS. Both answer `202` before the
+daemon goes down. CLI: `dlm system info|stop|restart`.
+
 ## Conventions
 
 - **JSON** field names are `camelCase`, enums are lower-case strings

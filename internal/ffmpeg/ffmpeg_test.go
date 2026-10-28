@@ -285,3 +285,40 @@ func TestDownloadReal(t *testing.T) {
 		t.Errorf("Locate = %+v", b)
 	}
 }
+
+func TestProbeNeverDownloads(t *testing.T) {
+	ctx := context.Background()
+	rel, hits := fakeRelease(t, "binary", false)
+	f := &Fetcher{Dir: t.TempDir(), Release: rel, Platform: "testos"}
+	notOnPath := func(string) (string, error) { return "", exec.ErrNotFound }
+	l := NewLocator(Options{LookPath: notOnPath, Version: versionOK(""), CacheDir: f.Dir, Fetcher: f, AutoDownload: true})
+
+	if _, err := l.Probe(ctx); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Probe with nothing installed = %v, want ErrNotFound", err)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("Probe downloaded %d times", hits.Load())
+	}
+	if _, ok := f.Cached(); ok {
+		t.Fatal("Probe left a download in the cache")
+	}
+
+	// A cached build is found without a download and without being remembered.
+	if _, err := f.Fetch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	before := hits.Load()
+	b, err := l.Probe(ctx)
+	if err != nil || b.Source != "cache" || hits.Load() != before {
+		t.Errorf("Probe = %+v, %v", b, err)
+	}
+
+	// Locate's remembered result is what Probe reports afterwards.
+	located, err := l.Locate(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again, err := l.Probe(ctx); err != nil || again != located {
+		t.Errorf("Probe after Locate = %+v, %v; want %+v", again, err, located)
+	}
+}

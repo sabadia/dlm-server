@@ -35,6 +35,8 @@ type e2e struct {
 	home   string
 	// browser is the fake headless browser behind `dlm browser`.
 	browser *fakeBrowser
+	// life records the shutdown requests of `dlm system stop|restart`.
+	life *fakeLifecycle
 }
 
 func newE2E(t *testing.T) *e2e {
@@ -59,6 +61,7 @@ func newE2E(t *testing.T) *e2e {
 		t.Fatal(err)
 	}
 	fb := &fakeBrowser{}
+	life := &fakeLifecycle{}
 	svc := daemon.NewServices(service.Deps{
 		Store: store, Engines: reg, Resolves: resolves,
 		Defaults: func() settings.Settings { return defaults },
@@ -71,13 +74,15 @@ func newE2E(t *testing.T) *e2e {
 		Webhooks:    service.NewWebhookService(service.Deps{Store: store}, cipher, webhook.New(nil, nil, webhook.Options{})),
 		Credentials: service.NewCredentialService(service.Deps{Store: store}, cipher),
 		Plugins:     service.NewPluginService(plugin.NewManager(plugin.Options{Dir: filepath.Join(t.TempDir(), "plugins"), Store: store})),
+		System:      fakeSystem{},
+		Lifecycle:   life,
 	})
 	content := bytes.Repeat([]byte("x"), 2048)
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "file.bin", time.Unix(1_700_000_000, 0), bytes.NewReader(content))
 	}))
 	t.Cleanup(origin.Close)
-	return &e2e{base: base, origin: origin.URL, home: t.TempDir(), browser: fb}
+	return &e2e{base: base, origin: origin.URL, home: t.TempDir(), browser: fb, life: life}
 }
 
 // run runs the CLI against the environment's server.

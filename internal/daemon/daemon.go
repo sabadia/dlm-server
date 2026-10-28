@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"os"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -16,6 +18,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/api"
 	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/browser"
+	"github.com/sabadia/dlm-server/internal/client"
 	"github.com/sabadia/dlm-server/internal/config"
 	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/engine"
@@ -29,6 +32,7 @@ import (
 	ytdlpengine "github.com/sabadia/dlm-server/internal/engine/ytdlp"
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/ffmpeg"
+	"github.com/sabadia/dlm-server/internal/instance"
 	"github.com/sabadia/dlm-server/internal/logging"
 	"github.com/sabadia/dlm-server/internal/mcp"
 	"github.com/sabadia/dlm-server/internal/netclient"
@@ -52,6 +56,21 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	if err := cfg.EnsureDirs(); err != nil {
 		return fmt.Errorf("daemon: %w", err)
 	}
+	// One daemon per configuration directory: the lock also keeps two
+	// daemons started with port 0 from sharing a database.
+	lock, err := instance.Acquire(cfg.Paths.ConfigDir)
+	if err != nil {
+		return fmt.Errorf("daemon: %w", err)
+	}
+	defer func() {
+		if rerr := lock.Release(); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("daemon: %w", rerr))
+		}
+	}()
+	ctx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	life := &lifecycle{cancel: cancelRun}
+	startedAt := time.Now()
 	logger, err := logging.New(cfg.Log, cfg.Paths.LogDir, stderr)
 	if err != nil {
 		return fmt.Errorf("daemon: %w", err)
@@ -253,6 +272,10 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		bus.Close()
 		return fmt.Errorf("daemon: %w", err)
 	}
+	system := &systemSource{
+		cfg: cfg, version: version, startedAt: startedAt, downloadDir: downloadDir, engines: engines.Names(),
+		ffmpeg: ffmpegLocator, ytdlp: ytdlpLocator, browsers: browsers,
+	}
 	srv, err := BuildServer(cfg, api.Deps{
 		Logger: log, Version: version, Token: token, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
@@ -266,16 +289,33 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		MCP: mcp.Handler(mcp.New(mcp.Deps{
 			Tasks: services.Tasks, Queues: services.Queues, Settings: services.Settings, Bus: bus, Version: version, Logger: log,
 		})),
-		Browser: services.Browser,
+		Browser:   services.Browser,
+		System:    system,
+		Lifecycle: life,
 	})
 	if err != nil {
 		bus.Close()
 		return err
 	}
+	ln, err := srv.Listen(ctx)
+	if err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
+	if err := publishRuntime(cfg, ln, version, startedAt, system); err != nil {
+		_ = ln.Close()
+		bus.Close()
+		return err
+	}
+	defer func() {
+		if rerr := instance.Remove(cfg.Paths.ConfigDir, os.Getpid()); rerr != nil {
+			log.WarnContext(ctx, "daemon: remove the runtime file", "error", rerr)
+		}
+	}()
 
 	log.InfoContext(ctx, "dlm daemon starting",
 		"version", version,
-		"address", cfg.Server.Address,
+		"address", ln.Addr().String(),
 		"tls", cfg.TLSEnabled(),
 		"config_dir", cfg.Paths.ConfigDir,
 		"data_dir", cfg.Paths.DataDir,
@@ -306,13 +346,41 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		// publish; closing it also stops bus.Run.
 		defer bus.Close()
 		defer stopSweep()
-		return srv.Run(gctx)
+		return srv.Serve(gctx, ln)
 	})
 	if err := g.Wait(); err != nil {
 		log.ErrorContext(ctx, "dlm daemon stopped with error", "error", err)
 		return fmt.Errorf("daemon: serve: %w", err)
 	}
 	log.InfoContext(ctx, "dlm daemon stopped")
+	if life.restart.Load() {
+		return ErrRestart
+	}
+	return nil
+}
+
+// publishRuntime tells clients where the daemon really listens (see package
+// instance) and records the address for get-system-info.
+func publishRuntime(cfg *config.Config, ln net.Listener, version string, startedAt time.Time, system *systemSource) error {
+	bound := *cfg
+	bound.Server.Address = ln.Addr().String()
+	url, err := client.BaseURL(&bound)
+	if err != nil {
+		return fmt.Errorf("daemon: %w", err)
+	}
+	info := instance.Info{
+		PID: os.Getpid(), Address: bound.Server.Address, URL: url, Version: version,
+		APIVersion: api.APIVersion, StartedAt: startedAt.UTC(),
+	}
+	if cfg.TLSEnabled() {
+		if info.TLSFingerprint, err = instance.Fingerprint(cfg.Server.TLSCert, cfg.Server.TLSKey); err != nil {
+			return fmt.Errorf("daemon: %w", err)
+		}
+	}
+	system.address.Store(bound.Server.Address)
+	if err := instance.Write(cfg.Paths.ConfigDir, info); err != nil {
+		return fmt.Errorf("daemon: %w", err)
+	}
 	return nil
 }
 

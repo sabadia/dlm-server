@@ -50,3 +50,66 @@ func BaseURL(cfg *config.Config) (string, error) {
 	}
 	return scheme + "://" + net.JoinHostPort(host, port), nil
 }
+
+// SystemInfo is the response of get-system-info.
+type SystemInfo struct {
+	Version       string `json:"version"`
+	APIVersion    int    `json:"apiVersion"`
+	MinClientAPI  int    `json:"minClientApi"`
+	Commit        string `json:"commit,omitempty"`
+	GoVersion     string `json:"goVersion"`
+	OS            string `json:"os"`
+	Arch          string `json:"arch"`
+	PID           int    `json:"pid"`
+	StartedAt     string `json:"startedAt"`
+	UptimeSeconds int64  `json:"uptimeSeconds"`
+	Address       string `json:"address"`
+	TLS           bool   `json:"tls"`
+	Local         bool   `json:"local"`
+	Paths         struct {
+		Config    string `json:"config"`
+		Data      string `json:"data"`
+		Cache     string `json:"cache"`
+		Log       string `json:"log"`
+		Database  string `json:"database"`
+		Downloads string `json:"downloads"`
+	} `json:"paths"`
+	Engines []string `json:"engines"`
+	Tools   []struct {
+		Name         string `json:"name"`
+		Available    bool   `json:"available"`
+		Path         string `json:"path,omitempty"`
+		Version      string `json:"version,omitempty"`
+		Source       string `json:"source,omitempty"`
+		AutoDownload bool   `json:"autoDownload"`
+		Error        string `json:"error,omitempty"`
+	} `json:"tools"`
+	DatabaseBytes int64 `json:"databaseBytes"`
+}
+
+// SystemInfo calls get-system-info (GET /v1/system/info).
+func (c *Client) SystemInfo(ctx context.Context) (*SystemInfo, error) {
+	var out SystemInfo
+	if err := c.do(ctx, http.MethodGet, "/v1/system/info", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Shutdown calls shutdown-daemon (POST /v1/system/shutdown) and returns the
+// status the daemon announced.
+func (c *Client) Shutdown(ctx context.Context) (string, error) { return c.lifecycle(ctx, "shutdown") }
+
+// Restart calls restart-daemon (POST /v1/system/restart) and returns the
+// status the daemon announced.
+func (c *Client) Restart(ctx context.Context) (string, error) { return c.lifecycle(ctx, "restart") }
+
+func (c *Client) lifecycle(ctx context.Context, verb string) (string, error) {
+	var out struct {
+		Status string `json:"status"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/v1/system/"+verb, nil, &out); err != nil {
+		return "", err
+	}
+	return out.Status, nil
+}

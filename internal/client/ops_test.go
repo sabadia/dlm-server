@@ -145,6 +145,9 @@ func TestOperationRequests(t *testing.T) {
 		}, `{}`, 0, "PATCH", "/v1/settings", mergeType, `{"retry":{"maxAttempts":null}}`},
 		{"default settings", func(c *Client) error { _, err := c.DefaultSettings(ctx); return err }, `{}`, 0, "GET", "/v1/settings/defaults", "", ""},
 		{"settings schema", func(c *Client) error { _, err := c.SettingsSchema(ctx); return err }, `{}`, 0, "GET", "/v1/settings/schema", "", ""},
+		{"system info", func(c *Client) error { _, err := c.SystemInfo(ctx); return err }, `{"version":"1"}`, 0, "GET", "/v1/system/info", "", ""},
+		{"shutdown", func(c *Client) error { _, err := c.Shutdown(ctx); return err }, `{"status":"shutting_down"}`, http.StatusAccepted, "POST", "/v1/system/shutdown", "", ""},
+		{"restart", func(c *Client) error { _, err := c.Restart(ctx); return err }, `{"status":"restarting"}`, http.StatusAccepted, "POST", "/v1/system/restart", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, rec := newCaptureClient(t)
