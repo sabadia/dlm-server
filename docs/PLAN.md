@@ -313,6 +313,24 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 ### Phase 12: Follow-ups
 - [x] P12.1 HTTP: optional browser TLS impersonation fallback (utls) for sites that block Go's TLS fingerprint
 
+### Phase 13: Frontend enablers (requested by the dlm-app desktop client)
+Backend changes the Flutter app plan (https://github.com/sabadia/dlm-app/blob/main/docs/PLAN.md) depends on. Each has an issue and keeps REST, CLI and OpenAPI in parity.
+
+- [ ] P13.1 Discovery and lifecycle (#110) — `--address 127.0.0.1:0`; atomic `runtime.json` (pid, address, version, startedAt, TLS fingerprint) in the config dir; single-instance lock per home; `POST /v1/system/shutdown` and `/restart`; `GET /v1/system/info` (version, apiVersion, commit, OS/arch, paths, uptime, local flag, engines enabled, tool status ffmpeg/yt-dlp/browser with version and source, DB size)
+- [ ] P13.2 Boot config API (#111) — `GET/PATCH /v1/config` (effective values with source, `restartRequired`, secrets redacted) and `dlm config get/set`
+- [ ] P13.3 Logs API (#112) — `GET /v1/logs` (filters) and `GET /v1/logs/stream` (SSE) plus `dlm logs`
+- [ ] P13.4 Task detail endpoints (#113) — `GET /v1/tasks/{id}/segments`; `PATCH /v1/tasks/{id}/files` (change file selection after creation, incl. torrents); `GET /v1/tasks/{id}/torrent` (peers, trackers, ratio, seeding state); progress events gain `uploadSpeed` and `peers`
+- [ ] P13.5 List filters, sorts, counts and bulk operations (#114) — Filters `engine`, `label`, `category`, size/date ranges; sorts (name, size, created, completed); `total` count; per-queue status counts on `GET /v1/queues`; bulk `move`, `update` (priority/labels/queue/settings), `restart`, `refresh`
+- [ ] P13.6 Add-flow helpers (#115) — `POST /v1/tasks/expand` (pattern preview), `dryRun` on import, `POST /v1/resolve/batch`, `duplicateOf` hint in resolve results, `GET /v1/fs/browse` and `/fs/free` (remote-safe directory picker limited to `server.fs_roots`)
+- [ ] P13.7 Live and historical stats (#116) — `system.speed` SSE event (down/up bps, active, queued, every second) and `GET /v1/stats/timeline?bucket=hour|day&groupBy=engine|queue`
+- [ ] P13.8 Limits and turbo (#117) — `GET /v1/limits` (current limits, active profile, quota used) and `POST /v1/limits/override` (temporary global speed limit or unlimited for N minutes)
+- [ ] P13.9 Observability of integrations (#118) — Webhook delivery log (`GET /v1/webhooks/{id}/deliveries`) and plugin logs (`GET /v1/plugins/{name}/logs`)
+- [ ] P13.10 Multi-client sync events (#119) — `resource.changed {kind,id,op}` SSE event for categories, webhooks, credentials, cookies, plugins, config.
+- [ ] P13.11 API ergonomics for generated clients (#120) — Stable machine `code` (and `params`) on every problem response; typed per-event SSE schemas (oneOf with discriminator); OpenAPI 3.0.3 downgrade served at `/openapi-3.0.json` and published per release; `apiVersion` and `minClientApi` in health; settings schema hints (`x-dlm-*`: group, unit, min/max, levels, restart, secret) or `GET /v1/settings/schema`; ETag/If-Match on settings
+- [ ] P13.12 Auth and remote access (#121) — `GET /v1/auth/whoami`, `POST /v1/auth/token/rotate`, named scoped tokens (admin / read-only), `dlm tls init` (self-signed certificate and fingerprint)
+- [ ] P13.13 Local integrations (#122) — `GET/POST /v1/native-host` (status/install/uninstall, local-only) and `dlm service install|uninstall|status` (launchd / systemd user / Windows startup)
+- [ ] P13.14 Housekeeping (#123) — `POST /v1/tasks/cleanup` (completed older than N days, optionally with files) and a retention setting
+
 ## Verification
 - **Unit tests:** settings resolution/provenance, FSM, scheduler (fake clock), limiter, refresh validation, filename parsing.
 - **Integration tests:** `httptest` servers covering ranges, no-range, 200-on-range, `Retry-After`/429, slow/dying connections, expiring signed URLs (refresh), cookie-gated files, Content-Disposition edge cases. Local HLS/DASH fixtures, a local FTP server, a local BT swarm with two in-process clients.
