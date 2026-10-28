@@ -44,6 +44,8 @@ type Config struct {
 	ED2K ED2KConfig `koanf:"ed2k"`
 	// Ytdlp configures the yt-dlp the ytdlp engine runs.
 	Ytdlp YtdlpConfig `koanf:"ytdlp"`
+	// HTTP configures the HTTP clients every engine and the browser use.
+	HTTP HTTPConfig `koanf:"http"`
 }
 
 // ServerConfig controls the HTTP listener.
@@ -179,6 +181,19 @@ type YtdlpConfig struct {
 	AutoDownload bool `koanf:"auto_download"`
 }
 
+// HTTPConfig configures the HTTP clients.
+type HTTPConfig struct {
+	// TLSImpersonation retries a request through a Chrome-like TLS fingerprint
+	// when a site refuses Go's (a handshake failure, or a Cloudflare challenge
+	// page), and remembers which hosts needed it. Off by default: it opens an
+	// extra connection to such sites, and some sites would rather see an honest
+	// client. JavaScript challenges are not solved either way.
+	TLSImpersonation bool `koanf:"tls_impersonation"`
+	// ImpersonationTTL is how long a host that needed impersonation is
+	// remembered before the normal fingerprint is tried again.
+	ImpersonationTTL time.Duration `koanf:"impersonation_ttl"`
+}
+
 // Default returns the configuration used when nothing else is specified.
 func Default() Config {
 	return Config{
@@ -203,6 +218,7 @@ func Default() Config {
 		},
 		ED2K:  ED2KConfig{Enabled: true},
 		Ytdlp: YtdlpConfig{AutoDownload: true},
+		HTTP:  HTTPConfig{ImpersonationTTL: time.Hour},
 	}
 }
 
@@ -308,6 +324,9 @@ func (c *Config) Validate() error {
 	}
 	if (c.Server.TLSCert == "") != (c.Server.TLSKey == "") {
 		errs = append(errs, errors.New("server.tls_cert and server.tls_key must be set together"))
+	}
+	if c.HTTP.ImpersonationTTL <= 0 {
+		errs = append(errs, errors.New("http.impersonation_ttl must be positive"))
 	}
 	if c.Server.ShutdownTimeout <= 0 {
 		errs = append(errs, errors.New("server.shutdown_timeout must be positive"))
