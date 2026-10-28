@@ -136,7 +136,7 @@ func (s *RefreshService) Await(ctx context.Context, taskID string) (*domain.Task
 		return nil, err
 	}
 	if t.Status != domain.StatusError && t.Status != domain.StatusAwaitingLink {
-		return nil, domain.Conflict("service: task %q is %s; only a failed or awaiting_link task can wait for a new link", taskID, t.Status)
+		return nil, domain.ConflictCode("task.invalid_state", map[string]string{"taskId": taskID, "status": string(t.Status), "operation": "await_link"}, "service: task %q is %s; only a failed or awaiting_link task can wait for a new link", taskID, t.Status)
 	}
 	if err := s.parkFrom(ctx, t, eff, domain.RefreshCauseManual, settings.RefreshExtensionCapture); err != nil {
 		return nil, err
@@ -395,7 +395,7 @@ func (s *RefreshService) enterRefreshing(ctx context.Context, t *domain.Task) er
 	}
 	return s.mutate(ctx, t, func(fresh *domain.Task) error {
 		if fresh.Status != t.Status {
-			return domain.Conflict("service: refresh task %q: status changed to %s", fresh.ID, fresh.Status)
+			return domain.ConflictCode("task.state_changed", map[string]string{"taskId": fresh.ID, "operation": "refresh", "status": string(fresh.Status)}, "service: refresh task %q: status changed to %s", fresh.ID, fresh.Status)
 		}
 		return fresh.TransitionTo(domain.StatusRefreshing, s.d.now()) //nolint:wrapcheck // domain error
 	})
@@ -507,7 +507,7 @@ func (s *RefreshService) apply(ctx context.Context, t *domain.Task, cand refresh
 				return fmt.Errorf("service: refresh task: %w", err)
 			}
 			if fresh.Status != expect {
-				return domain.Conflict("service: refresh task %q: status changed from %s to %s", t.ID, expect, fresh.Status)
+				return domain.ConflictCode("task.state_changed", map[string]string{"taskId": t.ID, "operation": "refresh", "status": string(fresh.Status)}, "service: refresh task %q: status changed from %s to %s", t.ID, expect, fresh.Status)
 			}
 			from = fresh.Status
 			downloaded := fresh.Downloaded
@@ -777,9 +777,9 @@ func (s *RefreshService) engineFor(t *domain.Task, src domain.Source) (engine.En
 func refreshable(t *domain.Task) error {
 	switch t.Status {
 	case domain.StatusRunning, domain.StatusRefreshing, domain.StatusPostprocessing:
-		return domain.Conflict("service: task %q is %s; pause it first", t.ID, t.Status)
+		return domain.ConflictCode("task.invalid_state", map[string]string{"taskId": t.ID, "status": string(t.Status), "operation": "set_source"}, "service: task %q is %s; pause it first", t.ID, t.Status)
 	case domain.StatusCompleted:
-		return domain.Conflict("service: task %q is completed", t.ID)
+		return domain.ConflictCode("task.invalid_state", map[string]string{"taskId": t.ID, "status": "completed", "operation": "set_source"}, "service: task %q is completed", t.ID)
 	default:
 		return nil
 	}

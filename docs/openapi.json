@@ -1,12 +1,28 @@
 {
   "components": {
     "schemas": {
+      "ActionCancelledData": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "reason"
+        ],
+        "type": "object"
+      },
       "BatchItem": {
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/ErrorModel",
-            "description": "Why the item failed (RFC 9457 problem)."
+            "$ref": "#/components/schemas/Problem",
+            "description": "Why the item failed (RFC 9457 problem with a code)."
           },
           "id": {
             "description": "Task ID (the requested one, or the created task's ID).",
@@ -1070,100 +1086,6 @@
         },
         "type": "object"
       },
-      "ErrorModel": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/ErrorModel.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "detail": {
-            "description": "A human-readable explanation specific to this occurrence of the problem.",
-            "examples": [
-              "Property foo is required but is missing."
-            ],
-            "type": "string"
-          },
-          "errors": {
-            "description": "Optional list of individual error details",
-            "items": {
-              "$ref": "#/components/schemas/ErrorDetail"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "instance": {
-            "description": "A URI reference that identifies the specific occurrence of the problem.",
-            "examples": [
-              "https://example.com/error-log/abc123"
-            ],
-            "format": "uri",
-            "type": "string"
-          },
-          "status": {
-            "description": "HTTP status code",
-            "examples": [
-              400
-            ],
-            "format": "int64",
-            "type": "integer"
-          },
-          "title": {
-            "description": "A short, human-readable summary of the problem type. This value should not change between occurrences of the error.",
-            "examples": [
-              "Bad Request"
-            ],
-            "type": "string"
-          },
-          "type": {
-            "default": "about:blank",
-            "description": "A URI reference to human-readable documentation for the error.",
-            "examples": [
-              "https://example.com/errors/example"
-            ],
-            "format": "uri",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "Event": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {},
-          "id": {
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "queueId": {
-            "type": "string"
-          },
-          "taskId": {
-            "type": "string"
-          },
-          "time": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "type",
-          "time"
-        ],
-        "type": "object"
-      },
       "ExportCookiesResult": {
         "additionalProperties": false,
         "properties": {
@@ -1230,6 +1152,86 @@
           "format",
           "count",
           "content"
+        ],
+        "type": "object"
+      },
+      "FieldSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "What the field does",
+            "type": "string"
+          },
+          "enum": {
+            "description": "Accepted values of a closed set (of each element for arrays)",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "group": {
+            "description": "Section the field belongs to",
+            "type": "string"
+          },
+          "levels": {
+            "description": "Levels that may set the field",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "max": {
+            "description": "Largest accepted value",
+            "format": "double",
+            "type": "number"
+          },
+          "min": {
+            "description": "Smallest accepted value",
+            "format": "double",
+            "type": "number"
+          },
+          "path": {
+            "description": "Dotted JSON path of the field",
+            "type": "string"
+          },
+          "restartRequired": {
+            "description": "Changes only take effect after a daemon restart",
+            "type": "boolean"
+          },
+          "secret": {
+            "description": "The value may hold credentials and must be hidden",
+            "type": "boolean"
+          },
+          "type": {
+            "description": "Value type; a duration is a Go duration string such as 1m30s",
+            "enum": [
+              "boolean",
+              "integer",
+              "number",
+              "string",
+              "duration",
+              "array",
+              "object"
+            ],
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit of numeric values, e.g. bytes/s or seconds",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "type",
+          "group",
+          "description",
+          "levels"
         ],
         "type": "object"
       },
@@ -1300,9 +1302,19 @@
             "readOnly": true,
             "type": "string"
           },
+          "apiVersion": {
+            "description": "Version of the REST API (grows only on breaking changes).",
+            "format": "int64",
+            "type": "integer"
+          },
           "authenticated": {
             "description": "Whether the request presented a valid bearer token.",
             "type": "boolean"
+          },
+          "minClientApi": {
+            "description": "Oldest API version a client may have been written for; older clients must be updated.",
+            "format": "int64",
+            "type": "integer"
           },
           "status": {
             "description": "Always \"ok\" when the daemon is serving.",
@@ -1319,6 +1331,8 @@
         "required": [
           "status",
           "version",
+          "apiVersion",
+          "minClientApi",
           "authenticated"
         ],
         "type": "object"
@@ -1771,6 +1785,115 @@
         ],
         "type": "object"
       },
+      "Problem": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/Problem.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "code": {
+            "description": "Stable machine-readable error code, for example task.not_found, task.duplicate or validation_failed. Clients map it to a localised message; unknown codes fall back to title and detail.",
+            "examples": [
+              "task.not_found"
+            ],
+            "type": "string"
+          },
+          "detail": {
+            "description": "A human-readable explanation specific to this occurrence of the problem.",
+            "examples": [
+              "Property foo is required but is missing."
+            ],
+            "type": "string"
+          },
+          "errors": {
+            "description": "Optional list of individual error details",
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetail"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "instance": {
+            "description": "A URI reference that identifies the specific occurrence of the problem.",
+            "examples": [
+              "https://example.com/error-log/abc123"
+            ],
+            "format": "uri",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Values for the localised message of the code (ids, names, statuses).",
+            "type": "object"
+          },
+          "status": {
+            "description": "HTTP status code",
+            "examples": [
+              400
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "A short, human-readable summary of the problem type. This value should not change between occurrences of the error.",
+            "examples": [
+              "Bad Request"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "description": "A URI reference to human-readable documentation for the error.",
+            "examples": [
+              "https://example.com/errors/example"
+            ],
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "ProgressData": {
+        "additionalProperties": false,
+        "properties": {
+          "connections": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "downloaded": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "speed": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "downloaded",
+          "size",
+          "speed",
+          "connections"
+        ],
+        "type": "object"
+      },
       "Proxy": {
         "additionalProperties": false,
         "properties": {
@@ -1860,6 +1983,192 @@
         ],
         "type": "object"
       },
+      "QueueActionCancelledEvent": {
+        "additionalProperties": false,
+        "description": "A pending post-queue action was cancelled (new work, queue stopped or deleted, settings changed).",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ActionCancelledData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "queue.action_cancelled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "QueueCompletedData": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "completedTasks": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "executeAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "completedTasks",
+          "action",
+          "executeAt"
+        ],
+        "type": "object"
+      },
+      "QueueCompletedEvent": {
+        "additionalProperties": false,
+        "description": "A queue with an onQueueComplete action ran out of work; the action runs at executeAt unless cancelled.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QueueCompletedData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "queue.completed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "QueueCreatedEvent": {
+        "additionalProperties": false,
+        "description": "A queue was created.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Queue"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "queue.created"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "QueueDeletedEvent": {
+        "additionalProperties": false,
+        "description": "A queue was deleted; data is its last state.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Queue"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "queue.deleted"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
       "QueueList": {
         "additionalProperties": false,
         "properties": {
@@ -1885,6 +2194,166 @@
         },
         "required": [
           "queues"
+        ],
+        "type": "object"
+      },
+      "QueueUpdatedEvent": {
+        "additionalProperties": false,
+        "description": "A queue changed (name, state, settings, position).",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Queue"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "queue.updated"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "QuotaData": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "period": {
+            "type": "string"
+          },
+          "queueId": {
+            "type": "string"
+          },
+          "resetsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "used": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "windowStart": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "bytes",
+          "period",
+          "used"
+        ],
+        "type": "object"
+      },
+      "QuotaExhaustedEvent": {
+        "additionalProperties": false,
+        "description": "A global or queue byte quota was used up.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QuotaData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "quota.exhausted"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "QuotaResetEvent": {
+        "additionalProperties": false,
+        "description": "An exhausted quota is available again.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QuotaData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "quota.reset"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
         ],
         "type": "object"
       },
@@ -2206,6 +2675,34 @@
         ],
         "type": "object"
       },
+      "Schema": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/Schema.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "fields": {
+            "description": "One entry per settings field, in display order",
+            "items": {
+              "$ref": "#/components/schemas/FieldSchema"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "fields"
+        ],
+        "type": "object"
+      },
       "Settings": {
         "additionalProperties": false,
         "properties": {
@@ -2395,6 +2892,47 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "SettingsUpdatedEvent": {
+        "additionalProperties": false,
+        "description": "The global settings changed; data is the new global layer.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Settings"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "settings.updated"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
         "type": "object"
       },
       "Source": {
@@ -2641,6 +3179,91 @@
         ],
         "type": "object"
       },
+      "StatusData": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/TaskError"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "type": "object"
+      },
+      "StreamEvent": {
+        "description": "An event of the stream: one of the typed events, told apart by type.",
+        "discriminator": {
+          "mapping": {
+            "queue.action_cancelled": "#/components/schemas/QueueActionCancelledEvent",
+            "queue.completed": "#/components/schemas/QueueCompletedEvent",
+            "queue.created": "#/components/schemas/QueueCreatedEvent",
+            "queue.deleted": "#/components/schemas/QueueDeletedEvent",
+            "queue.updated": "#/components/schemas/QueueUpdatedEvent",
+            "quota.exhausted": "#/components/schemas/QuotaExhaustedEvent",
+            "quota.reset": "#/components/schemas/QuotaResetEvent",
+            "settings.updated": "#/components/schemas/SettingsUpdatedEvent",
+            "task.created": "#/components/schemas/TaskCreatedEvent",
+            "task.deleted": "#/components/schemas/TaskDeletedEvent",
+            "task.progress": "#/components/schemas/TaskProgressEvent",
+            "task.refresh": "#/components/schemas/TaskRefreshEvent",
+            "task.status": "#/components/schemas/TaskStatusEvent",
+            "task.updated": "#/components/schemas/TaskUpdatedEvent"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TaskCreatedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/TaskUpdatedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/TaskStatusEvent"
+          },
+          {
+            "$ref": "#/components/schemas/TaskProgressEvent"
+          },
+          {
+            "$ref": "#/components/schemas/TaskDeletedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/TaskRefreshEvent"
+          },
+          {
+            "$ref": "#/components/schemas/QueueCreatedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/QueueUpdatedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/QueueDeletedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/QueueCompletedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/QueueActionCancelledEvent"
+          },
+          {
+            "$ref": "#/components/schemas/SettingsUpdatedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/QuotaExhaustedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/QuotaResetEvent"
+          }
+        ]
+      },
       "Task": {
         "additionalProperties": false,
         "properties": {
@@ -2736,6 +3359,88 @@
         ],
         "type": "object"
       },
+      "TaskCreatedEvent": {
+        "additionalProperties": false,
+        "description": "A task was created.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Task"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "task.created"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "TaskDeletedEvent": {
+        "additionalProperties": false,
+        "description": "A task was deleted; data is its last state.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Task"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "task.deleted"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
       "TaskError": {
         "additionalProperties": false,
         "properties": {
@@ -2790,6 +3495,88 @@
         },
         "required": [
           "tasks"
+        ],
+        "type": "object"
+      },
+      "TaskProgressEvent": {
+        "additionalProperties": false,
+        "description": "Transfer progress of a running task; coalesced per task, at most a few per second.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ProgressData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "task.progress"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "TaskRefreshEvent": {
+        "additionalProperties": false,
+        "description": "A link-refresh step happened: a strategy ran or was skipped, a wait started or ended.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RefreshAttempt"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "task.refresh"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
         ],
         "type": "object"
       },
@@ -2851,6 +3638,88 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "TaskStatusEvent": {
+        "additionalProperties": false,
+        "description": "A task moved to another status.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StatusData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "task.status"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "TaskUpdatedEvent": {
+        "additionalProperties": false,
+        "description": "A task's fields changed (name, directory, settings, source, labels, ...).",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Task"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "task.updated"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
         "type": "object"
       },
       "TimeWindow": {
@@ -3323,7 +4192,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3333,7 +4202,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3343,7 +4212,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3375,7 +4244,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3385,7 +4254,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3395,7 +4264,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3432,7 +4301,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3442,7 +4311,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3452,7 +4321,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3462,7 +4331,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3472,7 +4341,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3482,7 +4351,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3524,7 +4393,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3534,7 +4403,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3544,7 +4413,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3554,7 +4423,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3564,7 +4433,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3630,7 +4499,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3640,7 +4509,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3650,7 +4519,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3660,7 +4529,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3670,7 +4539,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3713,7 +4582,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3723,7 +4592,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3733,7 +4602,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3743,7 +4612,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3753,7 +4622,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3785,7 +4654,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3795,7 +4664,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3805,7 +4674,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3845,7 +4714,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3855,7 +4724,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3865,7 +4734,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3875,7 +4744,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3885,7 +4754,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3939,7 +4808,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3949,7 +4818,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3959,7 +4828,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -3969,7 +4838,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4006,7 +4875,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4016,7 +4885,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4026,7 +4895,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4036,7 +4905,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4046,7 +4915,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4087,7 +4956,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4097,7 +4966,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4107,7 +4976,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4117,7 +4986,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4127,7 +4996,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4178,7 +5047,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4188,7 +5057,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4198,7 +5067,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4208,7 +5077,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4218,7 +5087,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4228,7 +5097,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4274,7 +5143,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4284,7 +5153,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4294,7 +5163,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4304,7 +5173,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4356,7 +5225,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4366,7 +5235,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4376,7 +5245,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4386,7 +5255,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4455,7 +5324,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4465,7 +5334,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4475,7 +5344,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4485,7 +5354,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4527,7 +5396,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4537,7 +5406,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4547,7 +5416,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4557,7 +5426,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4593,7 +5462,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4603,7 +5472,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4613,7 +5482,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4623,7 +5492,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4633,7 +5502,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4665,7 +5534,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4675,7 +5544,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4685,7 +5554,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4724,7 +5593,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4734,7 +5603,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4744,7 +5613,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4754,7 +5623,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4764,7 +5633,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4800,7 +5669,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4810,7 +5679,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4820,7 +5689,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4830,7 +5699,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4840,7 +5709,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4881,7 +5750,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4891,7 +5760,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4901,7 +5770,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4911,7 +5780,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4921,7 +5790,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4972,7 +5841,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4982,7 +5851,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -4992,7 +5861,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5002,7 +5871,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5012,7 +5881,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5022,7 +5891,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5101,11 +5970,11 @@
             "content": {
               "text/event-stream": {
                 "schema": {
-                  "description": "SSE messages whose data is an Event or, for event type reset, a ResetEventData.",
+                  "description": "SSE messages whose data is a StreamEvent or, for event name reset, a ResetEventData.",
                   "items": {
                     "oneOf": [
                       {
-                        "$ref": "#/components/schemas/Event"
+                        "$ref": "#/components/schemas/StreamEvent"
                       },
                       {
                         "$ref": "#/components/schemas/ResetData"
@@ -5117,13 +5986,13 @@
                 }
               }
             },
-            "description": "Server-Sent Events stream. The data of each event is an Event, except for reset events."
+            "description": "Server-Sent Events stream. The data of each event is a StreamEvent (one of the typed events, discriminated by type), except for reset events."
           },
           "401": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5133,7 +6002,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5143,7 +6012,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5153,7 +6022,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5185,7 +6054,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5218,7 +6087,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5228,7 +6097,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5238,7 +6107,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5278,7 +6147,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5288,7 +6157,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5298,7 +6167,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5308,7 +6177,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5318,7 +6187,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5355,7 +6224,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5365,7 +6234,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5375,7 +6244,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5385,7 +6254,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5395,7 +6264,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5436,7 +6305,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5446,7 +6315,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5456,7 +6325,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5466,7 +6335,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5476,7 +6345,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5527,7 +6396,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5537,7 +6406,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5547,7 +6416,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5557,7 +6426,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5567,7 +6436,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5598,7 +6467,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5608,7 +6477,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5618,7 +6487,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5658,7 +6527,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5668,7 +6537,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5678,7 +6547,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5688,7 +6557,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5698,7 +6567,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5745,7 +6614,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5755,7 +6624,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5765,7 +6634,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5775,7 +6644,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5785,7 +6654,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5795,7 +6664,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5836,7 +6705,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5846,7 +6715,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5856,7 +6725,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5866,7 +6735,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5876,7 +6745,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5933,7 +6802,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5943,7 +6812,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5953,7 +6822,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5963,7 +6832,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5973,7 +6842,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -5983,7 +6852,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6036,7 +6905,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6046,7 +6915,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6056,7 +6925,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6066,7 +6935,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6076,7 +6945,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6130,7 +6999,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6140,7 +7009,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6150,7 +7019,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6160,7 +7029,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6170,7 +7039,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6215,7 +7084,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6225,7 +7094,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6235,7 +7104,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6245,7 +7114,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6255,7 +7124,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6300,7 +7169,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6310,7 +7179,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6320,7 +7189,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6330,7 +7199,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6340,7 +7209,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6384,7 +7253,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6394,7 +7263,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6404,7 +7273,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6414,7 +7283,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6424,7 +7293,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6466,7 +7335,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6476,7 +7345,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6486,7 +7355,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6496,7 +7365,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6506,7 +7375,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6516,7 +7385,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6542,13 +7411,21 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "description": "Version of the settings layer; send it as If-Match to update only if unchanged",
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6558,7 +7435,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6568,7 +7445,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6583,6 +7460,17 @@
       "patch": {
         "description": "Applies an RFC 7396 JSON merge patch to the global settings layer (null unsets a field). Accepts application/json and application/merge-patch+json.",
         "operationId": "patch-settings",
+        "parameters": [
+          {
+            "description": "ETag of the settings last read; the update fails with 412 (settings.changed) if they changed since",
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "description": "ETag of the settings last read; the update fails with 412 (settings.changed) if they changed since",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6611,23 +7499,41 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "description": "Version of the settings layer; send it as If-Match to update only if unchanged",
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
             "description": "Unauthorized"
           },
+          "412": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
           "422": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6637,7 +7543,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6647,7 +7553,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6662,6 +7568,17 @@
       "put": {
         "description": "Replaces the global settings layer as a whole.",
         "operationId": "replace-settings",
+        "parameters": [
+          {
+            "description": "ETag of the settings last read; the update fails with 412 (settings.changed) if they changed since",
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "description": "ETag of the settings last read; the update fails with 412 (settings.changed) if they changed since",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6681,23 +7598,41 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "description": "Version of the settings layer; send it as If-Match to update only if unchanged",
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
             "description": "Unauthorized"
           },
+          "412": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
           "422": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6707,7 +7642,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6717,7 +7652,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6743,13 +7678,21 @@
                 }
               }
             },
-            "description": "OK"
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "description": "Version of the settings layer; send it as If-Match to update only if unchanged",
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6759,7 +7702,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6769,7 +7712,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6777,6 +7720,48 @@
           }
         },
         "summary": "Get the default settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/v1/settings/schema": {
+      "get": {
+        "description": "Returns one entry per settings field with its type, group, unit, numeric bounds, accepted values and the levels (default, global, queue, task) that may set it, for building generic settings forms.",
+        "operationId": "get-settings-schema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Schema"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Describe the settings fields",
         "tags": [
           "settings"
         ]
@@ -6801,7 +7786,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6811,7 +7796,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6821,7 +7806,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6940,7 +7925,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6950,7 +7935,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6960,7 +7945,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -6970,7 +7955,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7010,7 +7995,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7020,7 +8005,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7030,7 +8015,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7040,7 +8025,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7050,7 +8035,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7092,7 +8077,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7102,7 +8087,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7112,7 +8097,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7122,7 +8107,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7164,7 +8149,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7174,7 +8159,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7184,7 +8169,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7194,7 +8179,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7290,7 +8275,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7300,7 +8285,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7310,7 +8295,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7320,7 +8305,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7362,7 +8347,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7372,7 +8357,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7382,7 +8367,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7392,7 +8377,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7402,7 +8387,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7444,7 +8429,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7454,7 +8439,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7464,7 +8449,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7474,7 +8459,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7516,7 +8501,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7526,7 +8511,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7536,7 +8521,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7546,7 +8531,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7593,7 +8578,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7603,7 +8588,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7613,7 +8598,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7623,7 +8608,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7633,7 +8618,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7643,7 +8628,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7684,7 +8669,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7694,7 +8679,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7704,7 +8689,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7714,7 +8699,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7724,7 +8709,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7781,7 +8766,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7791,7 +8776,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7801,7 +8786,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7811,7 +8796,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7821,7 +8806,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7831,7 +8816,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7885,7 +8870,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7895,7 +8880,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7905,7 +8890,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7915,7 +8900,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7925,7 +8910,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7969,7 +8954,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7979,7 +8964,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7989,7 +8974,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -7999,7 +8984,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8009,7 +8994,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8019,7 +9004,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8029,7 +9014,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8074,7 +9059,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8084,7 +9069,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8094,7 +9079,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8104,7 +9089,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8114,7 +9099,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8124,7 +9109,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8169,7 +9154,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8179,7 +9164,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8189,7 +9174,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8199,7 +9184,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8209,7 +9194,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8263,7 +9248,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8273,7 +9258,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8283,7 +9268,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8293,7 +9278,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8303,7 +9288,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8347,7 +9332,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8357,7 +9342,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8367,7 +9352,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8377,7 +9362,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8387,7 +9372,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8397,7 +9382,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8441,7 +9426,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8451,7 +9436,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8461,7 +9446,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8471,7 +9456,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8481,7 +9466,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8541,7 +9526,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8551,7 +9536,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8561,7 +9546,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8571,7 +9556,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8581,7 +9566,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8591,7 +9576,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8601,7 +9586,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8634,7 +9619,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8644,7 +9629,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8654,7 +9639,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8693,7 +9678,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8703,7 +9688,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8713,7 +9698,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8723,7 +9708,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8759,7 +9744,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8769,7 +9754,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8779,7 +9764,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8789,7 +9774,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8799,7 +9784,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8840,7 +9825,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8850,7 +9835,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8860,7 +9845,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8870,7 +9855,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8880,7 +9865,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8931,7 +9916,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8941,7 +9926,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8951,7 +9936,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8961,7 +9946,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -8971,7 +9956,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -9008,7 +9993,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -9018,7 +10003,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -9028,7 +10013,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -9038,7 +10023,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -9048,7 +10033,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
@@ -9058,7 +10043,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },

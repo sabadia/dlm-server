@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage"
@@ -38,39 +39,55 @@ func (s *SettingsService) Global(ctx context.Context) (settings.Settings, error)
 // settings.updated event carrying the new layer is published and the
 // scheduler is woken (concurrency limits may have changed).
 func (s *SettingsService) ReplaceGlobal(ctx context.Context, g settings.Settings) (settings.Settings, error) {
-	if err := validateLevel(g, settings.LevelGlobal); err != nil {
-		return settings.Settings{}, err
-	}
-	if err := s.d.Store.Settings().SaveGlobal(ctx, g); err != nil {
-		return settings.Settings{}, fmt.Errorf("service: save global settings: %w", err)
-	}
-	s.applyGlobalLimit(g)
-	s.d.publish(events.TypeSettingsUpdated, "", "", g)
-	s.d.Scheduler.Wake()
-	return g, nil
+	return s.ReplaceGlobalIfMatch(ctx, "", g)
+}
+
+// ReplaceGlobalIfMatch is ReplaceGlobal that fails with an error matching
+// domain.ErrPreconditionFailed (code settings.changed) unless the stored
+// layer's settings.ETag equals etag; an empty etag skips the check.
+func (s *SettingsService) ReplaceGlobalIfMatch(ctx context.Context, etag string, g settings.Settings) (settings.Settings, error) {
+	return s.updateGlobal(ctx, etag, func(settings.Settings) (settings.Settings, error) { return g, nil })
 }
 
 // PatchGlobal applies an RFC 7396 JSON merge patch (see settings.MergePatch)
 // to the global layer and then behaves like ReplaceGlobal. A malformed
 // patch returns an error matching domain.ErrInvalidArgument.
 func (s *SettingsService) PatchGlobal(ctx context.Context, patch []byte) (settings.Settings, error) {
+	return s.PatchGlobalIfMatch(ctx, "", patch)
+}
+
+// PatchGlobalIfMatch is PatchGlobal with the precondition of
+// ReplaceGlobalIfMatch.
+func (s *SettingsService) PatchGlobalIfMatch(ctx context.Context, etag string, patch []byte) (settings.Settings, error) {
+	return s.updateGlobal(ctx, etag, func(cur settings.Settings) (settings.Settings, error) {
+		return patchSettings(cur, patch)
+	})
+}
+
+// updateGlobal is the compare-and-set of the global layer: inside one
+// transaction it checks etag against the stored layer, derives, validates and
+// saves the next layer, then applies the side effects.
+func (s *SettingsService) updateGlobal(ctx context.Context, etag string, next func(cur settings.Settings) (settings.Settings, error)) (settings.Settings, error) {
 	var out settings.Settings
 	err := s.d.Store.WithTx(ctx, func(tx storage.Store) error {
 		cur, err := tx.Settings().GetGlobal(ctx)
 		if err != nil {
 			return fmt.Errorf("service: get global settings: %w", err)
 		}
-		next, err := patchSettings(cur, patch)
+		if etag != "" && etag != settings.ETag(cur) {
+			return domain.PreconditionFailed("settings.changed", "the global settings changed since they were read")
+		}
+		g, err := next(cur)
 		if err != nil {
 			return err
 		}
-		if err := validateLevel(next, settings.LevelGlobal); err != nil {
+		if err := validateLevel(g, settings.LevelGlobal); err != nil {
 			return err
 		}
-		if err := tx.Settings().SaveGlobal(ctx, next); err != nil {
+		if err := tx.Settings().SaveGlobal(ctx, g); err != nil {
 			return fmt.Errorf("service: save global settings: %w", err)
 		}
-		out = next
+		out = g
 		return nil
 	})
 	if err != nil {

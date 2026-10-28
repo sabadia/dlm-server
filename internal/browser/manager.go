@@ -486,7 +486,7 @@ func (m *Manager) DeleteProfile(group string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.instances[group] != nil {
-		return domain.Conflict("browser: the browser of %q is running", group)
+		return domain.ConflictCode("browser.running", map[string]string{"group": group}, "browser: the browser of %q is running", group)
 	}
 	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
 		return domain.NotFound("browser profile", group)

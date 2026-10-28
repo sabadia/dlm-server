@@ -104,10 +104,10 @@ type TaskList struct {
 
 // BatchItem is the outcome of one item of a bulk operation.
 type BatchItem struct {
-	ID    string           `json:"id,omitempty" doc:"Task ID (the requested one, or the created task's ID)."`
-	OK    bool             `json:"ok" doc:"Whether the item succeeded."`
-	Task  *domain.Task     `json:"task,omitempty" doc:"The task's state after the operation (for delete: its last state)."`
-	Error *huma.ErrorModel `json:"error,omitempty" doc:"Why the item failed (RFC 9457 problem)."`
+	ID    string       `json:"id,omitempty" doc:"Task ID (the requested one, or the created task's ID)."`
+	OK    bool         `json:"ok" doc:"Whether the item succeeded."`
+	Task  *domain.Task `json:"task,omitempty" doc:"The task's state after the operation (for delete: its last state)."`
+	Error *Problem     `json:"error,omitempty" doc:"Why the item failed (RFC 9457 problem with a code)."`
 }
 
 // BatchOutput is the response of a bulk operation. It is 200 even when some
@@ -555,8 +555,8 @@ func (s *Server) batchItem(ctx context.Context, op string, r service.BatchResult
 
 // asProblem returns err as a problem: problems raised by the adapter are
 // kept, service errors are mapped.
-func (s *Server) asProblem(ctx context.Context, op string, err error, settingsLoc string) *huma.ErrorModel {
-	if p, ok := err.(*huma.ErrorModel); ok { //nolint:errorlint // adapter problems are never wrapped
+func (s *Server) asProblem(ctx context.Context, op string, err error, settingsLoc string) *Problem {
+	if p, ok := err.(*Problem); ok { //nolint:errorlint // adapter problems are never wrapped
 		return p
 	}
 	return s.problemFor(ctx, op, err, settingsLoc)

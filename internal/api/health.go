@@ -12,6 +12,8 @@ type HealthOutput struct {
 	Body struct {
 		Status        string `json:"status" enum:"ok" doc:"Always \"ok\" when the daemon is serving."`
 		Version       string `json:"version" doc:"Daemon version."`
+		APIVersion    int    `json:"apiVersion" doc:"Version of the REST API (grows only on breaking changes)."`
+		MinClientAPI  int    `json:"minClientApi" doc:"Oldest API version a client may have been written for; older clients must be updated."`
 		Authenticated bool   `json:"authenticated" doc:"Whether the request presented a valid bearer token."`
 	}
 }
@@ -28,6 +30,7 @@ func (s *Server) registerHealth() {
 		out := &HealthOutput{}
 		out.Body.Status = "ok"
 		out.Body.Version = s.version
+		out.Body.APIVersion, out.Body.MinClientAPI = APIVersion, MinClientAPI
 		out.Body.Authenticated = Authenticated(ctx)
 		return out, nil
 	})

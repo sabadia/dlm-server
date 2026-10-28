@@ -258,7 +258,8 @@ func (s *TaskService) checkDuplicate(ctx context.Context, t *domain.Task, task s
 		return fmt.Errorf("service: create task: %w", err)
 	}
 	if dup != nil {
-		return domain.Conflict("service: create task: duplicate of task %s (%q, %s); allow duplicates to add it anyway", dup.ID, dup.Name, dup.Status)
+		return domain.ConflictCode("task.duplicate", map[string]string{"taskId": dup.ID, "name": dup.Name, "status": string(dup.Status)},
+			"service: create task: duplicate of task %s (%q, %s); allow duplicates to add it anyway", dup.ID, dup.Name, dup.Status)
 	}
 	return nil
 }
@@ -388,7 +389,8 @@ func (s *TaskService) update(ctx context.Context, id string, in UpdateTaskInput,
 		*out = t
 		if (in.Name != nil && *in.Name != t.Name) || (in.Dir != nil && dir != t.Dir) {
 			if t.Status.Active() || (t.Downloaded > 0 && t.Status != domain.StatusCompleted) {
-				return domain.Conflict("service: task %q: name and dir cannot change while it is active or has partial data", id)
+				return domain.ConflictCode("task.locked", map[string]string{"taskId": id},
+					"service: task %q: name and dir cannot change while it is active or has partial data", id)
 			}
 		}
 		if in.Name != nil {
@@ -593,7 +595,7 @@ func (s *TaskService) pause(ctx context.Context, id string) (*domain.Task, error
 			return nil, err
 		}
 	}
-	return nil, domain.Conflict("service: pause task %q: it was restarted while being stopped", id)
+	return nil, domain.ConflictCode("task.state_changed", map[string]string{"taskId": id, "operation": "pause"}, "service: pause task %q: it was restarted while being stopped", id)
 }
 
 // Resume queues each paused or errored task again (retrying an errored
@@ -615,7 +617,7 @@ func (s *TaskService) Resume(ctx context.Context, ids []string) []BatchResult {
 				t, err = s.transitionLocked(ctx, id, domain.StatusQueued, false)
 				return err
 			default:
-				return domain.Conflict("service: task %q: cannot resume a %s task", id, t.Status)
+				return domain.ConflictCode("task.invalid_state", map[string]string{"taskId": id, "status": string(t.Status), "operation": "resume"}, "service: task %q: cannot resume a %s task", id, t.Status)
 			}
 		})
 		if err != nil {
@@ -638,7 +640,7 @@ func (s *TaskService) Restart(ctx context.Context, id string) (*domain.Task, err
 			return fmt.Errorf("service: restart task: %w", err)
 		}
 		if t.Status != domain.StatusCompleted && t.Status != domain.StatusError {
-			return domain.Conflict("service: task %q: only completed or failed tasks can be restarted, not %s", id, t.Status)
+			return domain.ConflictCode("task.invalid_state", map[string]string{"taskId": id, "status": string(t.Status), "operation": "restart"}, "service: task %q: only completed or failed tasks can be restarted, not %s", id, t.Status)
 		}
 		if final, part, ok := taskPaths(t); ok {
 			exists, err := fileExists(final)
@@ -646,7 +648,7 @@ func (s *TaskService) Restart(ctx context.Context, id string) (*domain.Task, err
 				return fmt.Errorf("service: restart task %q: %w", id, err)
 			}
 			if exists {
-				return domain.Conflict("service: task %q: file %q exists; delete or move it before restarting", id, final)
+				return domain.ConflictCode("task.file_exists", map[string]string{"taskId": id, "path": final}, "service: task %q: file %q exists; delete or move it before restarting", id, final)
 			}
 			if err := removeFile(part); err != nil {
 				return fmt.Errorf("service: restart task %q: %w", id, err)
@@ -716,7 +718,7 @@ func (s *TaskService) delete(ctx context.Context, id string, opts DeleteOptions)
 			return nil, err
 		}
 	}
-	return nil, domain.Conflict("service: delete task %q: it was restarted while being stopped", id)
+	return nil, domain.ConflictCode("task.state_changed", map[string]string{"taskId": id, "operation": "delete"}, "service: delete task %q: it was restarted while being stopped", id)
 }
 
 // removeFiles deletes a task's .part and final file. Only plain files and

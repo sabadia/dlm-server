@@ -116,7 +116,7 @@ connection.`
 
 func (s *Server) registerEvents() {
 	reg := s.api.OpenAPI().Components.Schemas
-	eventSchema := reg.Schema(reflect.TypeFor[events.Event](), true, "Event")
+	eventSchema := registerEventSchemas(reg)
 	resetSchema := reg.Schema(reflect.TypeFor[resetData](), true, "ResetEventData")
 	Register(s, huma.Operation{
 		OperationID: "stream-events",
@@ -128,16 +128,14 @@ func (s *Server) registerEvents() {
 		Errors:      []int{http.StatusServiceUnavailable},
 		Responses: map[string]*huma.Response{
 			"200": {
-				Description: "Server-Sent Events stream. The data of each event is an Event, except for reset events.",
+				Description: "Server-Sent Events stream. The data of each event is a StreamEvent (one of the typed events, discriminated by type), except for reset events.",
 				Content: map[string]*huma.MediaType{
 					"text/event-stream": {
 						Schema: &huma.Schema{
 							Title:       "Server Sent Events",
-							Description: "SSE messages whose data is an Event or, for event type reset, a ResetEventData.",
+							Description: "SSE messages whose data is a StreamEvent or, for event name reset, a ResetEventData.",
 							Type:        huma.TypeArray,
-							Items: &huma.Schema{
-								Extensions: map[string]any{"oneOf": []*huma.Schema{eventSchema, resetSchema}},
-							},
+							Items:       &huma.Schema{OneOf: []*huma.Schema{eventSchema, resetSchema}},
 						},
 					},
 				},

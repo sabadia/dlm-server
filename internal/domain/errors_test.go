@@ -48,3 +48,48 @@ func TestInvalidArgumentKeepsWrappedCause(t *testing.T) {
 		t.Fatalf("message = %q", err.Error())
 	}
 }
+
+func TestDescribeGivesStableCodes(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		err    error
+		code   string
+		params map[string]string
+	}{
+		{"not found", NotFound("task", "t1"), "task.not_found", map[string]string{"entity": "task", "id": "t1"}},
+		{"entity with spaces", NotFound("browser profile", "g"), "browser_profile.not_found", nil},
+		{"entity of something", NotFound("refresh attempt of task", "t"), "refresh_attempt.not_found", nil},
+		{"exists", AlreadyExists("plugin", "p"), "plugin.already_exists", map[string]string{"id": "p"}},
+		{"unique name", AlreadyExists("queue name", "Main"), "queue.name_taken", nil},
+		{"conflict code", ConflictCode("task.duplicate", map[string]string{"taskId": "x"}, "dup %s", "x"), "task.duplicate", map[string]string{"taskId": "x"}},
+		{"invalid code", InvalidArgumentCode("category.bad_dir", nil, "bad"), "category.bad_dir", nil},
+		{"generic conflict", Conflict("nope"), "conflict", nil},
+		{"generic invalid", InvalidArgument("bad %d", 1), "invalid_argument", nil},
+		{"wrapped", fmt.Errorf("service: %w", NotFound("queue", "q")), "queue.not_found", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			code, params, ok := Describe(c.err)
+			if !ok || code != c.code {
+				t.Fatalf("Describe = %q, %v; want %q", code, ok, c.code)
+			}
+			for k, v := range c.params {
+				if params[k] != v {
+					t.Errorf("params[%s] = %q, want %q", k, params[k], v)
+				}
+			}
+		})
+	}
+	if _, _, ok := Describe(errors.New("plain")); ok {
+		t.Error("a plain error was described")
+	}
+	// The sentinels still match.
+	if !errors.Is(ConflictCode("x", nil, "c"), ErrConflict) || !errors.Is(NotFound("a", "b"), ErrNotFound) {
+		t.Error("codes must not change which sentinel an error matches")
+	}
+	if !errors.Is(invalidTransition("t", StatusQueued, StatusCompleted), ErrConflict) {
+		t.Error("an invalid transition is a conflict")
+	}
+	if code, p, _ := Describe(invalidTransition("t", StatusQueued, StatusCompleted)); code != "task.invalid_transition" || p["from"] != "queued" || p["to"] != "completed" {
+		t.Errorf("transition = %q %v", code, p)
+	}
+}

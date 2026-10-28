@@ -29,6 +29,25 @@ func TestOpenAPIDocumentIsUpToDate(t *testing.T) {
 	checkGenerated(t, filepath.Join("..", "..", "docs", "openapi.json"), stdout.Bytes())
 }
 
+func TestOpenAPI30DocumentIsUpToDate(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run(t.Context(), "dev", []string{"openapi", "--oas", "3.0"}, WithIO(&stdout, &stderr))
+	if code != ExitOK {
+		t.Fatalf("dlm openapi --oas 3.0: exit %d: %s", code, stderr.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte(`"openapi": "3.0.3"`)) {
+		t.Errorf("not an OpenAPI 3.0.3 document: %.200s", stdout.String())
+	}
+	checkGenerated(t, filepath.Join("..", "..", "docs", "openapi-3.0.json"), stdout.Bytes())
+}
+
+func TestOpenAPIRejectsUnknownVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), "dev", []string{"openapi", "--oas", "2.0"}, WithIO(&stdout, &stderr)); code != ExitUsage {
+		t.Errorf("exit %d, want %d", code, ExitUsage)
+	}
+}
+
 func checkGenerated(t *testing.T, path string, want []byte) {
 	t.Helper()
 	have, err := os.ReadFile(path)

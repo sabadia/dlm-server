@@ -75,20 +75,10 @@ func (SystemActions) Command(ctx context.Context, name string, args []string) ([
 }
 
 // QueueCompletedData is the payload of queue.completed events.
-type QueueCompletedData struct {
-	// CompletedTasks is the number of tasks the queue completed since it
-	// last ran out of work.
-	CompletedTasks int                  `json:"completedTasks"`
-	Action         settings.QueueAction `json:"action"`
-	// ExecuteAt is when the action runs unless it is cancelled first.
-	ExecuteAt time.Time `json:"executeAt"`
-}
+type QueueCompletedData = events.QueueCompletedData
 
 // ActionCancelledData is the payload of queue.action_cancelled events.
-type ActionCancelledData struct {
-	Action settings.QueueAction `json:"action"`
-	Reason string               `json:"reason"` // one of the Cancel* constants
-}
+type ActionCancelledData = events.ActionCancelledData
 
 // pendingAction is a post-queue action waiting for its delay to elapse.
 type pendingAction struct {

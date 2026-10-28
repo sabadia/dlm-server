@@ -144,6 +144,7 @@ func TestOperationRequests(t *testing.T) {
 			return err
 		}, `{}`, 0, "PATCH", "/v1/settings", mergeType, `{"retry":{"maxAttempts":null}}`},
 		{"default settings", func(c *Client) error { _, err := c.DefaultSettings(ctx); return err }, `{}`, 0, "GET", "/v1/settings/defaults", "", ""},
+		{"settings schema", func(c *Client) error { _, err := c.SettingsSchema(ctx); return err }, `{}`, 0, "GET", "/v1/settings/schema", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, rec := newCaptureClient(t)

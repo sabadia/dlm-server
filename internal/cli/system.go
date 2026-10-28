@@ -40,8 +40,8 @@ func (a *app) newHealthCommand() *cobra.Command {
 			}
 			if err := a.printer(cmd).Print(h, func() output.Table {
 				return output.Table{
-					Columns: []string{"status", "version", "authenticated"},
-					Rows:    [][]string{{h.Status, h.Version, strconv.FormatBool(h.Authenticated)}},
+					Columns: []string{"status", "version", "api", "authenticated"},
+					Rows:    [][]string{{h.Status, h.Version, strconv.Itoa(h.APIVersion), strconv.FormatBool(h.Authenticated)}},
 				}
 			}); err != nil {
 				return err

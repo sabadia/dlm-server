@@ -63,6 +63,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm settings defaults`](#dlm-settings-defaults) | Show the built-in default settings |
 | [`dlm settings get`](#dlm-settings-get) | Show the global settings layer |
 | [`dlm settings replace`](#dlm-settings-replace) | Replace the global settings with a JSON or YAML file |
+| [`dlm settings schema`](#dlm-settings-schema) | Describe the settings fields (type, group, bounds, levels) |
 | [`dlm settings set`](#dlm-settings-set) | Set global settings |
 | [`dlm settings unset`](#dlm-settings-unset) | Unset global settings (they inherit the defaults again) |
 | [`dlm stats`](#dlm-stats) | Show download statistics |
@@ -1590,7 +1591,7 @@ Print the OpenAPI 3.1 document of the REST API
 
 ### Synopsis
 
-Print the OpenAPI document of the daemon's REST API, as the daemon serves it at /openapi.json, without starting a daemon or contacting one. JSON by default; -o yaml prints YAML. Releases publish it as a versioned artifact, which client generators (Dart, TypeScript, ...) read.
+Print the OpenAPI document of the daemon's REST API, as the daemon serves it at /openapi.json, without starting a daemon or contacting one. JSON by default; -o yaml prints YAML. Releases publish it as a versioned artifact, which client generators (Dart, TypeScript, ...) read. --oas 3.0 prints the OpenAPI 3.0.3 downgrade (served at /openapi-3.0.json) for generators that do not understand 3.1.
 
 ```
 dlm openapi [flags]
@@ -1601,12 +1602,14 @@ dlm openapi [flags]
 ```
   dlm openapi > openapi.json
   dlm openapi -o yaml
+  dlm openapi --oas 3.0 > openapi-3.0.json
 ```
 
 ### Options
 
 ```
-  -h, --help   help for openapi
+  -h, --help         help for openapi
+      --oas string   OpenAPI version to print: 3.1 or 3.0 (the 3.0.3 downgrade) (default "3.1")
 ```
 
 ### Options inherited from parent commands
@@ -2561,6 +2564,7 @@ dlm settings [flags]
 * [dlm settings defaults](#dlm-settings-defaults)	 - Show the built-in default settings
 * [dlm settings get](#dlm-settings-get)	 - Show the global settings layer
 * [dlm settings replace](#dlm-settings-replace)	 - Replace the global settings with a JSON or YAML file
+* [dlm settings schema](#dlm-settings-schema)	 - Describe the settings fields (type, group, bounds, levels)
 * [dlm settings set](#dlm-settings-set)	 - Set global settings
 * [dlm settings unset](#dlm-settings-unset)	 - Unset global settings (they inherit the defaults again)
 
@@ -2662,6 +2666,46 @@ dlm settings replace -f FILE [flags]
 ```
   -f, --file string   settings file (JSON or YAML; '-' for stdin)
   -h, --help          help for replace
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm settings](#dlm-settings)	 - Manage the global settings
+
+
+## dlm settings schema
+
+Describe the settings fields (type, group, bounds, levels)
+
+```
+dlm settings schema [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for schema
 ```
 
 ### Options inherited from parent commands
