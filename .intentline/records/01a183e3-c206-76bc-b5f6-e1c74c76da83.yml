@@ -1,0 +1,35 @@
+schema_version: 1
+id: 01a183e3-c206-76bc-b5f6-e1c74c76da83
+status: draft
+created_at: '2026-10-28T19:01:44Z'
+updated_at: '2026-10-28T19:01:44Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P13.1: let a supervising app start the daemon on a random port and find, monitor and stop it: runtime.json discovery, single-instance lock per config dir, system info and shutdown/restart endpoints with CLI parity'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/instance/instance.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: internal/api/system.go
+  start_line: null
+  end_line: null
+- path: internal/cli/root.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

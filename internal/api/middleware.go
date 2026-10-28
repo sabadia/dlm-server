@@ -80,7 +80,9 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			writeProblem(w, http.StatusUnauthorized, "missing or invalid bearer token")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authKey{}, authed)))
+		ctx := context.WithValue(r.Context(), authKey{}, authed)
+		ctx = context.WithValue(ctx, localKey{}, isLoopbackRemote(r.RemoteAddr))
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

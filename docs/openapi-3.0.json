@@ -1424,6 +1424,30 @@
         ],
         "type": "object"
       },
+      "LifecycleOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/LifecycleOutputBody.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "status": {
+            "description": "What the daemon is about to do.",
+            "enum": [
+              "shutting_down",
+              "restarting"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
       "MediaCandidateBody": {
         "additionalProperties": false,
         "properties": {
@@ -3044,6 +3068,156 @@
           }
         ]
       },
+      "SystemInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/SystemInfo.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "address": {
+            "description": "host:port the daemon listens on.",
+            "type": "string"
+          },
+          "apiVersion": {
+            "description": "Version of the REST API.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "arch": {
+            "description": "CPU architecture.",
+            "type": "string"
+          },
+          "commit": {
+            "description": "Source revision the daemon was built from.",
+            "type": "string"
+          },
+          "databaseBytes": {
+            "description": "Size of the database file.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "engines": {
+            "description": "Enabled download engines.",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "goVersion": {
+            "description": "Go toolchain the daemon was built with.",
+            "type": "string"
+          },
+          "local": {
+            "description": "Whether this request came from the machine the daemon runs on.",
+            "type": "boolean"
+          },
+          "minClientApi": {
+            "description": "Oldest API version a client may have been written for.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "os": {
+            "description": "Operating system.",
+            "type": "string"
+          },
+          "paths": {
+            "$ref": "#/components/schemas/SystemPaths"
+          },
+          "pid": {
+            "description": "Process id of the daemon.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "startedAt": {
+            "description": "When the daemon started.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "tls": {
+            "description": "Whether the API is served over TLS.",
+            "type": "boolean"
+          },
+          "tools": {
+            "description": "External programs dlm can use.",
+            "items": {
+              "$ref": "#/components/schemas/ToolStatus"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "uptimeSeconds": {
+            "description": "Seconds since the daemon started.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "version": {
+            "description": "Daemon version.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "apiVersion",
+          "minClientApi",
+          "goVersion",
+          "os",
+          "arch",
+          "pid",
+          "startedAt",
+          "uptimeSeconds",
+          "address",
+          "tls",
+          "local",
+          "paths",
+          "engines",
+          "tools",
+          "databaseBytes"
+        ],
+        "type": "object"
+      },
+      "SystemPaths": {
+        "additionalProperties": false,
+        "properties": {
+          "cache": {
+            "description": "Cache directory (downloaded tools).",
+            "type": "string"
+          },
+          "config": {
+            "description": "Configuration directory (token, runtime.json).",
+            "type": "string"
+          },
+          "data": {
+            "description": "Data directory.",
+            "type": "string"
+          },
+          "database": {
+            "description": "SQLite database file.",
+            "type": "string"
+          },
+          "downloads": {
+            "description": "Default download directory.",
+            "type": "string"
+          },
+          "log": {
+            "description": "Log directory.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "data",
+          "cache",
+          "log",
+          "database",
+          "downloads"
+        ],
+        "type": "object"
+      },
       "Task": {
         "additionalProperties": false,
         "properties": {
@@ -3511,6 +3685,56 @@
           "days",
           "start",
           "end"
+        ],
+        "type": "object"
+      },
+      "ToolStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "autoDownload": {
+            "description": "Whether dlm downloads the tool when it is missing and needed.",
+            "type": "boolean"
+          },
+          "available": {
+            "description": "Whether a usable build was found (without downloading one).",
+            "type": "boolean"
+          },
+          "error": {
+            "description": "Why no usable build was found.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Which tool.",
+            "enum": [
+              "ffmpeg",
+              "yt-dlp",
+              "browser"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "description": "Executable path.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Where the build comes from.",
+            "enum": [
+              "configured",
+              "path",
+              "cache",
+              "download"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "description": "Version the tool reports, when known.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "available",
+          "autoDownload"
         ],
         "type": "object"
       },
@@ -7550,6 +7774,162 @@
         "summary": "Download statistics",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/v1/system/info": {
+      "get": {
+        "description": "Reports the daemon's version, API version, build, operating system, process, listen address, directories, enabled engines, the status of the external tools (ffmpeg, yt-dlp, browser; none is downloaded by this call) and the database size. `local` tells whether this request came from the daemon's own machine, for clients that offer features only meaningful there (folder pickers, opening files).",
+        "operationId": "get-system-info",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Describe the daemon and its machine",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/v1/system/restart": {
+      "post": {
+        "description": "Gracefully stops the daemon and starts it again with the same arguments (the process keeps its pid where the platform allows). Clients reconnect using runtime.json or the same address.",
+        "operationId": "restart-daemon",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleOutputBody"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Restart the daemon",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/v1/system/shutdown": {
+      "post": {
+        "description": "Starts a graceful shutdown: running downloads are stopped and requeued, then the daemon exits. The response is sent before it stops.",
+        "operationId": "shutdown-daemon",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleOutputBody"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Stop the daemon",
+        "tags": [
+          "system"
         ]
       }
     },

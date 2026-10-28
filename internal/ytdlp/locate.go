@@ -80,7 +80,7 @@ func (l *Locator) Locate(ctx context.Context) (Binary, error) {
 	if l.found != nil {
 		return *l.found, nil
 	}
-	b, err := l.find(ctx)
+	b, err := l.find(ctx, true)
 	if err != nil {
 		return Binary{}, err
 	}
@@ -89,7 +89,7 @@ func (l *Locator) Locate(ctx context.Context) (Binary, error) {
 	return b, nil
 }
 
-func (l *Locator) find(ctx context.Context) (Binary, error) {
+func (l *Locator) find(ctx context.Context, download bool) (Binary, error) {
 	if l.opts.Path != "" {
 		v, err := l.opts.Version(ctx, l.opts.Path)
 		if err != nil {
@@ -112,7 +112,7 @@ func (l *Locator) find(ctx context.Context) (Binary, error) {
 		}
 		l.log.Warn("ytdlp: the cached build does not run; ignoring it", "path", path)
 	}
-	if !l.opts.AutoDownload {
+	if !download || !l.opts.AutoDownload {
 		return Binary{}, fmt.Errorf("%w: install yt-dlp, set its path, or allow downloading it", ErrNotFound)
 	}
 	l.log.Info("ytdlp: downloading yt-dlp")
@@ -126,6 +126,18 @@ func (l *Locator) find(ctx context.Context) (Binary, error) {
 		return Binary{}, fmt.Errorf("%w: the downloaded build does not run: %w", ErrNotFound, err)
 	}
 	return Binary{Path: path, Version: v, Source: "download"}, nil
+}
+
+// Probe reports the yt-dlp Locate would use without downloading anything: a
+// configured, installed or already cached build. It is Locate's remembered
+// result when there is one, and does not remember its own.
+func (l *Locator) Probe(ctx context.Context) (Binary, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.found != nil {
+		return *l.found, nil
+	}
+	return l.find(ctx, false)
 }
 
 func (l *Locator) fetcher() *Fetcher {

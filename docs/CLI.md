@@ -67,6 +67,10 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm settings set`](#dlm-settings-set) | Set global settings |
 | [`dlm settings unset`](#dlm-settings-unset) | Unset global settings (they inherit the defaults again) |
 | [`dlm stats`](#dlm-stats) | Show download statistics |
+| [`dlm system`](#dlm-system) | Inspect and control the running daemon |
+| [`dlm system info`](#dlm-system-info) | Describe the daemon: version, directories, engines, tools |
+| [`dlm system restart`](#dlm-system-restart) | Restart the daemon |
+| [`dlm system stop`](#dlm-system-stop) | Stop the daemon gracefully |
 | [`dlm task`](#dlm-task) | Manage download tasks |
 | [`dlm task add`](#dlm-task-add) | Add download tasks |
 | [`dlm task await-link`](#dlm-task-await-link) | Wait for the browser extension to capture a new link |
@@ -145,6 +149,7 @@ Run `dlm serve` to start the daemon; every other command talks to it over its RE
 * [dlm serve](#dlm-serve)	 - Run the dlm daemon
 * [dlm settings](#dlm-settings)	 - Manage the global settings
 * [dlm stats](#dlm-stats)	 - Show download statistics
+* [dlm system](#dlm-system)	 - Inspect and control the running daemon
 * [dlm task](#dlm-task)	 - Manage download tasks
 * [dlm token](#dlm-token)	 - Manage the API token
 * [dlm version](#dlm-version)	 - Print the CLI and daemon versions
@@ -2483,6 +2488,8 @@ Run the dlm daemon in the foreground until interrupted.
 
 On first start a random API token is written to the token file in the config directory (see `dlm token show`).
 
+With --address 127.0.0.1:0 the system picks a free port; the daemon publishes it in runtime.json in the config directory, which the other commands read to find it. Only one daemon runs per config directory.
+
 ```
 dlm serve [flags]
 ```
@@ -2876,6 +2883,181 @@ dlm stats [flags]
 ### SEE ALSO
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+
+
+## dlm system
+
+Inspect and control the running daemon
+
+```
+dlm system [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for system
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm system info](#dlm-system-info)	 - Describe the daemon: version, directories, engines, tools
+* [dlm system restart](#dlm-system-restart)	 - Restart the daemon
+* [dlm system stop](#dlm-system-stop)	 - Stop the daemon gracefully
+
+
+## dlm system info
+
+Describe the daemon: version, directories, engines, tools
+
+### Synopsis
+
+Report the daemon's version, API version, build, process, listen address, directories, enabled engines, the status of the external tools (ffmpeg, yt-dlp, browser) and the database size.
+
+```
+dlm system info [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for info
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm system](#dlm-system)	 - Inspect and control the running daemon
+
+
+## dlm system restart
+
+Restart the daemon
+
+### Synopsis
+
+Stop the daemon gracefully and start it again with the same arguments.
+
+```
+dlm system restart [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for restart
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm system](#dlm-system)	 - Inspect and control the running daemon
+
+
+## dlm system stop
+
+Stop the daemon gracefully
+
+### Synopsis
+
+Stop the daemon gracefully: running downloads are stopped and requeued, then it exits.
+
+```
+dlm system stop [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for stop
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm system](#dlm-system)	 - Inspect and control the running daemon
 
 
 ## dlm task

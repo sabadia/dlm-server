@@ -175,3 +175,40 @@ func TestProfiles(t *testing.T) {
 		t.Error("Profiles without a directory succeeded")
 	}
 }
+
+func TestProbeReportsTheSourceAndNeverDownloads(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "browser")
+	if err := os.WriteFile(exe, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	none := func() []Installation { return nil }
+
+	if inst, source, err := NewManager(Options{Path: exe, Discover: none}).Probe(ctx); err != nil || source != SourceConfigured || inst.Path != exe {
+		t.Errorf("configured: %+v %q %v", inst, source, err)
+	}
+	found := func() []Installation { return []Installation{{Name: "edge", Path: exe}} }
+	if _, source, err := NewManager(Options{Discover: found}).Probe(ctx); err != nil || source != SourcePath {
+		t.Errorf("discovered: %q %v", source, err)
+	}
+
+	srv := newCFT(t, "155.0.1.2", shellZip(t))
+	m := NewManager(Options{
+		Discover: none, AutoDownload: true,
+		Fetcher: &Fetcher{Dir: t.TempDir(), VersionsURL: srv.URL + "/versions.json", Platform: "linux64"},
+	})
+	if _, _, err := m.Probe(ctx); !errors.Is(err, ErrNoBrowser) {
+		t.Errorf("Probe with nothing installed = %v, want ErrNoBrowser", err)
+	}
+	if srv.downloads.Load() != 0 {
+		t.Errorf("Probe downloaded %d times", srv.downloads.Load())
+	}
+	// Resolve downloads; Probe then reports that installation.
+	if _, err := m.Resolve(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if inst, source, err := m.Probe(ctx); err != nil || inst.Name != NameHeadlessShell || source != SourceCache {
+		t.Errorf("Probe after Resolve: %+v %q %v", inst, source, err)
+	}
+}

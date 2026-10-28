@@ -116,7 +116,7 @@ func (m *Manager) Resolve(ctx context.Context) (Installation, error) {
 	if m.install != nil {
 		return *m.install, nil
 	}
-	inst, err := m.find(ctx)
+	inst, _, err := m.find(ctx, true)
 	if err != nil {
 		return Installation{}, err
 	}
@@ -132,29 +132,63 @@ func (m *Manager) fetcher() *Fetcher {
 	return &Fetcher{Dir: m.opts.CacheDir}
 }
 
-func (m *Manager) find(ctx context.Context) (Installation, error) {
+// Source names where a browser came from.
+const (
+	SourceConfigured = "configured"
+	SourcePath       = "path"
+	SourceCache      = "cache"
+	SourceDownload   = "download"
+)
+
+// Probe reports the browser Resolve would use and where it comes from
+// (SourceConfigured, SourcePath, SourceCache or SourceDownload), without
+// downloading anything and without remembering the result.
+func (m *Manager) Probe(ctx context.Context) (Installation, string, error) {
+	m.resolveMu.Lock()
+	defer m.resolveMu.Unlock()
+	if m.install != nil {
+		_, source := m.sourceOf(*m.install)
+		return *m.install, source, nil
+	}
+	return m.find(ctx, false)
+}
+
+// sourceOf classifies an already resolved installation.
+func (m *Manager) sourceOf(inst Installation) (Installation, string) {
+	switch {
+	case m.opts.Path != "":
+		return inst, SourceConfigured
+	case inst.Name == NameHeadlessShell:
+		return inst, SourceCache
+	default:
+		return inst, SourcePath
+	}
+}
+
+func (m *Manager) find(ctx context.Context, download bool) (Installation, string, error) {
 	if m.opts.Path != "" {
-		return Validate(m.opts.Path)
+		inst, err := Validate(m.opts.Path)
+		return inst, SourceConfigured, err
 	}
 	if found := m.opts.Discover(); len(found) > 0 {
-		return found[0], nil
+		return found[0], SourcePath, nil
 	}
 	f := m.fetcher()
 	if f.Dir == "" {
-		return Installation{}, fmt.Errorf("%w: install Chrome, Chromium, Edge or Brave, or set the browser path", ErrNoBrowser)
+		return Installation{}, "", fmt.Errorf("%w: install Chrome, Chromium, Edge or Brave, or set the browser path", ErrNoBrowser)
 	}
 	if cached, ok := f.Cached(); ok {
-		return cached, nil
+		return cached, SourceCache, nil
 	}
-	if !m.opts.AutoDownload {
-		return Installation{}, fmt.Errorf("%w: install Chrome, Chromium, Edge or Brave, set the browser path, or allow downloading chrome-headless-shell", ErrNoBrowser)
+	if !download || !m.opts.AutoDownload {
+		return Installation{}, "", fmt.Errorf("%w: install Chrome, Chromium, Edge or Brave, set the browser path, or allow downloading chrome-headless-shell", ErrNoBrowser)
 	}
 	m.log.Info("browser: downloading chrome-headless-shell")
 	inst, err := f.Fetch(ctx)
 	if err != nil {
-		return Installation{}, fmt.Errorf("%w: %w", ErrNoBrowser, err)
+		return Installation{}, "", fmt.Errorf("%w: %w", ErrNoBrowser, err)
 	}
-	return inst, nil
+	return inst, SourceDownload, nil
 }
 
 // noop is an action that does nothing; running it starts the browser or tab

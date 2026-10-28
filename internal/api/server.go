@@ -78,6 +78,11 @@ type Deps struct {
 	Refresh *service.RefreshService
 	// Browser is the service behind the /v1/browser operations; 503 while nil.
 	Browser *service.BrowserService
+	// System describes the daemon for get-system-info; 503 while nil.
+	System SystemSource
+	// Lifecycle stops or restarts the daemon (shutdown-daemon,
+	// restart-daemon); 503 while nil.
+	Lifecycle Lifecycle
 }
 
 // Server is the REST API server.
@@ -105,6 +110,8 @@ type Server struct {
 	capture     *service.CaptureService
 	refresh     *service.RefreshService
 	browser     *service.BrowserService
+	system      SystemSource
+	lifecycle   Lifecycle
 
 	mu     sync.RWMutex
 	public map[string]struct{} // mux patterns ("GET /v1/health") that need no token
@@ -163,6 +170,8 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		capture:     deps.Capture,
 		refresh:     deps.Refresh,
 		browser:     deps.Browser,
+		system:      deps.System,
+		lifecycle:   deps.Lifecycle,
 	}
 	useProblemModel()
 	s.api = humago.New(s.mux, humaConfig(version))
@@ -175,6 +184,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 
 	registerSettingsSchemas(s.api.OpenAPI().Components.Schemas)
 	s.registerHealth()
+	s.registerSystem()
 	s.registerEvents()
 	s.registerTasks()
 	s.registerQueues()
@@ -223,12 +233,22 @@ func (s *Server) API() huma.API { return s.api }
 // until ctx is cancelled, then shuts down gracefully. It returns nil on a
 // clean shutdown.
 func (s *Server) Run(ctx context.Context) error {
+	ln, err := s.Listen(ctx)
+	if err != nil {
+		return err
+	}
+	return s.Serve(ctx, ln)
+}
+
+// Listen binds cfg.Server.Address. With port 0 the operating system picks a
+// free port; ln.Addr() tells which one. Pass the listener to Serve.
+func (s *Server) Listen(ctx context.Context) (net.Listener, error) {
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", s.cfg.Server.Address)
 	if err != nil {
-		return fmt.Errorf("api: listen %q: %w", s.cfg.Server.Address, err)
+		return nil, fmt.Errorf("api: listen %q: %w", s.cfg.Server.Address, err)
 	}
-	return s.Serve(ctx, ln)
+	return ln, nil
 }
 
 // Serve serves on ln until ctx is cancelled, then shuts down gracefully within
