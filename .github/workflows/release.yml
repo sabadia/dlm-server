@@ -25,8 +25,8 @@ jobs:
       - name: Choose the publishers that are configured
         id: publishers
         env:
-          HOMEBREW: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-          SCOOP: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+          HOMEBREW: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          SCOOP: ${{ secrets.SCOOP_BUCKET_DEPLOY_KEY }}
           WINGET: ${{ secrets.WINGET_GITHUB_TOKEN }}
         run: |
           skip=""
@@ -41,6 +41,6 @@ jobs:
           args: release --clean ${{ steps.publishers.outputs.skip != '' && format('--skip={0}', steps.publishers.outputs.skip) || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-          SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          SCOOP_BUCKET_DEPLOY_KEY: ${{ secrets.SCOOP_BUCKET_DEPLOY_KEY }}
           WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}

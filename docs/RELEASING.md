@@ -28,14 +28,23 @@ Every binary is built with `CGO_ENABLED=0`, so the archives run on a bare system
 
 | Manager | Install | Needs |
 |---|---|---|
-| Homebrew (macOS, Linux) | `brew install sabadia/tap/dlm` | repository `sabadia/homebrew-tap`; secret `HOMEBREW_TAP_GITHUB_TOKEN` (write access to it) |
-| Scoop (Windows) | `scoop bucket add sabadia https://github.com/sabadia/scoop-bucket` then `scoop install dlm` | repository `sabadia/scoop-bucket`; secret `SCOOP_BUCKET_GITHUB_TOKEN` |
-| winget (Windows) | `winget install sabadia.dlm` | a fork `sabadia/winget-pkgs` of `microsoft/winget-pkgs`; secret `WINGET_GITHUB_TOKEN` (can push to the fork and open pull requests); the first submission is reviewed by hand by the winget team |
+| Homebrew (macOS, Linux) | `brew install sabadia/tap/dlm` | repository `sabadia/homebrew-tap` with a deploy key (write access to that repository only); its private key is the secret `HOMEBREW_TAP_DEPLOY_KEY` |
+| Scoop (Windows) | `scoop bucket add sabadia https://github.com/sabadia/scoop-bucket` then `scoop install dlm` | repository `sabadia/scoop-bucket` with a deploy key; secret `SCOOP_BUCKET_DEPLOY_KEY` |
+| winget (Windows) | `winget install sabadia.dlm` | the fork `sabadia/winget-pkgs` of `microsoft/winget-pkgs`; secret `WINGET_GITHUB_TOKEN`, a classic personal access token with the `public_repo` scope (it must open the pull request on `microsoft/winget-pkgs`, which no repository-scoped credential can); the first submission is reviewed by hand by the winget team |
 | apt / dnf | install the downloaded `.deb` / `.rpm` | nothing: the packages are release assets, not a repository |
 
 A publisher whose secret is not set is skipped, so a release works before the
 repositories exist. The GitHub release itself only needs the built-in
 `GITHUB_TOKEN`.
+
+### Rotating a deploy key
+
+```sh
+ssh-keygen -t ed25519 -N "" -f key -C "dlm-server release"
+gh repo deploy-key add key.pub --repo sabadia/homebrew-tap --title "dlm-server release workflow" --allow-write
+gh secret set HOMEBREW_TAP_DEPLOY_KEY --repo sabadia/dlm-server < key
+rm key key.pub       # then delete the old deploy key in the tap's settings
+```
 
 ## Trying it without publishing
 
