@@ -133,7 +133,7 @@ func (r queueRepo) Update(ctx context.Context, q *domain.Queue) error {
 func (r queueRepo) Delete(ctx context.Context, id string) error {
 	n, err := r.s.write().DeleteQueue(ctx, id)
 	if isForeignKeyViolation(err) {
-		return domain.Conflict("queue %q still has tasks", id)
+		return domain.ConflictCode("queue.not_empty", map[string]string{"queueId": id}, "queue %q still has tasks", id)
 	}
 	if err != nil {
 		return fmt.Errorf("storage: delete queue %q: %w", id, err)

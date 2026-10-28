@@ -18,10 +18,11 @@ generate-check:
 	sqlc diff -f internal/storage/sqlite/sqlc.yaml
 
 # Regenerate the reference documents: the command reference and the OpenAPI
-# document (a test fails when they are stale).
+# documents (a test fails when they are stale).
 docs:
 	go run ./cmd/dlm docs > docs/CLI.md
 	go run ./cmd/dlm openapi > docs/openapi.json
+	go run ./cmd/dlm openapi --oas 3.0 > docs/openapi-3.0.json
 
 fmt:
 	golangci-lint fmt ./...

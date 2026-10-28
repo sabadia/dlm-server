@@ -87,7 +87,7 @@ func TestHealthJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(r.stdout), &h); err != nil {
 		t.Fatalf("output is not JSON: %v\n%s", err, r.stdout)
 	}
-	if h != (client.Health{Status: "ok", Version: testSrvVersion, Authenticated: true}) {
+	if h != (client.Health{Status: "ok", Version: testSrvVersion, APIVersion: api.APIVersion, MinClientAPI: api.MinClientAPI, Authenticated: true}) {
 		t.Errorf("health = %+v", h)
 	}
 }
@@ -99,8 +99,8 @@ func TestHealthTableAndYAML(t *testing.T) {
 		t.Fatalf("exit %d, stderr: %s", r.code, r.stderr)
 	}
 	lines := strings.Split(strings.TrimSpace(r.stdout), "\n")
-	if len(lines) != 2 || strings.Join(strings.Fields(lines[0]), " ") != "STATUS VERSION AUTHENTICATED" ||
-		strings.Join(strings.Fields(lines[1]), " ") != "ok "+testSrvVersion+" true" {
+	if len(lines) != 2 || strings.Join(strings.Fields(lines[0]), " ") != "STATUS VERSION API AUTHENTICATED" ||
+		strings.Join(strings.Fields(lines[1]), " ") != "ok "+testSrvVersion+" 1 true" {
 		t.Errorf("table output:\n%s", r.stdout)
 	}
 

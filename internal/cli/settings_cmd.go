@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -34,6 +35,7 @@ func (a *app) newSettingsCommand() *cobra.Command {
 		a.newSettingsPatchCommand(true),
 		a.newSettingsReplaceCommand(),
 		a.newSettingsReadCommand("defaults", "Show the built-in default settings", "get-default-settings", (*client.Client).DefaultSettings),
+		a.newSettingsSchemaCommand(),
 	)
 	return cmd
 }
@@ -136,4 +138,50 @@ func (a *app) newSettingsReplaceCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "settings file (JSON or YAML; '-' for stdin)")
 	return cmd
+}
+
+// newSettingsSchemaCommand builds `settings schema`: the machine-readable
+// description of every settings field (JSON/YAML: the document; table: one
+// row per field).
+func (a *app) newSettingsSchemaCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:         "schema",
+		Short:       "Describe the settings fields (type, group, bounds, levels)",
+		Args:        cobra.NoArgs,
+		Annotations: map[string]string{annotationOperationID: "get-settings-schema"},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			c, err := a.newClient(cmd, client.DefaultTimeout)
+			if err != nil {
+				return err
+			}
+			doc, err := c.SettingsSchema(cmd.Context())
+			if err != nil {
+				return err //nolint:wrapcheck // client errors are already user-facing
+			}
+			return a.printer(cmd).Print(doc, func() output.Table {
+				return output.Table{Columns: []string{"path", "type", "group", "levels", "description"}, Rows: settingsSchemaRows(doc)}
+			})
+		},
+	}
+}
+
+// settingsSchemaRows renders the get-settings-schema document as table rows.
+func settingsSchemaRows(raw json.RawMessage) [][]string {
+	var doc struct {
+		Fields []struct {
+			Path        string   `json:"path"`
+			Type        string   `json:"type"`
+			Group       string   `json:"group"`
+			Description string   `json:"description"`
+			Levels      []string `json:"levels"`
+		} `json:"fields"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return [][]string{{"(invalid)", string(raw), "", "", ""}}
+	}
+	rows := make([][]string, 0, len(doc.Fields))
+	for _, f := range doc.Fields {
+		rows = append(rows, []string{f.Path, f.Type, f.Group, strings.Join(f.Levels, ","), f.Description})
+	}
+	return rows
 }

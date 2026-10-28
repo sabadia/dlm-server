@@ -11,9 +11,13 @@ import (
 
 // Health is the response of the get-health operation.
 type Health struct {
-	Status        string `json:"status"`
-	Version       string `json:"version"`
-	Authenticated bool   `json:"authenticated"`
+	Status  string `json:"status"`
+	Version string `json:"version"`
+	// APIVersion is the daemon's REST API version; MinClientAPI the oldest
+	// client API version it still supports.
+	APIVersion    int  `json:"apiVersion"`
+	MinClientAPI  int  `json:"minClientApi"`
+	Authenticated bool `json:"authenticated"`
 }
 
 // Health calls get-health (GET /v1/health). It does not require a token;

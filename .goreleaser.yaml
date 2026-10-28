@@ -13,6 +13,7 @@ before:
     - sh -c 'go run ./cmd/dlm completion zsh > completions/_dlm'
     - sh -c 'go run ./cmd/dlm completion fish > completions/dlm.fish'
     - sh -c 'go run -ldflags "-X main.version={{ .Version }}" ./cmd/dlm openapi > "release-assets/dlm_{{ .Version }}_openapi.json"'
+    - sh -c 'go run -ldflags "-X main.version={{ .Version }}" ./cmd/dlm openapi --oas 3.0 > "release-assets/dlm_{{ .Version }}_openapi-3.0.json"'
 
 builds:
   - id: dlm
@@ -136,9 +137,11 @@ release:
     owner: sabadia
     name: dlm-server
   prerelease: auto
-  # The REST API's OpenAPI 3.1 document of this version, for client generators.
+  # The REST API's OpenAPI 3.1 document of this version, for client generators,
+  # and its 3.0.3 downgrade for generators that do not read 3.1 yet.
   extra_files:
     - glob: release-assets/dlm_{{ .Version }}_openapi.json
+    - glob: release-assets/dlm_{{ .Version }}_openapi-3.0.json
 
 changelog:
   sort: asc

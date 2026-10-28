@@ -18,7 +18,12 @@ const (
 )
 
 type settingsOutput struct {
+	ETag string `header:"ETag" doc:"Version of the settings layer; send it as If-Match to update only if unchanged"`
 	Body settings.Settings
+}
+
+func newSettingsOutput(g settings.Settings) *settingsOutput {
+	return &settingsOutput{ETag: settings.ETag(g), Body: g}
 }
 
 func (s *Server) registerSettings() {
@@ -39,7 +44,7 @@ func (s *Server) registerSettings() {
 		Summary:     "Replace the global settings",
 		Description: "Replaces the global settings layer as a whole.",
 		Tags:        []string{tagSettings},
-		Errors:      []int{http.StatusUnprocessableEntity, http.StatusServiceUnavailable},
+		Errors:      []int{http.StatusPreconditionFailed, http.StatusUnprocessableEntity, http.StatusServiceUnavailable},
 	}, s.replaceSettings)
 
 	Register(s, huma.Operation{
@@ -50,7 +55,7 @@ func (s *Server) registerSettings() {
 		Description: "Applies an RFC 7396 JSON merge patch to the global settings layer (null unsets a field). " +
 			"Accepts application/json and application/merge-patch+json.",
 		Tags:   []string{tagSettings},
-		Errors: []int{http.StatusUnprocessableEntity, http.StatusServiceUnavailable},
+		Errors: []int{http.StatusPreconditionFailed, http.StatusUnprocessableEntity, http.StatusServiceUnavailable},
 	}, s.patchSettings)
 	s.allowMergePatch(http.MethodPatch, "/v1/settings")
 
@@ -63,6 +68,24 @@ func (s *Server) registerSettings() {
 		Tags:        []string{tagSettings},
 		Errors:      []int{http.StatusServiceUnavailable},
 	}, s.getDefaultSettings)
+
+	Register(s, huma.Operation{
+		OperationID: "get-settings-schema",
+		Method:      http.MethodGet,
+		Path:        "/v1/settings/schema",
+		Summary:     "Describe the settings fields",
+		Description: "Returns one entry per settings field with its type, group, unit, numeric bounds, accepted values and " +
+			"the levels (default, global, queue, task) that may set it, for building generic settings forms.",
+		Tags: []string{tagSettings},
+	}, s.getSettingsSchema)
+}
+
+type settingsSchemaOutput struct {
+	Body settings.Schema
+}
+
+func (s *Server) getSettingsSchema(_ context.Context, _ *struct{}) (*settingsSchemaOutput, error) {
+	return &settingsSchemaOutput{Body: settings.DescribeSchema()}, nil
 }
 
 // allowMergePatch documents application/merge-patch+json as an accepted
@@ -97,34 +120,42 @@ func (s *Server) getSettings(ctx context.Context, _ *struct{}) (*settingsOutput,
 	if err != nil {
 		return nil, s.fail(ctx, "get-settings", err, locBody)
 	}
-	return &settingsOutput{Body: g}, nil
+	return newSettingsOutput(g), nil
 }
 
-func (s *Server) replaceSettings(ctx context.Context, in *struct{ Body settings.Settings }) (*settingsOutput, error) {
+func (s *Server) replaceSettings(ctx context.Context, in *struct {
+	IfMatch string `header:"If-Match" doc:"ETag of the settings last read; the update fails with 412 (settings.changed) if they changed since"`
+	Body    settings.Settings
+},
+) (*settingsOutput, error) {
 	if s.settings == nil {
 		return nil, errServicesUnavailable()
 	}
-	g, err := s.settings.ReplaceGlobal(ctx, in.Body)
+	g, err := s.settings.ReplaceGlobalIfMatch(ctx, in.IfMatch, in.Body)
 	if err != nil {
 		return nil, s.fail(ctx, "replace-settings", err, locBody)
 	}
-	return &settingsOutput{Body: g}, nil
+	return newSettingsOutput(g), nil
 }
 
-func (s *Server) patchSettings(ctx context.Context, in *struct{ Body SettingsPatch }) (*settingsOutput, error) {
+func (s *Server) patchSettings(ctx context.Context, in *struct {
+	IfMatch string `header:"If-Match" doc:"ETag of the settings last read; the update fails with 412 (settings.changed) if they changed since"`
+	Body    SettingsPatch
+},
+) (*settingsOutput, error) {
 	if s.settings == nil {
 		return nil, errServicesUnavailable()
 	}
-	g, err := s.settings.PatchGlobal(ctx, in.Body)
+	g, err := s.settings.PatchGlobalIfMatch(ctx, in.IfMatch, in.Body)
 	if err != nil {
 		return nil, s.fail(ctx, "patch-settings", err, locBody)
 	}
-	return &settingsOutput{Body: g}, nil
+	return newSettingsOutput(g), nil
 }
 
 func (s *Server) getDefaultSettings(_ context.Context, _ *struct{}) (*settingsOutput, error) {
 	if s.settings == nil {
 		return nil, errServicesUnavailable()
 	}
-	return &settingsOutput{Body: s.settings.Defaults()}, nil
+	return newSettingsOutput(s.settings.Defaults()), nil
 }

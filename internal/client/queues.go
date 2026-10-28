@@ -115,6 +115,11 @@ func (c *Client) DefaultSettings(ctx context.Context) (json.RawMessage, error) {
 	return c.settingsCall(ctx, http.MethodGet, "/v1/settings/defaults", "application/json", nil)
 }
 
+// SettingsSchema calls get-settings-schema (GET /v1/settings/schema).
+func (c *Client) SettingsSchema(ctx context.Context) (json.RawMessage, error) {
+	return c.settingsCall(ctx, http.MethodGet, "/v1/settings/schema", "application/json", nil)
+}
+
 func (c *Client) settingsCall(ctx context.Context, method, path, contentType string, in any) (json.RawMessage, error) {
 	var out json.RawMessage
 	if err := c.doAs(ctx, method, path, contentType, in, &out); err != nil {

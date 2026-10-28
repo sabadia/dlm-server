@@ -164,6 +164,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		refresh:     deps.Refresh,
 		browser:     deps.Browser,
 	}
+	useProblemModel()
 	s.api = humago.New(s.mux, humaConfig(version))
 
 	handler, err := s.buildHandler()

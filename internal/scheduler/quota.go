@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 )
@@ -20,18 +21,7 @@ const globalScope = ""
 
 // QuotaData is the payload of quota.exhausted and quota.reset events.
 // Events of a queue's quota also carry the queue ID in Event.QueueID.
-type QuotaData struct {
-	Scope   string            `json:"scope"` // QuotaScopeGlobal or QuotaScopeQueue
-	QueueID string            `json:"queueId,omitempty"`
-	Bytes   int64             `json:"bytes"`
-	Period  settings.Duration `json:"period"`
-	// Used is the bytes counted in the current window (0 after a reset).
-	Used int64 `json:"used"`
-	// WindowStart and ResetsAt bound the current window; both are omitted
-	// after a reset (the next window starts with the next byte).
-	WindowStart time.Time `json:"windowStart,omitzero"`
-	ResetsAt    time.Time `json:"resetsAt,omitzero"`
-}
+type QuotaData = events.QuotaData
 
 // QuotaUsage is a snapshot of one quota scope.
 type QuotaUsage struct {

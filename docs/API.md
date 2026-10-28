@@ -34,7 +34,14 @@ example); requests from other origins are refused, and there is no wildcard.
   (`application/problem+json`): `status`, `title`, `detail`, and `errors[]` with a
   `location` for validation failures. The status says what happened: `404` unknown
   id, `409` conflict (duplicate download, name taken), `422` invalid input, `503`
-  while the daemon is starting or a feature is not wired.
+  while the daemon is starting or a feature is not wired. Every problem also has
+  a stable machine-readable `code` (for example `task.not_found`,
+  `queue.name_taken`, `task.duplicate`, `settings.invalid`) and a `params` map
+  with the values of the message (`{"taskId": "…"}`); its `type` is
+  `urn:dlm:problem:<code>`. Clients localise their own message from the code and
+  keep `detail` as the English fallback. Validation failures keep one entry per
+  field in `errors[]`. Codes are part of the API: new ones may appear, existing
+  ones do not change meaning.
 - **Settings** are layered Global → Queue → Task. A value that is absent or `null`
   inherits from the layer above. `GET /v1/tasks/{id}/settings/effective` returns
   every setting with the level it comes from.
@@ -42,6 +49,17 @@ example); requests from other origins are refused, and there is no wildcard.
   [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) merge patch
   (`Content-Type: application/merge-patch+json`): a field is set, or removed with
   `null`.
+- **Lost updates**: `GET /v1/settings` returns an `ETag`; send it as `If-Match`
+  with `PUT` or `PATCH /v1/settings` to update only if nobody changed the
+  settings since (`412` with code `settings.changed` otherwise). Without the
+  header the update is unconditional.
+- **Settings schema**: `GET /v1/settings/schema` lists every settings field with its
+  type, group, unit, numeric bounds, accepted values and the levels that may set it,
+  so a client can build a settings form without hard-coding the fields.
+- **Versions**: `GET /v1/health` reports `apiVersion` (the revision of this API) and
+  `minClientApi` (the oldest client revision still supported). The OpenAPI document is
+  served as 3.1 at `/openapi.json` and as a 3.0.3 downgrade at `/openapi-3.0.json`
+  (`dlm openapi --oas 3.0`); both are release assets.
 - **Lists** are paged with a cursor: pass the `nextCursor` of a page as `cursor` to
   get the next one, with the same `sort`. `GET /v1/tasks` filters by `queueId`,
   `status`, and `q` (text in the name or URL).
@@ -85,7 +103,8 @@ Each event is `id: <bootID>-<seq>`, `event: <type>`, `data: <JSON>`. Types:
 per second at most), `task.deleted`, `task.refresh`, `queue.created`,
 `queue.updated`, `queue.deleted`, `queue.completed`, `queue.action_cancelled`,
 `settings.updated`, `quota.exhausted` and `quota.reset`. Filter with `types`,
-`taskId` and `queueId`.
+`taskId` and `queueId`. The OpenAPI document describes every event type with its
+own payload schema (`StreamEvent` is a `oneOf` discriminated by `type`).
 
 On reconnect send `Last-Event-ID`: missed events are replayed. A `reset` event
 (`restart`, `gap` or `overflow`) means they could not be: refetch the state you

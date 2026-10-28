@@ -1,0 +1,35 @@
+schema_version: 1
+id: 01a183cb-a49e-7d80-acce-4dfd54112b3f
+status: draft
+created_at: '2026-10-28T18:35:23Z'
+updated_at: '2026-10-28T18:35:23Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P13.11: stable machine error codes, typed SSE event schemas, OpenAPI 3.0.3 release asset, apiVersion in health, settings schema endpoint and ETag/If-Match on global settings, so a generated client and schema-driven forms need no hand-written mapping'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/api/problem.go
+  start_line: null
+  end_line: null
+- path: internal/api/event_schemas.go
+  start_line: null
+  end_line: null
+- path: internal/settings/schema.go
+  start_line: null
+  end_line: null
+- path: internal/service/settings.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

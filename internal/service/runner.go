@@ -36,19 +36,10 @@ var (
 const DefaultProgressInterval = 500 * time.Millisecond
 
 // ProgressData is the payload of task.progress events.
-type ProgressData struct {
-	Downloaded  int64 `json:"downloaded"`
-	Size        int64 `json:"size"`
-	Speed       int64 `json:"speed"` // bytes per second, smoothed
-	Connections int   `json:"connections"`
-}
+type ProgressData = events.ProgressData
 
 // StatusData is the payload of task.status events.
-type StatusData struct {
-	From  domain.TaskStatus `json:"from"`
-	To    domain.TaskStatus `json:"to"`
-	Error *domain.TaskError `json:"error,omitempty"`
-}
+type StatusData = events.StatusData
 
 // ByteCounter receives the bytes each run transfers, for byte quotas. n is
 // the number of bytes the task downloaded since the previous call (always
