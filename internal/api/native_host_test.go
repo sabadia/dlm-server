@@ -30,7 +30,7 @@ func newNativeHostServer(t *testing.T, origins ...string) (*Server, string) {
 		Token: testToken, Version: testVersion,
 		NativeHost: func() (*nativehost.Installer, error) {
 			return &nativehost.Installer{
-				Executable: "/usr/local/bin/dlm", ConfigDir: filepath.Join(home, "cfg"), DataDir: filepath.Join(home, "cfg"),
+				Executable: filepath.Join(home, "bin", "dlm"), ConfigDir: filepath.Join(home, "cfg"), DataDir: filepath.Join(home, "cfg"),
 				ServerURL: "http://127.0.0.1:1", GOOS: "linux", Home: home, UserConfigDir: filepath.Join(home, ".config"), Registry: noRegistry{},
 			}, nil
 		},

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,9 @@ import (
 )
 
 func TestServiceInstallStatusUninstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("simulates a Linux host; the test binary's own path is a Windows path")
+	}
 	cfgDir := t.TempDir()
 	var mu sync.Mutex
 	var calls []string
