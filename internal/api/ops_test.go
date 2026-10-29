@@ -170,7 +170,15 @@ func TestSettingsSchemaComplete(t *testing.T) {
 			}
 			path := prefix + name
 			if p.Ref != "" {
-				walk(path+".", reg.SchemaFromRef(p.Ref))
+				ref := reg.SchemaFromRef(p.Ref)
+				// A referenced object without properties is the schema huma
+				// makes of an Optional[T] that has no alias: it rejects every
+				// real value (dlm-server#128).
+				if ref.Type == huma.TypeObject && len(ref.Properties) == 0 && ref.AdditionalProperties != true {
+					t.Errorf("setting %s: %s is an empty object; add an alias in registerSettingsSchemas", path, p.Ref)
+					continue
+				}
+				walk(path+".", ref)
 				continue
 			}
 			if p.Type == "" || !p.Nullable {
@@ -185,6 +193,44 @@ func TestSettingsSchemaComplete(t *testing.T) {
 	walk("", root)
 	if got := len(settings.SetPaths(settings.Defaults("x"))); got == 0 {
 		t.Fatal("no default settings")
+	}
+}
+
+// A queue accepts the settings the app and CLI send: the three values that
+// were once refused because their schema was empty (dlm-server#128).
+func TestQueueSettingsAcceptQuotaProfilesAndAction(t *testing.T) {
+	f := newOpsFixture(t)
+	q := f.createQueue(t, "night")
+	// The daemon wants an absolute path, which looks different per platform.
+	program, err := json.Marshal(filepath.Join(t.TempDir(), "notify"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{
+		"speedLimit": 2000000,
+		"torrent": {"seedRatio": 1.5, "trackers": ["udp://tracker.example:80"]},
+		"schedule": {"windows": [{"days": ["mon"], "start": "22:00", "end": "00:00"}]},
+		"speedProfiles": [{"windows": [{"days": ["mon"], "start": "10:00", "end": "12:00"}], "speedLimit": 5}],
+		"quota": {"bytes": 1000, "period": "24h0m0s"},
+		"onQueueComplete": {"action": "command", "command": ` + string(program) + `, "args": ["a"], "delay": "2m0s"}
+	}`
+	var got domain.Queue
+	f.call(t, http.MethodPut, "/v1/queues/"+q.ID+"/settings", body, http.StatusOK, &got)
+	if v, ok := got.Settings.Quota.Get(); !ok || v.Bytes != 1000 {
+		t.Errorf("quota = %+v (set %v)", v, ok)
+	}
+	if v, ok := got.Settings.OnQueueComplete.Get(); !ok || v.Action != settings.QueueActionCommand {
+		t.Errorf("onQueueComplete = %+v (set %v)", v, ok)
+	}
+	if v, ok := got.Settings.SpeedProfiles.Get(); !ok || len(v) != 1 || v[0].SpeedLimit != 5 {
+		t.Errorf("speedProfiles = %+v (set %v)", v, ok)
+	}
+
+	// Null unsets each of them again, as the app does when a switch is off.
+	f.call(t, http.MethodPut, "/v1/queues/"+q.ID+"/settings",
+		`{"quota": null, "onQueueComplete": null, "speedProfiles": null}`, http.StatusOK, &got)
+	if got.Settings.Quota.IsSet() || got.Settings.OnQueueComplete.IsSet() || got.Settings.SpeedProfiles.IsSet() {
+		t.Errorf("settings still set after null: %+v", got.Settings)
 	}
 }
 

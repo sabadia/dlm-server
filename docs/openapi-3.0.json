@@ -1506,26 +1506,6 @@
         ],
         "type": "object"
       },
-      "OptionalFloat64": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "OptionalListSpeedProfile": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "OptionalListString": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "OptionalQueueCompleteAction": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "OptionalQuota": {
-        "additionalProperties": false,
-        "type": "object"
-      },
       "PageResult": {
         "additionalProperties": false,
         "properties": {
@@ -2633,7 +2613,30 @@
             "type": "integer"
           },
           "onQueueComplete": {
-            "$ref": "#/components/schemas/OptionalQueueCompleteAction"
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "args": {
+                "items": {
+                  "type": "string"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "command": {
+                "type": "string"
+              },
+              "delay": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": "object"
           },
           "postActions": {
             "items": {
@@ -2666,7 +2669,22 @@
             "type": "array"
           },
           "quota": {
-            "$ref": "#/components/schemas/OptionalQuota"
+            "additionalProperties": false,
+            "nullable": true,
+            "properties": {
+              "bytes": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "period": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "bytes",
+              "period"
+            ],
+            "type": "object"
           },
           "refresh": {
             "$ref": "#/components/schemas/RefreshSettings"
@@ -2700,7 +2718,11 @@
             "type": "integer"
           },
           "speedProfiles": {
-            "$ref": "#/components/schemas/OptionalListSpeedProfile"
+            "items": {
+              "$ref": "#/components/schemas/SpeedProfile"
+            },
+            "nullable": true,
+            "type": "array"
           },
           "tlsVerify": {
             "nullable": true,
@@ -2895,6 +2917,30 @@
         },
         "required": [
           "currentUrl"
+        ],
+        "type": "object"
+      },
+      "SpeedProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "speedLimit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/TimeWindow"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "windows",
+          "speedLimit"
         ],
         "type": "object"
       },
@@ -3746,14 +3792,20 @@
             "type": "boolean"
           },
           "seedRatio": {
-            "$ref": "#/components/schemas/OptionalFloat64"
+            "format": "double",
+            "nullable": true,
+            "type": "number"
           },
           "seedTime": {
             "nullable": true,
             "type": "string"
           },
           "trackers": {
-            "$ref": "#/components/schemas/OptionalListString"
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
           }
         },
         "type": "object"
