@@ -312,6 +312,14 @@ of the same name, are sent with the download's requests, and are removed when th
 is deleted (or after 7 days); `store` adds them to the cookie store. The default is `task` for an
 extension token and `store` for any other token.
 
+**Quality picker and manifests.** `POST /v1/resolve` returns `formats` for a stream, best first:
+HLS variants, DASH video representations, and for a video page (`resolverKind: ytdlp`) one format per
+height plus the best audio-only one. Each has an `id`, a `label` (`1080p`, `720p, 2.5 Mbit/s`,
+`audio only (m4a)`), the size in pixels, bandwidth, codecs, container and, when yt-dlp knows it, the
+size. Passing a format's `id` as `source.mediaHint` downloads that one. A manifest whose URL does not
+end in `.m3u8` or `.mpd` (a signed or API link) is taken as HLS or DASH when the source says
+`streamKind: hls|dash`; a capture sets it from the media candidate's `kind`.
+
 **What the token may do.** Hand downloads over and follow them: `POST /v1/capture`,
 `POST /v1/tasks`, `/v1/tasks/batch` and `/v1/tasks/expand`, `POST /v1/resolve` and
 `/v1/resolve/batch`, `POST /v1/browser/resolve` (and downloading a candidate),

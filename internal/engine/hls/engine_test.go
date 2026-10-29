@@ -733,6 +733,10 @@ func TestResolve(t *testing.T) {
 	if probe.Engine != EngineName || probe.Suggested == "" || !strings.HasSuffix(probe.Suggested, ".mp4") || probe.Resource.Size != -1 || len(probe.Resource.Files) != 1 {
 		t.Errorf("probe = %+v", probe)
 	}
+	// The master playlist's streams come back for a picker.
+	if len(probe.Formats) != 1 || probe.Formats[0].ID != "360p" || probe.Formats[0].Width != 640 {
+		t.Errorf("formats = %+v", probe.Formats)
+	}
 	if _, err := v.e.Resolve(t.Context(), engine.Request{Source: domain.Source{CurrentURL: o.url("/master.m3u8"), MediaHint: "nope"}, Settings: v.settings()}); err == nil {
 		t.Error("an unmatched media hint was accepted")
 	}
@@ -874,4 +878,23 @@ func segmentedIV(seq uint64) []byte {
 	iv := make([]byte, 16)
 	binary.BigEndian.PutUint64(iv[8:], seq)
 	return iv
+}
+
+func TestMatchTakesAManifestWithoutASuffixWhenTheSourceSaysSo(t *testing.T) {
+	e := &Engine{}
+	plain := domain.Source{CurrentURL: "https://api.example.com/v1/stream/abc?sig=1"}
+	if e.Match(plain) {
+		t.Error("an ordinary link was taken")
+	}
+	plain.StreamKind = domain.StreamHLS
+	if !e.Match(plain) {
+		t.Error("a link the extension saw as HLS was not taken")
+	}
+	plain.ResolverKind = domain.ResolverYtdlp
+	if e.Match(plain) {
+		t.Error("an HLS hint beats the yt-dlp resolver")
+	}
+	if !e.Match(domain.Source{CurrentURL: "https://example.com/a/index.m3u8"}) {
+		t.Error("the suffix no longer matches")
+	}
 }

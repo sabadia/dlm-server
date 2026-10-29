@@ -50,6 +50,9 @@ type ResolveResult struct {
 	Resource  domain.Resource `json:"resource"`
 	Name      string          `json:"name"`
 	ExpiresAt time.Time       `json:"expiresAt"`
+	// Formats are the qualities a stream (HLS, DASH, a video page) offers, best
+	// first. Pass a format's id as source.mediaHint to download that one.
+	Formats []domain.Format `json:"formats,omitempty"`
 	// DuplicateOf is set when another task already has this link, or the
 	// file name and size the probe found.
 	DuplicateOf *DuplicateHint `json:"duplicateOf,omitempty"`
@@ -152,6 +155,7 @@ func (s *TaskService) Resolve(ctx context.Context, in ResolveInput) (*ResolveRes
 		Source:   probe.Source,
 		Resource: probe.Resource,
 		Name:     strings.TrimSpace(probe.Suggested),
+		Formats:  probe.Formats,
 	}
 	if dup, err := s.d.Store.Tasks().FindDuplicate(ctx, storage.DuplicateQuery{
 		URLs: []string{probe.Source.CurrentURL, probe.Source.OriginalURL}, Name: res.Name, Size: probe.Resource.Size,

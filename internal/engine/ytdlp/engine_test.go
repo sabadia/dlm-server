@@ -572,3 +572,31 @@ func TestBinaryMissingIsFatal(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestPickFormatsOffersOneVideoPerHeightAndTheBestAudio(t *testing.T) {
+	in, err := parseInfo([]byte(`{"id":"x","title":"T","ext":"mp4","formats":[
+		{"format_id":"251","ext":"webm","vcodec":"none","acodec":"opus","tbr":130,"filesize":1000},
+		{"format_id":"140","ext":"m4a","vcodec":"none","acodec":"mp4a","tbr":129},
+		{"format_id":"137","ext":"mp4","vcodec":"avc1","acodec":"none","height":1080,"width":1920,"tbr":4400,"filesize":9000},
+		{"format_id":"248","ext":"webm","vcodec":"vp9","acodec":"none","height":1080,"width":1920,"tbr":2600},
+		{"format_id":"18","ext":"mp4","vcodec":"avc1","acodec":"mp4a","height":360,"width":640,"tbr":500},
+		{"format_id":"sb0","ext":"mhtml","vcodec":"none","acodec":"none"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := in.pickFormats()
+	if len(got) != 3 {
+		t.Fatalf("formats = %+v", got)
+	}
+	// 1080p: the higher bitrate; a video-only format is paired with the best audio.
+	if got[0].ID != "137+bestaudio/137" || got[0].Label != "1080p (mp4)" || got[0].Size != 9000 || got[0].Height != 1080 {
+		t.Errorf("first = %+v", got[0])
+	}
+	// A format with sound is selected as it is.
+	if got[1].ID != "18" || got[1].Label != "360p (mp4)" || got[1].Size != -1 {
+		t.Errorf("second = %+v", got[1])
+	}
+	if got[2].ID != "251" || got[2].Kind != "audio" || got[2].Label != "audio only (webm)" {
+		t.Errorf("audio = %+v", got[2])
+	}
+}

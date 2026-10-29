@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -537,4 +538,42 @@ func parseRange(s string) (*segmented.ByteRange, error) {
 		return nil, fmt.Errorf("dash: bad byte range %q", s)
 	}
 	return &segmented.ByteRange{Offset: first, Length: last - first + 1}, nil
+}
+
+// formats lists the video representations of the first period for a picker,
+// best first. A format's id selects it through Source.MediaHint: its height
+// ("720p") when no other representation has that height, else an exact match
+// on its representation id.
+func (m *manifest) formats() []domain.Format {
+	if len(m.periods) == 0 {
+		return nil
+	}
+	var reps []rep
+	for _, r := range m.periods[0].reps {
+		if r.kind == "video" {
+			reps = append(reps, r)
+		}
+	}
+	heights := map[int]int{}
+	for _, r := range reps {
+		heights[r.height]++
+	}
+	out := make([]domain.Format, 0, len(reps))
+	for _, r := range reps {
+		id := "^" + regexp.QuoteMeta(r.id) + "$"
+		if r.height > 0 && heights[r.height] == 1 {
+			id = strconv.Itoa(r.height) + "p"
+		}
+		out = append(out, domain.Format{
+			ID: id, Label: domain.FormatLabel(r.height, int64(r.bandwidth), heights[r.height] > 1), Kind: domain.FormatVideo,
+			Height: r.height, Bandwidth: int64(r.bandwidth), Codecs: r.codecs, Size: -1,
+		})
+	}
+	slices.SortStableFunc(out, func(a, b domain.Format) int {
+		if a.Height != b.Height {
+			return b.Height - a.Height
+		}
+		return int(b.Bandwidth - a.Bandwidth)
+	})
+	return out
 }

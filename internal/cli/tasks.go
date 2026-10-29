@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -164,10 +165,11 @@ func (a *app) newResolveCommand() *cobra.Command {
 			}
 			return a.printer(cmd).Print(res, func() output.Table {
 				return output.Table{
-					Columns: []string{"resolve id", "name", "size", "ranges", "engine", "expires"},
+					Columns: []string{"resolve id", "name", "size", "ranges", "engine", "expires", "formats"},
 					Rows: [][]string{{
 						res.ResolveID, res.Name, formatSize(res.Resource.Size),
 						strconv.FormatBool(res.Resource.RangeSupported), res.Engine, res.ExpiresAt.Local().Format(time.TimeOnly),
+						formatLabels(res.Formats),
 					}},
 				}
 			})
@@ -728,4 +730,13 @@ func (a *app) printEffective(cmd *cobra.Command, eff *client.EffectiveSettings) 
 		}
 		return t
 	})
+}
+
+// formatLabels lists the qualities of a stream for a table cell.
+func formatLabels(fs []client.Format) string {
+	labels := make([]string, len(fs))
+	for i, f := range fs {
+		labels[i] = f.Label
+	}
+	return strings.Join(labels, ", ")
 }

@@ -21,6 +21,12 @@ const (
 	ResolverPlugin  ResolverKind = "plugin"  // produced by a JS plugin
 )
 
+// Stream kinds of Source.StreamKind.
+const (
+	StreamHLS  = "hls"
+	StreamDASH = "dash"
+)
+
 // Valid reports whether k is a known resolver kind.
 func (k ResolverKind) Valid() bool {
 	switch k {
@@ -57,6 +63,10 @@ type Source struct {
 	// spreads its connections over the ones that serve a file of the same
 	// size; the others are ignored.
 	Mirrors []string `json:"mirrors,omitempty"`
+	// StreamKind says that CurrentURL is an HLS ("hls") or DASH ("dash")
+	// manifest although its path does not end in .m3u8 or .mpd (a signed link,
+	// an API URL). Empty means the engines decide by the URL alone.
+	StreamKind string `json:"streamKind,omitempty"`
 	// ResolverKind defaults to direct when empty.
 	ResolverKind ResolverKind `json:"resolverKind,omitempty"`
 	Fingerprint  Fingerprint  `json:"fingerprint"`
@@ -130,6 +140,9 @@ func (s *Source) validate() error {
 		if strings.TrimSpace(d) == "" {
 			return errors.New("source: cookieDomains must not contain empty entries")
 		}
+	}
+	if s.StreamKind != "" && s.StreamKind != StreamHLS && s.StreamKind != StreamDASH {
+		return fmt.Errorf("source: streamKind must be %s or %s", StreamHLS, StreamDASH)
 	}
 	if s.ResolverKind != "" && !s.ResolverKind.Valid() {
 		return fmt.Errorf("source: unknown resolverKind %q", s.ResolverKind)

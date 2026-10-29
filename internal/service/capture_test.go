@@ -325,3 +325,21 @@ func TestCaptureTaskCookiesAreDroppedWhenTheTaskCannotBeCreated(t *testing.T) {
 		t.Errorf("cookies of a task that was never created are still there: %+v", got)
 	}
 }
+
+func TestCaptureMarksAManifestByWhatTheExtensionSaw(t *testing.T) {
+	svc, _, f := newCaptureFixture(t)
+	res, err := svc.Capture(t.Context(), CaptureInput{
+		PageURL: "https://example.com/watch",
+		MediaCandidates: []MediaCandidate{
+			{URL: "https://api.example.com/v1/stream/abc?sig=1", Kind: MediaHLS, Variant: "720p"},
+		},
+		Paused: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := f.get(t, res.Task.ID).Source
+	if src.StreamKind != domain.StreamHLS || src.MediaHint != "720p" {
+		t.Errorf("source = %+v", src)
+	}
+}

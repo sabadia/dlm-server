@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a189a9-8e3b-7829-9123-3fd3677fe1d8
+status: draft
+created_at: '2026-10-29T21:55:53Z'
+updated_at: '2026-10-29T21:55:53Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: P14.5 Formats in resolve (HLS, DASH, yt-dlp) for a quality picker, and streamKind hint for manifests without .m3u8/.mpd
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/domain/format.go
+  start_line: null
+  end_line: null
+- path: internal/engine/hls/playlist.go
+  start_line: null
+  end_line: null
+- path: internal/engine/ytdlp/info.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

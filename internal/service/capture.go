@@ -251,6 +251,14 @@ func captureSource(in CaptureInput) (domain.Source, error) {
 	if in.ResolverKind != "" {
 		src.ResolverKind = in.ResolverKind
 	}
+	// A manifest whose URL says nothing (a signed or API link) is told apart by
+	// what the extension saw.
+	switch {
+	case found && chosen.Kind == MediaHLS:
+		src.StreamKind = domain.StreamHLS
+	case found && chosen.Kind == MediaDASH:
+		src.StreamKind = domain.StreamDASH
+	}
 	if in.FinalURL != "" && in.FinalURL != primary {
 		src.RedirectURL = in.FinalURL
 	}

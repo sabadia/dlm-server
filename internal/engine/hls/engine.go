@@ -63,25 +63,30 @@ func New(env engine.Env, ff FFmpeg, opts ...Option) *Engine {
 // Name implements engine.Engine.
 func (*Engine) Name() string { return EngineName }
 
-// Match implements engine.Engine: http(s) URLs whose path ends in .m3u8.
+// Match implements engine.Engine: http(s) URLs whose path ends in .m3u8, or
+// that the source says are HLS (Source.StreamKind) although the path does not.
 func (*Engine) Match(src domain.Source) bool {
 	u, err := url.Parse(strings.TrimSpace(src.CurrentURL))
 	if err != nil || u.Host == "" {
 		return false
 	}
 	s := strings.ToLower(u.Scheme)
-	return (s == "http" || s == "https") && strings.HasSuffix(strings.ToLower(u.Path), ".m3u8")
+	if s != "http" && s != "https" {
+		return false
+	}
+	return strings.HasSuffix(strings.ToLower(u.Path), ".m3u8") || (src.StreamKind == domain.StreamHLS && src.ResolverKind != domain.ResolverYtdlp && src.ResolverKind != domain.ResolverBrowser)
 }
 
 // Resolve implements engine.Engine: it reads the playlist(s), selects the
 // variant (Source.MediaHint) and describes the result.
 func (e *Engine) Resolve(ctx context.Context, req engine.Request) (*engine.Probe, error) {
-	if _, err := e.r.Resolve(ctx, e.fe, req.Source, req.Settings); err != nil {
+	plan, err := e.r.Resolve(ctx, e.fe, req.Source, req.Settings)
+	if err != nil {
 		return nil, err //nolint:wrapcheck // engine errors are classified; kept intact
 	}
 	name := suggestName(req.Source.CurrentURL)
 	return &engine.Probe{
-		Engine: EngineName, Source: req.Source, Suggested: name,
+		Engine: EngineName, Source: req.Source, Suggested: name, Formats: plan.Formats,
 		Resource: domain.Resource{Name: name, Size: -1, Files: []domain.File{{Index: 0, Name: name, Size: -1, Selected: true}}},
 	}, nil
 }
@@ -133,6 +138,7 @@ func (frontend) Build(ctx context.Context, c segmented.Client) (*segmented.Plan,
 	if first.media != nil {
 		return p, load(0, "video", src.CurrentURL, first.media)
 	}
+	p.Formats = formats(first.master.variants)
 	v, err := selectVariant(first.master.variants, src.MediaHint)
 	if err != nil {
 		return nil, engine.Fatal(domain.ErrorCodeFatal, err)
