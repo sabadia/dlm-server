@@ -1,0 +1,26 @@
+schema_version: 1
+id: 01a185cb-8af1-7d6b-b127-b797cd7ec8dc
+status: draft
+created_at: '2026-10-29T03:54:31Z'
+updated_at: '2026-10-29T03:54:31Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: Regenerate sqlc models for the transfer_buckets table (CI generate job)
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/storage/sqlite/db/models.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

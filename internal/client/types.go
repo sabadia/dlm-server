@@ -119,6 +119,15 @@ type ResolveResult struct {
 	Resource  Resource  `json:"resource"`
 	Name      string    `json:"name"`
 	ExpiresAt time.Time `json:"expiresAt"`
+	// DuplicateOf is set when another task already has this download.
+	DuplicateOf *DuplicateHint `json:"duplicateOf,omitempty"`
+}
+
+// DuplicateHint names the task a new download would repeat.
+type DuplicateHint struct {
+	TaskID string `json:"taskId"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
 
 // EffectiveSettings are resolved settings with the level ("default",
@@ -134,6 +143,8 @@ type TaskPage struct {
 	Tasks []*Task `json:"tasks"`
 	// NextCursor is empty on the last page.
 	NextCursor string `json:"nextCursor,omitempty"`
+	// Total is the number of tasks matching the filters, when asked for.
+	Total *int64 `json:"total,omitempty"`
 }
 
 // BatchItem is the outcome of one item of a bulk operation.
@@ -142,6 +153,8 @@ type BatchItem struct {
 	OK    bool      `json:"ok"`
 	Task  *Task     `json:"task,omitempty"`
 	Error *APIError `json:"error,omitempty"`
+	// URL is the link of an imported entry.
+	URL string `json:"url,omitempty"`
 }
 
 // ResolveRequest is the request of resolve-task. Set URL or Source.
@@ -188,9 +201,22 @@ type ListTasksOptions struct {
 	QueueID string
 	Status  []string
 	Search  string
-	Sort    string // position (default) or created
-	Limit   int    // 1..500; 0 means the daemon default
-	Cursor  string
+	// Sort is position (default), created, name, size or completed; Order is
+	// asc or desc (empty: the default of the sort).
+	Sort  string
+	Order string
+	// Engine, Label (key or key=value) and Category (ID or name) narrow the list.
+	Engine, Label, Category string
+	// MinSize and MaxSize bound the size in bytes; nil means no bound.
+	MinSize, MaxSize *int64
+	// CreatedAfter, CreatedBefore, CompletedAfter and CompletedBefore bound
+	// the times (RFC 3339); empty means no bound.
+	CreatedAfter, CreatedBefore     string
+	CompletedAfter, CompletedBefore string
+	// Total asks for the number of matching tasks (TaskPage.Total).
+	Total  bool
+	Limit  int // 1..500; 0 means the daemon default
+	Cursor string
 }
 
 // TaskFilter selects tasks by queue and status for a bulk operation.

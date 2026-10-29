@@ -147,7 +147,9 @@ func (d Deps) publishQueue(typ events.Type, q *domain.Queue) {
 // task's last state when it succeeds.
 type BatchResult struct {
 	// ID is the requested task ID (empty for CreateBatch).
-	ID   string
+	ID string
+	// URL is the link of an imported entry (set by Import).
+	URL  string
 	Task *domain.Task
 	Err  error
 }

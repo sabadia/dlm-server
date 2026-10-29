@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a185c7-ca9a-7332-81d4-d84e4fa55464
+status: draft
+created_at: '2026-10-29T03:50:25Z'
+updated_at: '2026-10-29T03:50:25Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P13.7 + P13.8: system.speed events and traffic history (hour buckets per queue and engine) with a stats timeline; limits view and a temporary global speed override (turbo) shared through the rate limit manager, with limits.changed events and CLI parity'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/transfer/meter.go
+  start_line: null
+  end_line: null
+- path: internal/service/limits_service.go
+  start_line: null
+  end_line: null
+- path: internal/ratelimit/manager.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

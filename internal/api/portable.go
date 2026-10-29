@@ -34,6 +34,7 @@ type ImportTasksBody struct {
 	Paused         bool   `json:"paused,omitempty" doc:"Add the tasks paused."`
 	AllowDuplicate bool   `json:"allowDuplicate,omitempty" doc:"Add tasks even when another task has the same link, checksum, or file name and size."`
 	ExpandPatterns bool   `json:"expandPatterns,omitempty" doc:"Expand ranges in the URLs: file[001-100].jpg becomes 100 tasks."`
+	DryRun         bool   `json:"dryRun,omitempty" doc:"Create nothing: answer, per entry, whether it would be added (ok) or why not (an invalid link, a duplicate of an existing task's link)."`
 }
 
 // StatsBody is the response of get-stats.
@@ -120,7 +121,7 @@ func (s *Server) importTasks(ctx context.Context, in *struct{ Body ImportTasksBo
 	}
 	results, err := s.tasks.Import(ctx, service.ImportInput{
 		Format: in.Body.Format, Content: in.Body.Content, QueueID: in.Body.QueueID, Paused: in.Body.Paused,
-		AllowDuplicate: in.Body.AllowDuplicate, ExpandPatterns: in.Body.ExpandPatterns,
+		AllowDuplicate: in.Body.AllowDuplicate, ExpandPatterns: in.Body.ExpandPatterns, DryRun: in.Body.DryRun,
 	})
 	if err != nil {
 		return nil, s.fail(ctx, "import-tasks", err, locBody)

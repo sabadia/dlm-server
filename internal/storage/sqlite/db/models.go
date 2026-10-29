@@ -121,6 +121,14 @@ type TaskSegment struct {
 	Done   int64
 }
 
+type TransferBucket struct {
+	Bucket  int64
+	QueueID string
+	Engine  string
+	Down    int64
+	Up      int64
+}
+
 type Webhook struct {
 	ID        string
 	Url       string

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -50,17 +51,39 @@ func (d *swarmDownload) Torrent() (*domain.TorrentInfo, bool) {
 	return &domain.TorrentInfo{State: domain.TorrentSeeding, PeerCount: 3, InfoHash: "abc"}, true
 }
 
+// transferLog records what the runner reports to a TransferRecorder.
+type transferLog struct {
+	mu                 sync.Mutex
+	down, up           int64
+	queueID, engineTag string
+}
+
+func (l *transferLog) Record(_, queueID, engine string, down, up int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.down += down
+	l.up += up
+	l.queueID, l.engineTag = queueID, engine
+}
+
+func (l *transferLog) totals() (down, up int64, queueID, engine string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.down, l.up, l.queueID, l.engineTag
+}
+
 func TestRunnerReportsUploadAndExposesTheRunningTorrent(t *testing.T) {
 	f := newSvcFixture(t)
 	reg, err := engine.NewRegistry(&swarmStub{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	rec := &transferLog{}
 	defaults := settings.Defaults(f.dir)
 	runner := NewRunner(RunnerDeps{
 		Store: f.store, Engines: reg, Limits: ratelimit.NewManager(0), Bus: f.bus,
 		Defaults: func() settings.Settings { return defaults }, ProgressInterval: 10 * time.Millisecond,
-		TaskLocks: f.tasks.d.TaskLocks,
+		TaskLocks: f.tasks.d.TaskLocks, Transfer: rec,
 	})
 	d := f.tasks.d
 	d.Engines, d.Runner = reg, runner
@@ -108,6 +131,9 @@ func TestRunnerReportsUploadAndExposesTheRunningTorrent(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Errorf("Run after cancel: %v", err)
+	}
+	if _, up, queueID, eng := rec.totals(); up <= 0 || queueID != domain.MainQueueID || eng != "swarm-stub" {
+		t.Errorf("transfer recorder saw up=%d queue=%q engine=%q", up, queueID, eng)
 	}
 	if _, ok := runner.Running(task.ID); ok {
 		t.Error("Running still knows a download that ended")

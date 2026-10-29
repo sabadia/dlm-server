@@ -91,3 +91,13 @@ func (c *Category) ResolveDir(downloadDir string) string {
 	}
 	return filepath.Join(downloadDir, filepath.FromSlash(strings.ReplaceAll(c.Dir, "\\", "/")))
 }
+
+// Suffixes are the file-name endings the category's extensions stand for
+// (".iso", ".tar.gz"), for matching names.
+func (c *Category) Suffixes() []string {
+	out := make([]string, len(c.Extensions))
+	for i, e := range c.Extensions {
+		out[i] = "." + e
+	}
+	return out
+}

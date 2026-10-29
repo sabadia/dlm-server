@@ -54,10 +54,28 @@ type TaskSort string
 // Task sort orders.
 const (
 	// TaskSortPosition is queue order: priority descending, then position
-	// and creation time ascending. It is the default.
+	// and creation time ascending. It is the default and has one direction.
 	TaskSortPosition TaskSort = "position"
-	// TaskSortCreated is newest first.
+	// TaskSortCreated orders by creation time, newest first by default.
 	TaskSortCreated TaskSort = "created"
+	// TaskSortName orders by name, case-insensitively, A to Z by default.
+	TaskSortName TaskSort = "name"
+	// TaskSortSize orders by size (unknown sizes count as -1), smallest
+	// first by default.
+	TaskSortSize TaskSort = "size"
+	// TaskSortCompleted orders by completion time, oldest first by default;
+	// tasks that are not completed count as never and come first (last when
+	// descending).
+	TaskSortCompleted TaskSort = "completed"
+)
+
+// SortOrder is the direction of a listing.
+type SortOrder string
+
+// Sort directions. The empty order means the default of the sort.
+const (
+	OrderAsc  SortOrder = "asc"
+	OrderDesc SortOrder = "desc"
 )
 
 // Task listing page-size limits.
@@ -76,14 +94,39 @@ type TaskFilter struct {
 	// Search matches, case-insensitively, a substring of the task name or of
 	// its current URL. Case folding covers ASCII letters only.
 	Search string
+	// Engine restricts the listing to tasks of one engine.
+	Engine string
+	// Label restricts the listing to tasks with this label: "key" matches
+	// any value, "key=value" an exact one.
+	Label string
+	// NameSuffixes and ContentTypes together select a category: a task
+	// matches when its name ends with one of the suffixes (".iso", compared
+	// case-insensitively) or its content type is one of ContentTypes ("type/*"
+	// matches every subtype). Both empty means no restriction.
+	NameSuffixes []string
+	ContentTypes []string
+	// MinSize and MaxSize bound the size in bytes (inclusive); tasks of
+	// unknown size match neither bound.
+	MinSize, MaxSize *int64
+	// CreatedAfter/Before and CompletedAfter/Before bound the creation and
+	// completion times (inclusive); zero means unbounded. A bound on the
+	// completion time leaves out tasks that are not completed.
+	CreatedAfter, CreatedBefore     time.Time
+	CompletedAfter, CompletedBefore time.Time
 	// Sort defaults to TaskSortPosition.
 	Sort TaskSort
+	// Order is the direction; empty means the default of Sort.
+	Order SortOrder
 	// Limit is the page size: <= 0 means DefaultTaskLimit; values above
 	// MaxTaskLimit are clamped.
 	Limit int
 	// Cursor is the opaque TaskPage.NextCursor of the previous page; empty
-	// starts at the beginning. A cursor is only valid with the same Sort.
+	// starts at the beginning. A cursor is only valid with the same Sort and
+	// Order.
 	Cursor string
+	// WithTotal also counts every task matching the filters (ignoring the
+	// cursor and the limit).
+	WithTotal bool
 }
 
 // TaskPage is one page of a task listing.
@@ -91,6 +134,9 @@ type TaskPage struct {
 	Tasks []*domain.Task
 	// NextCursor is empty when there are no more tasks.
 	NextCursor string
+	// Total is the number of tasks matching the filters, set when
+	// TaskFilter.WithTotal was requested.
+	Total int64
 }
 
 // TaskRepository persists tasks.
@@ -306,6 +352,45 @@ type PluginRepository interface {
 	Delete(ctx context.Context, name string) error
 }
 
+// TransferRow is the bytes one queue and engine transferred in one hour.
+type TransferRow struct {
+	// Bucket is the start of the hour (UTC).
+	Bucket  time.Time
+	QueueID string
+	Engine  string
+	Down    int64
+	Up      int64
+}
+
+// TransferGroup says how Timeline groups its rows.
+type TransferGroup string
+
+// Timeline groupings.
+const (
+	TransferGroupNone   TransferGroup = ""
+	TransferGroupEngine TransferGroup = "engine"
+	TransferGroupQueue  TransferGroup = "queue"
+)
+
+// TransferPoint is the bytes transferred in one bucket (and group).
+type TransferPoint struct {
+	Bucket time.Time
+	// Group is the engine or queue ID when grouped, otherwise empty.
+	Group string
+	Down  int64
+	Up    int64
+}
+
+// TransferRepository persists how much was transferred per hour.
+type TransferRepository interface {
+	// Add adds the rows' bytes to what is stored for the same hour, queue and
+	// engine.
+	Add(ctx context.Context, rows []TransferRow) error
+	// Timeline sums the bytes of the hours in [from, to) into buckets of
+	// bucketSize (an hour or a day, aligned to UTC), oldest first.
+	Timeline(ctx context.Context, from, to time.Time, bucketSize time.Duration, group TransferGroup) ([]TransferPoint, error)
+}
+
 // CookieRecord represents the persisted cookie row with encrypted value.
 type CookieRecord struct {
 	ID           string
@@ -352,6 +437,8 @@ type Store interface {
 	Webhooks() WebhookRepository
 	Credentials() CredentialRepository
 	Plugins() PluginRepository
+	// Transfer returns the transfer history.
+	Transfer() TransferRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

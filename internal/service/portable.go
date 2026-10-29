@@ -68,6 +68,10 @@ type ImportInput struct {
 	AllowDuplicate bool
 	// ExpandPatterns expands ranges in the URLs (see urlpattern).
 	ExpandPatterns bool
+	// DryRun only reports what would happen: nothing is created, an entry
+	// that would be refused (an invalid link, a duplicate of an existing
+	// task's link) carries its error, the others succeed without a task.
+	DryRun bool
 }
 
 // Import parses a list and creates one task per entry, independently: the
@@ -103,8 +107,17 @@ func (s *TaskService) Import(ctx context.Context, in ImportInput) ([]BatchResult
 			inputs = append(inputs, it)
 		}
 	}
+	if in.DryRun {
+		for j, it := range inputs {
+			results[slot[j]] = s.preview(ctx, it)
+		}
+		return results, nil
+	}
 	for j, r := range s.CreateBatch(ctx, inputs) {
 		results[slot[j]] = r
+	}
+	for j := range inputs {
+		results[slot[j]].URL = inputs[j].Source.CurrentURL
 	}
 	return results, nil
 }
@@ -179,4 +192,30 @@ func (s *TaskService) Stats(ctx context.Context) (*Stats, error) {
 		st.Completed = append(st.Completed, CompletedWindow{Period: periods[i].name, Tasks: c.Tasks, Bytes: c.Bytes})
 	}
 	return st, nil
+}
+
+// preview says what creating in would do, without probing or creating: it
+// checks the source and the queue, and the link against the existing tasks.
+func (s *TaskService) preview(ctx context.Context, in CreateTaskInput) BatchResult {
+	r := BatchResult{URL: in.Source.CurrentURL}
+	if err := resolveQueueRef(ctx, s.d.Store, &in.QueueID); err != nil {
+		r.Err = err
+		return r
+	}
+	if err := in.Source.Validate(); err != nil {
+		r.Err = fmt.Errorf("service: import: %w", err)
+		return r
+	}
+	if !in.AllowDuplicate {
+		dup, err := s.d.Store.Tasks().FindDuplicate(ctx, storage.DuplicateQuery{URLs: []string{in.Source.CurrentURL, in.Source.OriginalURL}})
+		if err != nil {
+			r.Err = fmt.Errorf("service: import: %w", err)
+			return r
+		}
+		if dup != nil {
+			r.Err = domain.ConflictCode("task.duplicate", map[string]string{"taskId": dup.ID, "name": dup.Name, "status": string(dup.Status)},
+				"service: import: duplicate of task %s (%q, %s)", dup.ID, dup.Name, dup.Status)
+		}
+	}
+	return r
 }

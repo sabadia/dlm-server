@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -70,6 +71,24 @@ func (c *Client) ListTasks(ctx context.Context, opts ListTasksOptions) (*TaskPag
 	}
 	if opts.Sort != "" {
 		q.Set("sort", opts.Sort)
+	}
+	for k, v := range map[string]string{
+		"order": opts.Order, "engine": opts.Engine, "label": opts.Label, "category": opts.Category,
+		"createdAfter": opts.CreatedAfter, "createdBefore": opts.CreatedBefore,
+		"completedAfter": opts.CompletedAfter, "completedBefore": opts.CompletedBefore,
+	} {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	if opts.MinSize != nil {
+		q.Set("minSize", strconv.FormatInt(*opts.MinSize, 10))
+	}
+	if opts.MaxSize != nil {
+		q.Set("maxSize", strconv.FormatInt(*opts.MaxSize, 10))
+	}
+	if opts.Total {
+		q.Set("total", "true")
 	}
 	if opts.Limit > 0 {
 		q.Set("limit", strconv.Itoa(opts.Limit))
@@ -178,4 +197,42 @@ func (c *Client) bulk(ctx context.Context, path string, in any) ([]BatchItem, er
 		return nil, err
 	}
 	return out.Results, nil
+}
+
+// MoveTasks calls move-tasks (POST /v1/tasks/move).
+func (c *Client) MoveTasks(ctx context.Context, sel TaskSelection, queueID string) ([]BatchItem, error) {
+	in := struct {
+		TaskSelection
+		QueueID string `json:"queueId"`
+	}{sel, queueID}
+	return c.bulk(ctx, "/v1/tasks/move", in)
+}
+
+// UpdateTasksRequest is the change of update-tasks; empty fields are left
+// alone.
+type UpdateTasksRequest struct {
+	Priority     string            `json:"priority,omitempty"`
+	QueueID      string            `json:"queueId,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	RemoveLabels []string          `json:"removeLabels,omitempty"`
+	Settings     json.RawMessage   `json:"settings,omitempty"`
+}
+
+// UpdateTasks calls update-tasks (POST /v1/tasks/update).
+func (c *Client) UpdateTasks(ctx context.Context, sel TaskSelection, change UpdateTasksRequest) ([]BatchItem, error) {
+	in := struct {
+		TaskSelection
+		UpdateTasksRequest
+	}{sel, change}
+	return c.bulk(ctx, "/v1/tasks/update", in)
+}
+
+// RestartTasks calls restart-tasks (POST /v1/tasks/restart).
+func (c *Client) RestartTasks(ctx context.Context, sel TaskSelection) ([]BatchItem, error) {
+	return c.bulk(ctx, "/v1/tasks/restart", sel)
+}
+
+// RefreshTasks calls refresh-tasks (POST /v1/tasks/refresh).
+func (c *Client) RefreshTasks(ctx context.Context, sel TaskSelection) ([]BatchItem, error) {
+	return c.bulk(ctx, "/v1/tasks/refresh", sel)
 }

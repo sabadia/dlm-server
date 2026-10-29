@@ -60,6 +60,24 @@ func (s *QueueService) List(ctx context.Context) ([]*domain.Queue, error) {
 	return qs, nil
 }
 
+// Counts returns, for every queue, how many tasks it has in each status
+// (statuses without tasks are left out).
+func (s *QueueService) Counts(ctx context.Context) (map[string]map[domain.TaskStatus]int, error) {
+	qs, err := s.d.Store.Queues().List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service: count tasks per queue: %w", err)
+	}
+	out := make(map[string]map[domain.TaskStatus]int, len(qs))
+	for _, q := range qs {
+		c, err := s.d.Store.Tasks().CountByStatus(ctx, q.ID)
+		if err != nil {
+			return nil, fmt.Errorf("service: count tasks of queue %q: %w", q.ID, err)
+		}
+		out[q.ID] = c
+	}
+	return out, nil
+}
+
 // Get returns a queue or an error matching domain.ErrNotFound.
 func (s *QueueService) Get(ctx context.Context, id string) (*domain.Queue, error) {
 	if err := resolveQueueRef(ctx, s.d.Store, &id); err != nil {

@@ -74,6 +74,26 @@ func (s *CategoryService) Get(ctx context.Context, id string) (*domain.Category,
 	return c, nil
 }
 
+// Find returns the category with this ID or, failing that, this name
+// (case-insensitive). An unknown one matches domain.ErrNotFound.
+func (s *CategoryService) Find(ctx context.Context, idOrName string) (*domain.Category, error) {
+	list, err := s.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range list {
+		if c.ID == idOrName {
+			return c, nil
+		}
+	}
+	for _, c := range list {
+		if strings.EqualFold(c.Name, idOrName) {
+			return c, nil
+		}
+	}
+	return nil, domain.NotFound("category", idOrName)
+}
+
 // Create adds a category at the end of the order.
 func (s *CategoryService) Create(ctx context.Context, in CreateCategoryInput) (*domain.Category, error) {
 	exts, mimes := normalizeRules(in.Extensions, in.MIMETypes)

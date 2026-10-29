@@ -34,6 +34,12 @@ const (
 	TypeQuotaExhausted Type = "quota.exhausted"
 	// TypeQuotaReset: an exhausted quota is available again.
 	TypeQuotaReset Type = "quota.reset"
+	// TypeSystemSpeed: the transfer speed of the whole daemon, once a second
+	// while anything moves (and once more when it stops).
+	TypeSystemSpeed Type = "system.speed"
+	// TypeLimitsChanged: the temporary global speed override was set,
+	// cleared or ran out.
+	TypeLimitsChanged Type = "limits.changed"
 )
 
 // Event is a single notification published on the Bus.

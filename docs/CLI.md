@@ -34,7 +34,12 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm credential list`](#dlm-credential-list) | List stored logins |
 | [`dlm credential rm`](#dlm-credential-rm) | Delete a stored login |
 | [`dlm credential set`](#dlm-credential-set) | Change a stored login |
+| [`dlm fs`](#dlm-fs) | Browse the daemon's machine (limited to server.fs_roots) |
+| [`dlm fs browse`](#dlm-fs-browse) | List the directories below a path |
+| [`dlm fs free`](#dlm-fs-free) | Show the free space of a directory |
 | [`dlm health`](#dlm-health) | Check that the daemon is running |
+| [`dlm limits`](#dlm-limits) | Show the speed limits and quotas in force |
+| [`dlm limits override`](#dlm-limits-override) | Replace the global speed limit for a while |
 | [`dlm native-host`](#dlm-native-host) | Native Messaging host for the browser extension |
 | [`dlm native-host install`](#dlm-native-host-install) | Register the Native Messaging host with the browsers |
 | [`dlm native-host uninstall`](#dlm-native-host-uninstall) | Remove the Native Messaging host registrations |
@@ -58,6 +63,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm queue start`](#dlm-queue-start) | Start a queue (its tasks may run) |
 | [`dlm queue stop`](#dlm-queue-stop) | Stop a queue (running tasks return to queued) |
 | [`dlm resolve`](#dlm-resolve) | Probe a URL without downloading it |
+| [`dlm resolve-many`](#dlm-resolve-many) | Probe several URLs without downloading them |
 | [`dlm serve`](#dlm-serve) | Run the dlm daemon |
 | [`dlm settings`](#dlm-settings) | Manage the global settings |
 | [`dlm settings defaults`](#dlm-settings-defaults) | Show the built-in default settings |
@@ -67,6 +73,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm settings set`](#dlm-settings-set) | Set global settings |
 | [`dlm settings unset`](#dlm-settings-unset) | Unset global settings (they inherit the defaults again) |
 | [`dlm stats`](#dlm-stats) | Show download statistics |
+| [`dlm stats timeline`](#dlm-stats-timeline) | Show the traffic per hour or day |
 | [`dlm system`](#dlm-system) | Inspect and control the running daemon |
 | [`dlm system info`](#dlm-system-info) | Describe the daemon: version, directories, engines, tools |
 | [`dlm system restart`](#dlm-system-restart) | Restart the daemon |
@@ -74,17 +81,21 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm task`](#dlm-task) | Manage download tasks |
 | [`dlm task add`](#dlm-task-add) | Add download tasks |
 | [`dlm task await-link`](#dlm-task-await-link) | Wait for the browser extension to capture a new link |
+| [`dlm task expand`](#dlm-task-expand) | Show the URLs a pattern with ranges stands for |
 | [`dlm task export`](#dlm-task-export) | Write tasks as a list (JSON, URL list or aria2 input file) |
 | [`dlm task files`](#dlm-task-files) | List a task's files or choose which are downloaded |
 | [`dlm task get`](#dlm-task-get) | Show a task |
 | [`dlm task import`](#dlm-task-import) | Add the downloads of a list (JSON, URL list or aria2 input file) |
 | [`dlm task list`](#dlm-task-list) | List tasks |
 | [`dlm task move`](#dlm-task-move) | Move a task to the end of another queue |
+| [`dlm task move-tasks`](#dlm-task-move-tasks) | Move several tasks to another queue |
 | [`dlm task pause`](#dlm-task-pause) | Pause tasks |
 | [`dlm task refresh`](#dlm-task-refresh) | Get a new link for a task whose link expired |
 | [`dlm task refresh-history`](#dlm-task-refresh-history) | Show a task's link refresh history |
+| [`dlm task refresh-tasks`](#dlm-task-refresh-tasks) | Refresh the links of several tasks |
 | [`dlm task reorder`](#dlm-task-reorder) | Move a task to a 0-based position within its queue |
 | [`dlm task restart`](#dlm-task-restart) | Download a completed or failed task again from scratch |
+| [`dlm task restart-tasks`](#dlm-task-restart-tasks) | Download several finished or failed tasks again |
 | [`dlm task resume`](#dlm-task-resume) | Resume paused or failed tasks |
 | [`dlm task rm`](#dlm-task-rm) | Delete tasks |
 | [`dlm task segments`](#dlm-task-segments) | Show the segments of a task's download |
@@ -92,6 +103,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm task set-url`](#dlm-task-set-url) | Replace a task's link |
 | [`dlm task settings`](#dlm-task-settings) | Show a task's effective settings and where each value comes from |
 | [`dlm task torrent`](#dlm-task-torrent) | Show the swarm of a torrent task |
+| [`dlm task update-tasks`](#dlm-task-update-tasks) | Change several tasks at once |
 | [`dlm token`](#dlm-token) | Manage the API token |
 | [`dlm token show`](#dlm-token-show) | Show the API token file (and, with --reveal, the token) |
 | [`dlm version`](#dlm-version) | Print the CLI and daemon versions |
@@ -143,12 +155,15 @@ Run `dlm serve` to start the daemon; every other command talks to it over its RE
 * [dlm category](#dlm-category)	 - Manage the categories that sort downloads into directories
 * [dlm cookies](#dlm-cookies)	 - Manage the cookie store
 * [dlm credential](#dlm-credential)	 - Manage stored site logins (HTTP Basic and Digest)
+* [dlm fs](#dlm-fs)	 - Browse the daemon's machine (limited to server.fs_roots)
 * [dlm health](#dlm-health)	 - Check that the daemon is running
+* [dlm limits](#dlm-limits)	 - Show the speed limits and quotas in force
 * [dlm native-host](#dlm-native-host)	 - Native Messaging host for the browser extension
 * [dlm openapi](#dlm-openapi)	 - Print the OpenAPI 3.1 document of the REST API
 * [dlm plugin](#dlm-plugin)	 - Manage JavaScript plugins
 * [dlm queue](#dlm-queue)	 - Manage download queues
 * [dlm resolve](#dlm-resolve)	 - Probe a URL without downloading it
+* [dlm resolve-many](#dlm-resolve-many)	 - Probe several URLs without downloading them
 * [dlm serve](#dlm-serve)	 - Run the dlm daemon
 * [dlm settings](#dlm-settings)	 - Manage the global settings
 * [dlm stats](#dlm-stats)	 - Show download statistics
@@ -1398,6 +1413,128 @@ dlm credential set ID [flags]
 * [dlm credential](#dlm-credential)	 - Manage stored site logins (HTTP Basic and Digest)
 
 
+## dlm fs
+
+Browse the daemon's machine (limited to server.fs_roots)
+
+### Options
+
+```
+  -h, --help   help for fs
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm fs browse](#dlm-fs-browse)	 - List the directories below a path
+* [dlm fs free](#dlm-fs-free)	 - Show the free space of a directory
+
+
+## dlm fs browse
+
+List the directories below a path
+
+### Synopsis
+
+List the sub-directories of a directory below server.fs_roots on the machine the daemon runs on, for choosing a download directory there. Without a path it lists the roots.
+
+```
+dlm fs browse [PATH] [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for browse
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm fs](#dlm-fs)	 - Browse the daemon's machine (limited to server.fs_roots)
+
+
+## dlm fs free
+
+Show the free space of a directory
+
+```
+dlm fs free PATH [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for free
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm fs](#dlm-fs)	 - Browse the daemon's machine (limited to server.fs_roots)
+
+
 ## dlm health
 
 Check that the daemon is running
@@ -1442,6 +1579,105 @@ dlm health [flags]
 ### SEE ALSO
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+
+
+## dlm limits
+
+Show the speed limits and quotas in force
+
+### Synopsis
+
+Show the global and per-queue speed limits now in force, the active speed profile, the quota usage and a temporary override. 'dlm limits override' changes the global limit for a while.
+
+```
+dlm limits [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for limits
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm limits override](#dlm-limits-override)	 - Replace the global speed limit for a while
+
+
+## dlm limits override
+
+Replace the global speed limit for a while
+
+### Synopsis
+
+Replace the global speed limit by SPEED per second (500K, 2MB, ...; none or 0: unlimited, "turbo") for --minutes (1-1440, default 60). The configured limit and profiles apply again afterwards. --clear ends an override now.
+
+```
+dlm limits override [SPEED] [flags]
+```
+
+### Examples
+
+```
+  dlm limits override           # turbo for an hour
+  dlm limits override 1MB -m 30
+  dlm limits override --clear
+```
+
+### Options
+
+```
+      --clear         end the override now
+  -h, --help          help for override
+  -m, --minutes int   how long the override lasts, 1-1440 (default 60)
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm limits](#dlm-limits)	 - Show the speed limits and quotas in force
 
 
 ## dlm native-host
@@ -2481,6 +2717,50 @@ dlm resolve URL [flags]
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
 
 
+## dlm resolve-many
+
+Probe several URLs without downloading them
+
+### Synopsis
+
+Probe up to 100 URLs, a few at a time, and show for each what would be downloaded, or why it failed, and whether another task already has it. The resolve IDs can be passed to the API's create-task until they expire.
+
+```
+dlm resolve-many URL... [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for resolve-many
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+
+
 ## dlm serve
 
 Run the dlm daemon
@@ -2886,6 +3166,62 @@ dlm stats [flags]
 ### SEE ALSO
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm stats timeline](#dlm-stats-timeline)	 - Show the traffic per hour or day
+
+
+## dlm stats timeline
+
+Show the traffic per hour or day
+
+### Synopsis
+
+Show the bytes downloaded and uploaded per hour or day (UTC), optionally split by engine or queue. Defaults to the last 24 hours (--bucket hour) or 30 days (--bucket day).
+
+```
+dlm stats timeline [flags]
+```
+
+### Examples
+
+```
+  dlm stats timeline
+  dlm stats timeline --bucket day --group-by engine
+```
+
+### Options
+
+```
+      --bucket string     hour (default) or day
+      --from string       start of the range, RFC 3339 (inclusive)
+      --group-by string   none (default), engine or queue
+  -h, --help              help for timeline
+      --to string         end of the range, RFC 3339 (exclusive)
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm stats](#dlm-stats)	 - Show download statistics
 
 
 ## dlm system
@@ -3103,17 +3439,21 @@ dlm task [flags]
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
 * [dlm task add](#dlm-task-add)	 - Add download tasks
 * [dlm task await-link](#dlm-task-await-link)	 - Wait for the browser extension to capture a new link
+* [dlm task expand](#dlm-task-expand)	 - Show the URLs a pattern with ranges stands for
 * [dlm task export](#dlm-task-export)	 - Write tasks as a list (JSON, URL list or aria2 input file)
 * [dlm task files](#dlm-task-files)	 - List a task's files or choose which are downloaded
 * [dlm task get](#dlm-task-get)	 - Show a task
 * [dlm task import](#dlm-task-import)	 - Add the downloads of a list (JSON, URL list or aria2 input file)
 * [dlm task list](#dlm-task-list)	 - List tasks
 * [dlm task move](#dlm-task-move)	 - Move a task to the end of another queue
+* [dlm task move-tasks](#dlm-task-move-tasks)	 - Move several tasks to another queue
 * [dlm task pause](#dlm-task-pause)	 - Pause tasks
 * [dlm task refresh](#dlm-task-refresh)	 - Get a new link for a task whose link expired
 * [dlm task refresh-history](#dlm-task-refresh-history)	 - Show a task's link refresh history
+* [dlm task refresh-tasks](#dlm-task-refresh-tasks)	 - Refresh the links of several tasks
 * [dlm task reorder](#dlm-task-reorder)	 - Move a task to a 0-based position within its queue
 * [dlm task restart](#dlm-task-restart)	 - Download a completed or failed task again from scratch
+* [dlm task restart-tasks](#dlm-task-restart-tasks)	 - Download several finished or failed tasks again
 * [dlm task resume](#dlm-task-resume)	 - Resume paused or failed tasks
 * [dlm task rm](#dlm-task-rm)	 - Delete tasks
 * [dlm task segments](#dlm-task-segments)	 - Show the segments of a task's download
@@ -3121,6 +3461,7 @@ dlm task [flags]
 * [dlm task set-url](#dlm-task-set-url)	 - Replace a task's link
 * [dlm task settings](#dlm-task-settings)	 - Show a task's effective settings and where each value comes from
 * [dlm task torrent](#dlm-task-torrent)	 - Show the swarm of a torrent task
+* [dlm task update-tasks](#dlm-task-update-tasks)	 - Change several tasks at once
 
 
 ## dlm task add
@@ -3218,6 +3559,57 @@ dlm task await-link ID [flags]
 
 ```
   -h, --help   help for await-link
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
+## dlm task expand
+
+Show the URLs a pattern with ranges stands for
+
+### Synopsis
+
+Show how many URLs a pattern such as 'https://example.com/img[001-100].jpg' stands for and list the first ones, before adding them with 'dlm add --expand'.
+
+```
+dlm task expand PATTERN [flags]
+```
+
+### Examples
+
+```
+  dlm task expand 'https://example.com/img[001-100].jpg' --preview 5
+```
+
+### Options
+
+```
+  -h, --help          help for expand
+      --preview int   how many URLs to list, 0-1000 (default 20)
 ```
 
 ### Options inherited from parent commands
@@ -3418,6 +3810,7 @@ dlm task import FILE [flags]
 
 ```
       --allow-duplicate   add tasks even when another task has the same link, checksum, or file name and size
+      --dry-run           create nothing; show per entry whether it would be added or why not
       --expand            expand ranges in the URLs: file[001-100].jpg is 100 tasks
       --format string     json, urls or aria2 (default: from the file extension)
   -h, --help              help for import
@@ -3468,14 +3861,25 @@ dlm task list [flags]
 ### Options
 
 ```
-      --all              follow cursors and list every matching task
-      --cursor string    continue after this cursor (from a previous page)
-  -h, --help             help for list
-      --limit int        page size, 1-500 (default 50)
-      --queue string     only tasks of this queue ID
-      --search string    only tasks whose name or URL contains this text
-      --sort string      sort order: position (queue order, default) or created (newest first)
-      --status strings   only tasks in this status (repeatable or comma-separated)
+      --all                       follow cursors and list every matching task
+      --category string           only tasks of this category (ID or name)
+      --completed-after string    only tasks completed at or after this time (RFC 3339)
+      --completed-before string   only tasks completed at or before this time (RFC 3339)
+      --created-after string      only tasks created at or after this time (RFC 3339)
+      --created-before string     only tasks created at or before this time (RFC 3339)
+      --cursor string             continue after this cursor (from a previous page)
+      --engine string             only tasks of this engine (http, bt, ...)
+  -h, --help                      help for list
+      --label string              only tasks with this label: KEY or KEY=VALUE
+      --limit int                 page size, 1-500 (default 50)
+      --max-size value            only tasks of at most this size (500K, 2MB, ...)
+      --min-size value            only tasks of at least this size (500K, 2MB, ...)
+      --order string              direction: asc or desc (default: the one of --sort)
+      --queue string              only tasks of this queue ID
+      --search string             only tasks whose name or URL contains this text
+      --sort string               sort: position (queue order, default), created (newest first), name, size or completed
+      --status strings            only tasks in this status (repeatable or comma-separated)
+      --total                     also count every matching task
 ```
 
 ### Options inherited from parent commands
@@ -3516,6 +3920,54 @@ dlm task move ID QUEUE [flags]
 
 ```
   -h, --help   help for move
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
+## dlm task move-tasks
+
+Move several tasks to another queue
+
+### Synopsis
+
+Append each chosen task at the end of the queue given with --to. Chooses tasks by ID, or every task matching --all, --queue and/or --status. Prints one result per task; exits 1 if any failed.
+
+```
+dlm task move-tasks [ID...] [flags]
+```
+
+### Options
+
+```
+      --all              act on every task
+  -h, --help             help for move-tasks
+      --queue string     act on the tasks of this queue ID
+      --status strings   act on the tasks in this status (repeatable or comma-separated)
+      --to string        target queue ID (required)
 ```
 
 ### Options inherited from parent commands
@@ -3675,6 +4127,53 @@ dlm task refresh-history ID [flags]
 * [dlm task](#dlm-task)	 - Manage download tasks
 
 
+## dlm task refresh-tasks
+
+Refresh the links of several tasks
+
+### Synopsis
+
+Run the refresh strategies of each chosen task now (see 'dlm task refresh'). Chooses tasks by ID, or every task matching --all, --queue and/or --status. Prints one result per task; exits 1 if any failed.
+
+```
+dlm task refresh-tasks [ID...] [flags]
+```
+
+### Options
+
+```
+      --all              act on every task
+  -h, --help             help for refresh-tasks
+      --queue string     act on the tasks of this queue ID
+      --status strings   act on the tasks in this status (repeatable or comma-separated)
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
 ## dlm task reorder
 
 Move a task to a 0-based position within its queue
@@ -3727,6 +4226,53 @@ dlm task restart ID [flags]
 
 ```
   -h, --help   help for restart
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
+## dlm task restart-tasks
+
+Download several finished or failed tasks again
+
+### Synopsis
+
+Restart each chosen task from scratch. Chooses tasks by ID, or every task matching --all, --queue and/or --status. Prints one result per task; exits 1 if any failed.
+
+```
+dlm task restart-tasks [ID...] [flags]
+```
+
+### Options
+
+```
+      --all              act on every task
+  -h, --help             help for restart-tasks
+      --queue string     act on the tasks of this queue ID
+      --status strings   act on the tasks in this status (repeatable or comma-separated)
 ```
 
 ### Options inherited from parent commands
@@ -4069,6 +4615,58 @@ dlm task torrent ID [flags]
 
 ```
   -h, --help   help for torrent
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
+## dlm task update-tasks
+
+Change several tasks at once
+
+### Synopsis
+
+Set the priority, add or remove labels, patch the settings overrides and/or move each chosen task. Only the given fields change. Chooses tasks by ID, or every task matching --all, --queue and/or --status. Prints one result per task; exits 1 if any failed.
+
+```
+dlm task update-tasks [ID...] [flags]
+```
+
+### Options
+
+```
+      --all                        act on every task
+  -h, --help                       help for update-tasks
+      --label stringArray          label to add or change, KEY=VALUE (repeatable)
+      --priority string            new priority: low, normal or high
+      --queue string               act on the tasks of this queue ID
+      --remove-label stringArray   label key to remove (repeatable)
+      --settings string            JSON merge patch of the task settings overrides (null unsets a field)
+      --status strings             act on the tasks in this status (repeatable or comma-separated)
+      --to string                  also move the tasks to this queue ID
 ```
 
 ### Options inherited from parent commands

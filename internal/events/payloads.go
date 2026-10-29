@@ -57,6 +57,35 @@ type QuotaData struct {
 	ResetsAt    time.Time `json:"resetsAt,omitzero"`
 }
 
+// SpeedData is the payload of system.speed events.
+type SpeedData struct {
+	// Down and Up are bytes per second over the last second, summed over all
+	// tasks; Up is what torrents send to peers.
+	Down int64 `json:"down"`
+	Up   int64 `json:"up"`
+	// Active is the number of tasks that are transferring (running or
+	// refreshing), Queued the number waiting for a slot.
+	Active int `json:"active"`
+	Queued int `json:"queued"`
+}
+
+// LimitsChangedData is the payload of limits.changed events.
+type LimitsChangedData struct {
+	// SpeedLimit is the global limit now in force, in bytes per second;
+	// 0 means unlimited.
+	SpeedLimit int64 `json:"speedLimit"`
+	// Override is the temporary override, absent when there is none.
+	Override *SpeedOverride `json:"override,omitempty"`
+}
+
+// SpeedOverride is a temporary replacement of the global speed limit.
+type SpeedOverride struct {
+	// SpeedLimit is bytes per second; 0 means unlimited (turbo).
+	SpeedLimit int64 `json:"speedLimit"`
+	// Until is when the override ends and the configured limit applies again.
+	Until time.Time `json:"until"`
+}
+
 // Kind describes one event type: what it means and the type of its data.
 type Kind struct {
 	// Type is the event type, as in Event.Type and the SSE event name.
@@ -87,5 +116,7 @@ func Catalogue() []Kind {
 		{TypeSettingsUpdated, settings.Settings{}, "The global settings changed; data is the new global layer."},
 		{TypeQuotaExhausted, QuotaData{}, "A global or queue byte quota was used up."},
 		{TypeQuotaReset, QuotaData{}, "An exhausted quota is available again."},
+		{TypeSystemSpeed, SpeedData{}, "The transfer speed of the whole daemon: once a second while anything moves, and once more (zeros) when it stops."},
+		{TypeLimitsChanged, LimitsChangedData{}, "The temporary global speed override was set, cleared or ran out; data is the limit now in force."},
 	}
 }

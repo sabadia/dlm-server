@@ -238,6 +238,9 @@ func (s *Store) Credentials() storage.CredentialRepository { return credentialRe
 // Plugins returns the plugin repository.
 func (s *Store) Plugins() storage.PluginRepository { return pluginRepo{s} }
 
+// Transfer returns the transfer history repository.
+func (s *Store) Transfer() storage.TransferRepository { return transferRepo{s} }
+
 // WithTx implements storage.Store.
 func (s *Store) WithTx(ctx context.Context, fn func(tx storage.Store) error) error {
 	return s.inTx(ctx, func(tx *Store) error { return fn(tx) })
@@ -290,6 +293,14 @@ func (s *Store) readConn() db.DBTX {
 		return s.tx
 	}
 	return s.reader
+}
+
+// writeConn returns the connection used for hand-written writes.
+func (s *Store) writeConn() db.DBTX {
+	if s.tx != nil {
+		return s.tx
+	}
+	return s.writer
 }
 
 // write returns the queries for single-statement writes.
