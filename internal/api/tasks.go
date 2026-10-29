@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -100,6 +101,7 @@ func (b *CreateTaskBody) toInput() (service.CreateTaskInput, error) {
 type TaskList struct {
 	Tasks      []*domain.Task `json:"tasks" doc:"Tasks of this page."`
 	NextCursor string         `json:"nextCursor,omitempty" doc:"Pass as cursor to get the next page; absent on the last page."`
+	Total      *int64         `json:"total,omitempty" doc:"The number of tasks matching the filters (all pages); only when total=true was asked."`
 }
 
 // BatchItem is the outcome of one item of a bulk operation.
@@ -373,12 +375,23 @@ func (s *Server) createTasks(ctx context.Context, in *struct{ Body CreateTasksBo
 
 // ListTasksInput are the parameters of list-tasks.
 type ListTasksInput struct {
-	QueueID string   `query:"queueId" doc:"Only tasks of this queue."`
-	Status  []string `query:"status" enum:"queued,running,paused,awaiting_link,refreshing,postprocessing,completed,error" doc:"Only tasks in any of these states (comma-separated)."`
-	Q       string   `query:"q" doc:"Case-insensitive substring of the task name or URL."`
-	Sort    string   `query:"sort" enum:"position,created" default:"position" doc:"position: queue order (priority, then position); created: newest first."`
-	Limit   int      `query:"limit" minimum:"1" maximum:"500" default:"50" doc:"Page size."`
-	Cursor  string   `query:"cursor" doc:"nextCursor of the previous page."`
+	QueueID         string    `query:"queueId" doc:"Only tasks of this queue."`
+	Status          []string  `query:"status" enum:"queued,running,paused,awaiting_link,refreshing,postprocessing,completed,error" doc:"Only tasks in any of these states (comma-separated)."`
+	Q               string    `query:"q" doc:"Case-insensitive substring of the task name or URL."`
+	Engine          string    `query:"engine" doc:"Only tasks of this engine (http, bt, ...)."`
+	Label           string    `query:"label" doc:"Only tasks with this label: key, or key=value."`
+	Category        string    `query:"category" doc:"Only tasks that belong to this category (ID or name): their name or content type matches its rules."`
+	MinSize         int64     `query:"minSize" minimum:"-1" default:"-1" doc:"Only tasks of at least this many bytes (-1: no bound; tasks of unknown size are left out)."`
+	MaxSize         int64     `query:"maxSize" minimum:"-1" default:"-1" doc:"Only tasks of at most this many bytes (-1: no bound; tasks of unknown size are left out)."`
+	CreatedAfter    time.Time `query:"createdAfter" doc:"Only tasks created at or after this time (RFC 3339)."`
+	CreatedBefore   time.Time `query:"createdBefore" doc:"Only tasks created at or before this time (RFC 3339)."`
+	CompletedAfter  time.Time `query:"completedAfter" doc:"Only tasks completed at or after this time (RFC 3339); tasks that are not completed are left out."`
+	CompletedBefore time.Time `query:"completedBefore" doc:"Only tasks completed at or before this time (RFC 3339); tasks that are not completed are left out."`
+	Sort            string    `query:"sort" enum:"position,created,name,size,completed" default:"position" doc:"position: queue order (priority, then position); created: by creation time (newest first); name: case-insensitive (A to Z); size: smallest first (unknown sizes first); completed: oldest first (tasks that are not completed first)."`
+	Order           string    `query:"order" enum:"asc,desc" doc:"Direction; the default is the one named in sort. The position order has one direction."`
+	Total           bool      `query:"total" doc:"Also count every task matching the filters (total)."`
+	Limit           int       `query:"limit" minimum:"1" maximum:"500" default:"50" doc:"Page size."`
+	Cursor          string    `query:"cursor" doc:"nextCursor of the previous page (same sort and order)."`
 }
 
 func (s *Server) listTasks(ctx context.Context, in *ListTasksInput) (*struct{ Body TaskList }, error) {
@@ -386,16 +399,39 @@ func (s *Server) listTasks(ctx context.Context, in *ListTasksInput) (*struct{ Bo
 		return nil, errServicesUnavailable()
 	}
 	f := storage.TaskFilter{
-		QueueID: in.QueueID, Search: in.Q, Sort: storage.TaskSort(in.Sort), Limit: in.Limit, Cursor: in.Cursor,
+		QueueID: in.QueueID, Search: in.Q, Engine: in.Engine, Label: in.Label,
+		CreatedAfter: in.CreatedAfter, CreatedBefore: in.CreatedBefore,
+		CompletedAfter: in.CompletedAfter, CompletedBefore: in.CompletedBefore,
+		Sort: storage.TaskSort(in.Sort), Order: storage.SortOrder(in.Order),
+		Limit: in.Limit, Cursor: in.Cursor, WithTotal: in.Total,
 	}
 	for _, st := range in.Status {
 		f.Statuses = append(f.Statuses, domain.TaskStatus(st))
+	}
+	if in.MinSize >= 0 {
+		f.MinSize = &in.MinSize
+	}
+	if in.MaxSize >= 0 {
+		f.MaxSize = &in.MaxSize
+	}
+	if in.Category != "" {
+		if s.categories == nil {
+			return nil, errServicesUnavailable()
+		}
+		c, err := s.categories.Find(ctx, in.Category)
+		if err != nil {
+			return nil, s.fail(ctx, "list-tasks", err, "query.category")
+		}
+		f.NameSuffixes, f.ContentTypes = c.Suffixes(), c.MIMETypes
 	}
 	page, err := s.tasks.List(ctx, f)
 	if err != nil {
 		return nil, s.fail(ctx, "list-tasks", err, locBody)
 	}
 	out := &struct{ Body TaskList }{Body: TaskList{Tasks: page.Tasks, NextCursor: page.NextCursor}}
+	if in.Total {
+		out.Body.Total = &page.Total
+	}
 	if out.Body.Tasks == nil {
 		out.Body.Tasks = []*domain.Task{}
 	}

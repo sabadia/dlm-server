@@ -85,6 +85,10 @@ type UpdateTaskInput struct {
 	Priority *domain.Priority
 	// Labels replaces all labels (an empty map removes them).
 	Labels *map[string]string
+	// LabelsSet adds or changes these labels and LabelsRemove drops the
+	// named ones, leaving the other labels alone; they apply after Labels.
+	LabelsSet    map[string]string
+	LabelsRemove []string
 	// SettingsPatch is an RFC 7396 JSON merge patch applied to the task's
 	// overrides (see settings.MergePatch).
 	SettingsPatch []byte
@@ -404,6 +408,20 @@ func (s *TaskService) update(ctx context.Context, id string, in UpdateTaskInput,
 		}
 		if in.Labels != nil {
 			t.Labels = maps.Clone(*in.Labels)
+			if len(t.Labels) == 0 {
+				t.Labels = nil
+			}
+		}
+		if len(in.LabelsSet) > 0 || len(in.LabelsRemove) > 0 {
+			labels := maps.Clone(t.Labels)
+			if labels == nil {
+				labels = map[string]string{}
+			}
+			maps.Copy(labels, in.LabelsSet)
+			for _, k := range in.LabelsRemove {
+				delete(labels, k)
+			}
+			t.Labels = labels
 			if len(t.Labels) == 0 {
 				t.Labels = nil
 			}

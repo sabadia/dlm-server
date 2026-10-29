@@ -245,12 +245,141 @@ func TestTaskList(t *testing.T) {
 			"garbage cursor":   {Cursor: "!!!"},
 			"non-json cursor":  {Cursor: "YWJj"},
 			"cursor sort swap": {Cursor: res.NextCursor, Sort: storage.TaskSortCreated},
-			"unknown sort":     {Sort: "size"},
+			"unknown sort":     {Sort: "bogus"},
+			"position order":   {Order: storage.OrderDesc},
+			"unknown order":    {Sort: storage.TaskSortName, Order: "sideways"},
 			"unknown status":   {Statuses: []domain.TaskStatus{"nope"}},
 		} {
 			if _, err := s.Tasks().List(t.Context(), f); !errors.Is(err, domain.ErrInvalidArgument) {
 				t.Errorf("%s: err = %v, want ErrInvalidArgument", name, err)
 			}
+		}
+	})
+}
+
+// seedVaried makes tasks that differ in everything the extra filters and
+// sorts look at.
+func seedVaried(t *testing.T, s *sqlite.Store) {
+	t.Helper()
+	type spec struct {
+		id, name, engine, ctype string
+		size                    int64
+		labels                  map[string]string
+		created                 int
+		completed               int // seconds after baseTime, 0: not completed
+	}
+	for _, sp := range []spec{
+		{"v1", "Alpha.iso", "http", "application/x-iso9660-image", 5_000, map[string]string{"project": "os", "owner": "ann"}, 1, 50},
+		{"v2", "bravo.ZIP", "http", "application/zip", 100, map[string]string{"project": "docs"}, 2, 0},
+		{"v3", "charlie.mkv", "bt", "video/x-matroska", 9_000, nil, 3, 30},
+		{"v4", "Delta.mp4", "http", "video/mp4", -1, map[string]string{"owner": "bob"}, 4, 0},
+		{"v5", "echo.txt", "ftp", "", 100, nil, 5, 10},
+	} {
+		task := newTask(t, sp.id, "", sp.name, "https://e.com/"+sp.id)
+		task.Engine, task.Size, task.Labels = sp.engine, sp.size, sp.labels
+		task.Source.Fingerprint.ContentType = sp.ctype
+		task.CreatedAt = baseTime.Add(time.Duration(sp.created) * time.Second)
+		task.UpdatedAt = task.CreatedAt
+		if sp.completed > 0 {
+			at := baseTime.Add(time.Duration(sp.completed) * time.Second)
+			task.CompletedAt = &at
+		}
+		if err := s.Tasks().Create(t.Context(), task); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func idsOf(t *testing.T, s *sqlite.Store, f storage.TaskFilter) []string {
+	t.Helper()
+	got := listAll(t, s, f)
+	if got == nil {
+		got = []string{}
+	}
+	return got
+}
+
+func TestTaskListFiltersAndSorts(t *testing.T) {
+	s := openStore(t)
+	seedVaried(t, s)
+	ptr := func(n int64) *int64 { return &n }
+	at := func(sec int) time.Time { return baseTime.Add(time.Duration(sec) * time.Second) }
+
+	filters := []struct {
+		name string
+		f    storage.TaskFilter
+		want []string // in created order, newest first
+	}{
+		{"engine", storage.TaskFilter{Engine: "http"}, []string{"v4", "v2", "v1"}},
+		{"label key", storage.TaskFilter{Label: "owner"}, []string{"v4", "v1"}},
+		{"label key=value", storage.TaskFilter{Label: "owner=ann"}, []string{"v1"}},
+		{"label value mismatch", storage.TaskFilter{Label: "owner=zed"}, []string{}},
+		{"suffix, case-insensitive", storage.TaskFilter{NameSuffixes: []string{".zip", ".iso"}}, []string{"v2", "v1"}},
+		{"content type", storage.TaskFilter{ContentTypes: []string{"application/zip"}}, []string{"v2"}},
+		{"content type wildcard", storage.TaskFilter{ContentTypes: []string{"video/*"}}, []string{"v4", "v3"}},
+		{"suffix or content type", storage.TaskFilter{NameSuffixes: []string{".txt"}, ContentTypes: []string{"video/*"}}, []string{"v5", "v4", "v3"}},
+		{"min size leaves out unknown", storage.TaskFilter{MinSize: ptr(100)}, []string{"v5", "v3", "v2", "v1"}},
+		{"size range", storage.TaskFilter{MinSize: ptr(100), MaxSize: ptr(5_000)}, []string{"v5", "v2", "v1"}},
+		{"max size leaves out unknown", storage.TaskFilter{MaxSize: ptr(200)}, []string{"v5", "v2"}},
+		{"created range", storage.TaskFilter{CreatedAfter: at(2), CreatedBefore: at(4)}, []string{"v4", "v3", "v2"}},
+		{"completed range leaves out open tasks", storage.TaskFilter{CompletedAfter: at(20)}, []string{"v3", "v1"}},
+		{"completed before", storage.TaskFilter{CompletedBefore: at(30)}, []string{"v5", "v3"}},
+	}
+	for _, tc := range filters {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.f.Sort = storage.TaskSortCreated
+			if diff := cmp.Diff(tc.want, idsOf(t, s, tc.f)); diff != "" {
+				t.Errorf("ids (-want +got):\n%s", diff)
+			}
+		})
+	}
+
+	sorts := []struct {
+		name string
+		f    storage.TaskFilter
+		want []string
+	}{
+		{"name", storage.TaskFilter{Sort: storage.TaskSortName}, []string{"v1", "v2", "v3", "v4", "v5"}},
+		{"name desc", storage.TaskFilter{Sort: storage.TaskSortName, Order: storage.OrderDesc}, []string{"v5", "v4", "v3", "v2", "v1"}},
+		{"size, ties by id", storage.TaskFilter{Sort: storage.TaskSortSize}, []string{"v4", "v2", "v5", "v1", "v3"}},
+		{"size desc", storage.TaskFilter{Sort: storage.TaskSortSize, Order: storage.OrderDesc}, []string{"v3", "v1", "v5", "v2", "v4"}},
+		{"created asc", storage.TaskFilter{Sort: storage.TaskSortCreated, Order: storage.OrderAsc}, []string{"v1", "v2", "v3", "v4", "v5"}},
+		{"completed puts open tasks first", storage.TaskFilter{Sort: storage.TaskSortCompleted}, []string{"v2", "v4", "v5", "v3", "v1"}},
+		{"completed desc", storage.TaskFilter{Sort: storage.TaskSortCompleted, Order: storage.OrderDesc}, []string{"v1", "v3", "v5", "v4", "v2"}},
+	}
+	for _, tc := range sorts {
+		for _, limit := range []int{0, 2} { // one page, and paged by two
+			t.Run(fmt.Sprintf("%s limit %d", tc.name, limit), func(t *testing.T) {
+				tc.f.Limit = limit
+				if diff := cmp.Diff(tc.want, idsOf(t, s, tc.f)); diff != "" {
+					t.Errorf("ids (-want +got):\n%s", diff)
+				}
+			})
+		}
+	}
+
+	t.Run("a cursor is only valid for its order", func(t *testing.T) {
+		res, err := s.Tasks().List(t.Context(), storage.TaskFilter{Sort: storage.TaskSortName, Limit: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = s.Tasks().List(t.Context(), storage.TaskFilter{Sort: storage.TaskSortName, Order: storage.OrderDesc, Cursor: res.NextCursor})
+		if !errors.Is(err, domain.ErrInvalidArgument) {
+			t.Errorf("err = %v, want ErrInvalidArgument", err)
+		}
+	})
+
+	t.Run("total counts the whole match, not the page", func(t *testing.T) {
+		res, err := s.Tasks().List(t.Context(), storage.TaskFilter{Engine: "http", Limit: 1, WithTotal: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Total != 3 || len(res.Tasks) != 1 {
+			t.Errorf("total %d, page %d", res.Total, len(res.Tasks))
+		}
+		res, err = s.Tasks().List(t.Context(), storage.TaskFilter{Engine: "http", Limit: 1})
+		if err != nil || res.Total != 0 {
+			t.Errorf("total without WithTotal = %d, %v", res.Total, err)
 		}
 	})
 }

@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a185ba-524d-75e7-9c60-abec89c87296
+status: draft
+created_at: '2026-10-29T03:35:42Z'
+updated_at: '2026-10-29T03:35:42Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P13.5 list power: engine/label/category/size/date filters, name/size/completed sorts with order, total, per-queue status counts, bulk move/update/restart/refresh with CLI parity'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/storage/sqlite/list.go
+  start_line: null
+  end_line: null
+- path: internal/api/task_bulk.go
+  start_line: null
+  end_line: null
+- path: internal/api/tasks.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

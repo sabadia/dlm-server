@@ -54,10 +54,28 @@ type TaskSort string
 // Task sort orders.
 const (
 	// TaskSortPosition is queue order: priority descending, then position
-	// and creation time ascending. It is the default.
+	// and creation time ascending. It is the default and has one direction.
 	TaskSortPosition TaskSort = "position"
-	// TaskSortCreated is newest first.
+	// TaskSortCreated orders by creation time, newest first by default.
 	TaskSortCreated TaskSort = "created"
+	// TaskSortName orders by name, case-insensitively, A to Z by default.
+	TaskSortName TaskSort = "name"
+	// TaskSortSize orders by size (unknown sizes count as -1), smallest
+	// first by default.
+	TaskSortSize TaskSort = "size"
+	// TaskSortCompleted orders by completion time, oldest first by default;
+	// tasks that are not completed count as never and come first (last when
+	// descending).
+	TaskSortCompleted TaskSort = "completed"
+)
+
+// SortOrder is the direction of a listing.
+type SortOrder string
+
+// Sort directions. The empty order means the default of the sort.
+const (
+	OrderAsc  SortOrder = "asc"
+	OrderDesc SortOrder = "desc"
 )
 
 // Task listing page-size limits.
@@ -76,14 +94,39 @@ type TaskFilter struct {
 	// Search matches, case-insensitively, a substring of the task name or of
 	// its current URL. Case folding covers ASCII letters only.
 	Search string
+	// Engine restricts the listing to tasks of one engine.
+	Engine string
+	// Label restricts the listing to tasks with this label: "key" matches
+	// any value, "key=value" an exact one.
+	Label string
+	// NameSuffixes and ContentTypes together select a category: a task
+	// matches when its name ends with one of the suffixes (".iso", compared
+	// case-insensitively) or its content type is one of ContentTypes ("type/*"
+	// matches every subtype). Both empty means no restriction.
+	NameSuffixes []string
+	ContentTypes []string
+	// MinSize and MaxSize bound the size in bytes (inclusive); tasks of
+	// unknown size match neither bound.
+	MinSize, MaxSize *int64
+	// CreatedAfter/Before and CompletedAfter/Before bound the creation and
+	// completion times (inclusive); zero means unbounded. A bound on the
+	// completion time leaves out tasks that are not completed.
+	CreatedAfter, CreatedBefore     time.Time
+	CompletedAfter, CompletedBefore time.Time
 	// Sort defaults to TaskSortPosition.
 	Sort TaskSort
+	// Order is the direction; empty means the default of Sort.
+	Order SortOrder
 	// Limit is the page size: <= 0 means DefaultTaskLimit; values above
 	// MaxTaskLimit are clamped.
 	Limit int
 	// Cursor is the opaque TaskPage.NextCursor of the previous page; empty
-	// starts at the beginning. A cursor is only valid with the same Sort.
+	// starts at the beginning. A cursor is only valid with the same Sort and
+	// Order.
 	Cursor string
+	// WithTotal also counts every task matching the filters (ignoring the
+	// cursor and the limit).
+	WithTotal bool
 }
 
 // TaskPage is one page of a task listing.
@@ -91,6 +134,9 @@ type TaskPage struct {
 	Tasks []*domain.Task
 	// NextCursor is empty when there are no more tasks.
 	NextCursor string
+	// Total is the number of tasks matching the filters, set when
+	// TaskFilter.WithTotal was requested.
+	Total int64
 }
 
 // TaskRepository persists tasks.

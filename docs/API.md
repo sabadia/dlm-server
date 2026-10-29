@@ -119,6 +119,20 @@ as `img[001-100].jpg` becomes a task per value.
 A task moves through `queued → running → postprocessing → completed`, with
 `paused`, `awaiting_link`, `refreshing` and `error` on the side.
 
+## Finding and changing many tasks
+
+`GET /v1/tasks` filters by `status`, `queueId`, `q` (name or URL), `engine`, `label` (`key` or
+`key=value`), `category` (ID or name: the category's extensions and MIME types), `minSize` /
+`maxSize`, and `createdAfter` / `createdBefore` / `completedAfter` / `completedBefore` (RFC 3339).
+`sort` is `position` (queue order), `created`, `name`, `size` or `completed`, with `order=asc|desc`
+(a cursor is only valid for the sort and order it was issued for); `total=true` adds the number of
+matching tasks. `GET /v1/queues` answers `counts`: per queue ID, the tasks per status.
+
+`POST /v1/tasks/move`, `/update`, `/restart` and `/refresh` (CLI: `dlm task move-tasks`,
+`update-tasks`, `restart-tasks`, `refresh-tasks`) take the same selector as pause and delete (`ids`
+or a `filter`) and answer one result per task. `update` sets the `priority`, adds or changes
+`labels`, drops `removeLabels`, patches the `settings` overrides and/or moves the tasks (`queueId`).
+
 ## Task details
 
 Three read/write operations describe a task beyond its progress:

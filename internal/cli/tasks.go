@@ -197,6 +197,10 @@ func (a *app) newTaskCommand() *cobra.Command {
 		a.newTaskBulkCommand("pause", "Pause tasks", "pause-tasks", (*client.Client).PauseTasks),
 		a.newTaskBulkCommand("resume", "Resume paused or failed tasks", "resume-tasks", (*client.Client).ResumeTasks),
 		a.newTaskRestartCommand(),
+		a.newTaskMoveTasksCommand(),
+		a.newTaskUpdateTasksCommand(),
+		a.newTaskRestartTasksCommand(),
+		a.newTaskRefreshTasksCommand(),
 		a.newTaskRefreshCommand(),
 		a.newTaskAwaitLinkCommand(),
 		a.newTaskSetURLCommand(),
@@ -409,6 +413,9 @@ func (a *app) newTaskListCommand() *cobra.Command {
 			if err := a.printer(cmd).Print(page, func() output.Table { return taskTable(page.Tasks, false) }); err != nil {
 				return err
 			}
+			if page.Total != nil && a.format == output.FormatTable {
+				writeErr(cmd.ErrOrStderr(), fmt.Sprintf("note: %d tasks match", *page.Total))
+			}
 			if page.NextCursor != "" && a.format == output.FormatTable {
 				writeErr(cmd.ErrOrStderr(), "note: more tasks available; use --all or --cursor "+page.NextCursor)
 			}
@@ -419,7 +426,26 @@ func (a *app) newTaskListCommand() *cobra.Command {
 	fl.StringVar(&opts.QueueID, "queue", "", "only tasks of this queue ID")
 	fl.StringSliceVar(&opts.Status, "status", nil, "only tasks in this status (repeatable or comma-separated)")
 	fl.StringVar(&opts.Search, "search", "", "only tasks whose name or URL contains this text")
-	fl.StringVar(&opts.Sort, "sort", "", "sort order: position (queue order, default) or created (newest first)")
+	fl.StringVar(&opts.Sort, "sort", "", "sort: position (queue order, default), created (newest first), name, size or completed")
+	fl.StringVar(&opts.Order, "order", "", "direction: asc or desc (default: the one of --sort)")
+	fl.StringVar(&opts.Engine, "engine", "", "only tasks of this engine (http, bt, ...)")
+	fl.StringVar(&opts.Label, "label", "", "only tasks with this label: KEY or KEY=VALUE")
+	fl.StringVar(&opts.Category, "category", "", "only tasks of this category (ID or name)")
+	fl.Func("min-size", "only tasks of at least this size (500K, 2MB, ...)", func(v string) error {
+		n, err := parseSize(v)
+		opts.MinSize = &n
+		return err
+	})
+	fl.Func("max-size", "only tasks of at most this size (500K, 2MB, ...)", func(v string) error {
+		n, err := parseSize(v)
+		opts.MaxSize = &n
+		return err
+	})
+	fl.StringVar(&opts.CreatedAfter, "created-after", "", "only tasks created at or after this time (RFC 3339)")
+	fl.StringVar(&opts.CreatedBefore, "created-before", "", "only tasks created at or before this time (RFC 3339)")
+	fl.StringVar(&opts.CompletedAfter, "completed-after", "", "only tasks completed at or after this time (RFC 3339)")
+	fl.StringVar(&opts.CompletedBefore, "completed-before", "", "only tasks completed at or before this time (RFC 3339)")
+	fl.BoolVar(&opts.Total, "total", false, "also count every matching task")
 	fl.IntVar(&opts.Limit, "limit", 0, "page size, 1-500 (default 50)")
 	fl.StringVar(&opts.Cursor, "cursor", "", "continue after this cursor (from a previous page)")
 	fl.BoolVar(&all, "all", false, "follow cursors and list every matching task")

@@ -693,3 +693,109 @@ func TestTaskDetailOperations(t *testing.T) {
 	// Not a torrent.
 	f.call(t, http.MethodGet, "/v1/tasks/"+task.ID+"/torrent", "", http.StatusNotFound, nil)
 }
+
+// The listing filters, sorts and total, the per-queue counts and the bulk
+// operations (P13.5).
+func TestListPowerAndBulkOperations(t *testing.T) {
+	f := newOpsFixture(t)
+	mk := func(name, labels string) *domain.Task {
+		return f.createTask(t, `{"url":"`+f.fileURL()+`","name":"`+name+`","paused":true,"labels":`+labels+`}`)
+	}
+	a := mk("alpha.iso", `{"project":"os"}`)
+	b := mk("Bravo.zip", `{"project":"docs","owner":"ann"}`)
+	c := mk("charlie.bin", `{}`)
+
+	var cat domain.Category
+	f.call(t, http.MethodPost, "/v1/categories", `{"name":"Archives","dir":"Archives","extensions":["zip","iso"]}`, http.StatusCreated, &cat)
+
+	list := func(query string) (ids []string, total *int64) {
+		var out struct {
+			Tasks []*domain.Task `json:"tasks"`
+			Total *int64         `json:"total"`
+		}
+		f.call(t, http.MethodGet, "/v1/tasks?"+query, "", http.StatusOK, &out)
+		for _, tk := range out.Tasks {
+			ids = append(ids, tk.Name)
+		}
+		return ids, out.Total
+	}
+	eq := func(what string, got []string, want ...string) {
+		t.Helper()
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("%s = %v, want %v", what, got, want)
+		}
+	}
+	got, _ := list("label=project")
+	eq("label key", got, "alpha.iso", "Bravo.zip")
+	got, _ = list("label=owner%3Dann")
+	eq("label key=value", got, "Bravo.zip")
+	got, _ = list("category=archives")
+	eq("category by name", got, "alpha.iso", "Bravo.zip")
+	got, _ = list("category=" + cat.ID + "&sort=name&order=desc")
+	eq("category by id, name desc", got, "Bravo.zip", "alpha.iso")
+	got, total := list("sort=name&limit=2&total=true")
+	eq("name sort page", got, "alpha.iso", "Bravo.zip")
+	if total == nil || *total != 3 {
+		t.Errorf("total = %v, want 3", total)
+	}
+	if _, total = list("limit=2"); total != nil {
+		t.Errorf("total = %d without total=true", *total)
+	}
+	f.call(t, http.MethodGet, "/v1/tasks?category=nope", "", http.StatusNotFound, nil)
+	f.call(t, http.MethodGet, "/v1/tasks?order=desc", "", http.StatusUnprocessableEntity, nil)
+
+	// Queue counts.
+	var queues struct {
+		Counts map[string]map[string]int `json:"counts"`
+	}
+	f.call(t, http.MethodGet, "/v1/queues", "", http.StatusOK, &queues)
+	if queues.Counts["main"]["paused"] != 3 {
+		t.Errorf("counts = %v, want 3 paused in main", queues.Counts)
+	}
+
+	// Bulk update: priority, labels added and removed, settings patch.
+	var batch struct {
+		Results []struct {
+			OK   bool         `json:"ok"`
+			Task *domain.Task `json:"task"`
+		} `json:"results"`
+	}
+	body := `{"ids":["` + a.ID + `","` + b.ID + `"],"priority":"high","labels":{"team":"x"},"removeLabels":["project"],"settings":{"speedLimit":1000}}`
+	f.call(t, http.MethodPost, "/v1/tasks/update", body, http.StatusOK, &batch)
+	if len(batch.Results) != 2 || !batch.Results[0].OK || !batch.Results[1].OK {
+		t.Fatalf("update results = %+v", batch.Results)
+	}
+	got1 := batch.Results[1].Task
+	if got1.Priority != domain.PriorityHigh || got1.Labels["team"] != "x" || got1.Labels["owner"] != "ann" || got1.Labels["project"] != "" {
+		t.Errorf("task after update = priority %v labels %v", got1.Priority, got1.Labels)
+	}
+	if v, ok := got1.Settings.SpeedLimit.Get(); !ok || v != 1000 {
+		t.Errorf("settings patch not applied: %+v", got1.Settings.SpeedLimit)
+	}
+
+	// Bulk move by filter; one bad queue is one error per task.
+	q := f.createQueue(t, "other")
+	f.call(t, http.MethodPost, "/v1/tasks/move", `{"filter":{"status":["paused"]},"queueId":"`+q.ID+`"}`, http.StatusOK, &batch)
+	if len(batch.Results) != 3 {
+		t.Fatalf("move results = %d", len(batch.Results))
+	}
+	for _, r := range batch.Results {
+		if !r.OK || r.Task.QueueID != q.ID {
+			t.Errorf("move result = %+v", r)
+		}
+	}
+	f.call(t, http.MethodPost, "/v1/tasks/move", `{"ids":["`+c.ID+`"],"queueId":"nope"}`, http.StatusOK, &batch)
+	if len(batch.Results) != 1 || batch.Results[0].OK {
+		t.Errorf("moving to an unknown queue = %+v", batch.Results)
+	}
+	// Restart and refresh answer per task as well (a paused task is not
+	// finished, so restarting it is refused).
+	f.call(t, http.MethodPost, "/v1/tasks/restart", `{"ids":["`+a.ID+`"]}`, http.StatusOK, &batch)
+	if len(batch.Results) != 1 {
+		t.Errorf("restart results = %+v", batch.Results)
+	}
+	f.call(t, http.MethodPost, "/v1/tasks/refresh", `{"ids":["`+a.ID+`"]}`, http.StatusOK, &batch)
+	if len(batch.Results) != 1 {
+		t.Errorf("refresh results = %+v", batch.Results)
+	}
+}
