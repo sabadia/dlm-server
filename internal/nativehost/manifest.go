@@ -10,7 +10,19 @@ import (
 // allow lower-case letters, digits, underscores and dots.
 const HostName = "dev.sabadia.dlm"
 
-const hostDescription = "dlm download manager: gives the browser extension the daemon address and token"
+// The ids of the published browser extension. They never change: the host
+// manifests allow exactly these, so nobody has to type an id.
+const (
+	// BuiltinChromiumID is the Chrome (and every Chromium browser) extension id,
+	// fixed by the public key in the extension's manifest.
+	BuiltinChromiumID = "gfjgahdobbldpjiijaakihgmmjemdalg"
+	// BuiltinChromiumOrigin is BuiltinChromiumID as an allowed origin.
+	BuiltinChromiumOrigin = "chrome-extension://" + BuiltinChromiumID + "/"
+	// BuiltinFirefoxID is the Firefox add-on id.
+	BuiltinFirefoxID = "dlm-extension@sabadia.github.io"
+)
+
+const hostDescription = "dlm download manager: tells the browser extension where the daemon is and pairs it"
 
 // Manifest is a native messaging host manifest. Chromium-family browsers
 // read AllowedOrigins, Firefox reads AllowedExtensions.

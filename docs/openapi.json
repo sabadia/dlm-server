@@ -2207,7 +2207,7 @@
             ]
           },
           "extensionIds": {
-            "description": "Chromium extension IDs or chrome-extension://ID/ origins to allow (install); default: the chrome-extension:// entries of server.allowed_origins.",
+            "description": "More Chromium extension IDs or chrome-extension://ID/ origins to allow (install), besides the published extension; default: the chrome-extension:// entries of server.allowed_origins.",
             "items": {
               "type": "string"
             },
@@ -2217,7 +2217,7 @@
             ]
           },
           "firefoxIds": {
-            "description": "Firefox add-on IDs to allow (install).",
+            "description": "More Firefox add-on IDs to allow (install), besides the published extension.",
             "items": {
               "type": "string"
             },
@@ -9500,7 +9500,7 @@
         ]
       },
       "post": {
-        "description": "Writes (install) or removes (uninstall) the Native Messaging host registration of the selected browsers, as `dlm native-host install|uninstall` does. Install needs the extension ID(s): Chromium browsers also need the extension's origin in server.allowed_origins. Only from the machine the daemon runs on (403 native_host.local_only otherwise).",
+        "description": "Writes (install) or removes (uninstall) the Native Messaging host registration of the selected browsers, as `dlm native-host install|uninstall` does. The published DLM extension is always registered; extensionIds and firefoxIds add others (another Chromium extension also needs its origin in server.allowed_origins). Only from the machine the daemon runs on (403 native_host.local_only otherwise).",
         "operationId": "update-native-host",
         "requestBody": {
           "content": {

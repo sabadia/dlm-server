@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/sabadia/dlm-server/internal/auth"
+	"github.com/sabadia/dlm-server/internal/client"
 	"github.com/sabadia/dlm-server/internal/nativehost"
 )
 
@@ -64,41 +65,120 @@ func (e *e2e) writeToken(t *testing.T) string {
 	return token
 }
 
+// writePrimaryToken stores the token the test daemon accepts, where the host reads it.
+func (e *e2e) writePrimaryToken(t *testing.T) {
+	t.Helper()
+	dir := filepath.Join(e.home, "config")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "token"), []byte(testToken+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNativeHostServesConnect(t *testing.T) {
 	e := newE2E(t)
-
-	// Before the daemon created a token there is nothing to hand out.
-	got := e.runHost(t, nil, []string{`{"type":"connect"}`})
-	if len(got) != 1 || got[0]["ok"] != false || got[0]["error"] != nativehost.CodeTokenUnavailable {
-		t.Fatalf("without a token: %v", got)
-	}
-
-	token := e.writeToken(t)
 	origin := "chrome-extension://" + testExtID + "/"
 	allowed := []string{"DLM_SERVER_ALLOWED_ORIGINS=chrome-extension://" + testExtID}
 
 	// Browser arguments: the caller origin, and Windows' --parent-window.
-	got = e.runHost(t, allowed, []string{`{"type":"connect","id":1}`, `{"type":"ping"}`}, origin, "--parent-window=0")
+	got := e.runHost(t, allowed, []string{`{"type":"connect","id":1}`, `{"type":"ping"}`}, origin, "--parent-window=0")
 	if len(got) != 2 {
 		t.Fatalf("replies = %v", got)
 	}
 	r := got[0]
-	if r["ok"] != true || r["token"] != token || r["baseUrl"] != e.base || r["running"] != true || r["version"] != testSrvVersion || r["id"] != float64(1) {
-		t.Errorf("connect = %v, want the token, base URL %s and the running daemon's version", r, e.base)
+	if r["ok"] != true || r["baseUrl"] != e.base || r["running"] != true || r["version"] != testSrvVersion || r["id"] != float64(1) {
+		t.Errorf("connect = %v, want base URL %s and the running daemon's version", r, e.base)
+	}
+	// The primary token is never handed to an extension.
+	if _, has := r["token"]; has {
+		t.Errorf("connect hands out a token: %v", r)
 	}
 	if got[1]["ok"] != true || got[1]["type"] != "ping" {
 		t.Errorf("ping = %v", got[1])
 	}
 
-	// An extension that is not allowed gets no token.
+	// An extension that is not allowed is refused.
 	got = e.runHost(t, nil, []string{`{"type":"connect"}`}, origin)
-	if len(got) != 1 || got[0]["error"] != nativehost.CodeOriginNotAllowed || got[0]["token"] != nil {
+	if len(got) != 1 || got[0]["error"] != nativehost.CodeOriginNotAllowed {
 		t.Errorf("unlisted origin: %v", got)
 	}
-	// Firefox passes the manifest path instead; the manifest restricts it.
-	got = e.runHost(t, nil, []string{`{"type":"connect"}`}, filepath.Join(e.home, "m.json"), "dlm@example.org")
+	// The published extension needs no configuration.
+	got = e.runHost(t, nil, []string{`{"type":"connect"}`}, nativehost.BuiltinChromiumOrigin)
+	if len(got) != 1 || got[0]["ok"] != true {
+		t.Errorf("published extension: %v", got)
+	}
+	// Firefox passes the manifest path and the add-on id; the manifest restricts it.
+	got = e.runHost(t, nil, []string{`{"type":"connect"}`}, filepath.Join(e.home, "m.json"), nativehost.BuiltinFirefoxID)
 	if len(got) != 1 || got[0]["ok"] != true {
 		t.Errorf("firefox-style arguments: %v", got)
+	}
+}
+
+// TestNativeHostPairsThroughTheDaemon runs the whole pairing: the extension
+// asks the host, the host asks the daemon with the primary token, the user
+// (here: the CLI) allows it, and the extension collects a token of its own.
+func TestNativeHostPairsThroughTheDaemon(t *testing.T) {
+	e := newE2E(t)
+	e.writePrimaryToken(t)
+	origin := nativehost.BuiltinChromiumOrigin
+
+	got := e.runHost(t, nil, []string{`{"type":"pair","name":"Work Chrome","browser":"chrome","version":"0.1.0"}`}, origin)
+	if len(got) != 1 || got[0]["ok"] != true || got[0]["status"] != "pending" {
+		t.Fatalf("pair = %v", got)
+	}
+	id, _ := got[0]["pairingId"].(string)
+	code, _ := got[0]["code"].(string)
+	if id == "" || len(code) != 6 {
+		t.Fatalf("pair = %v", got[0])
+	}
+
+	// The app would show the code; the user allows it.
+	var list []client.Pairing
+	e.ok(t, &list, "pairing", "list", "-o", "json")
+	if len(list) != 1 || list[0].ID != id || list[0].Code != code || list[0].Browser != "chrome" || list[0].ClientID != nativehost.BuiltinChromiumID {
+		t.Fatalf("pairings = %+v", list)
+	}
+	if r := e.run(t, "", "pairing", "approve", id); r.code != ExitOK {
+		t.Fatalf("approve: %d %s", r.code, r.stderr)
+	}
+
+	got = e.runHost(t, nil, []string{`{"type":"pair.status","pairingId":"` + id + `"}`, `{"type":"pair.status","pairingId":"` + id + `"}`}, origin)
+	if len(got) != 2 || got[0]["status"] != "approved" {
+		t.Fatalf("status = %v", got)
+	}
+	token, _ := got[0]["token"].(string)
+	if !strings.HasPrefix(token, auth.TokenPrefix) {
+		t.Fatalf("no token in %v", got[0])
+	}
+	if got[1]["token"] != nil {
+		t.Errorf("the token was handed out twice: %v", got[1])
+	}
+
+	// The token works, with the extension scope, and the primary token is untouched.
+	c, err := client.New(e.base, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	me, err := c.WhoAmI(context.Background())
+	if err != nil || me.Scope != "extension" {
+		t.Fatalf("whoami = %+v, %v", me, err)
+	}
+	if _, err := c.ListTokens(context.Background()); err == nil {
+		t.Error("an extension token listed the tokens")
+	}
+	if me.Primary || token == testToken {
+		t.Error("the extension got the primary token")
+	}
+}
+
+func TestNativeHostPairFailsWithoutAToken(t *testing.T) {
+	e := newE2E(t) // no token file yet
+	got := e.runHost(t, nil, []string{`{"type":"pair"}`}, nativehost.BuiltinChromiumOrigin)
+	msg, _ := got[0]["message"].(string)
+	if len(got) != 1 || got[0]["ok"] != false || got[0]["error"] != nativehost.CodePairingFailed || !strings.Contains(msg, "no token") {
+		t.Errorf("reply = %v", got)
 	}
 }
 
@@ -184,13 +264,17 @@ func TestNativeHostInstallErrors(t *testing.T) {
 	if r := e.run(t, "", "native-host", "install", "--browser", "netscape", "--extension-id", testExtID); r.code != ExitUsage || !strings.Contains(r.stderr, "unknown browser") {
 		t.Errorf("bad browser: exit %d stderr %s", r.code, r.stderr)
 	}
-	// Without any ID nothing is installed, which is an error.
+	// With no ID the published extension is registered.
 	r := e.run(t, "", "native-host", "install")
-	if r.code != ExitError || !strings.Contains(r.stderr, "nothing installed") || !strings.Contains(r.stdout, "skipped") {
+	if r.code != ExitOK || strings.Contains(r.stdout, "skipped") {
 		t.Errorf("no ids: exit %d stdout %s stderr %s", r.code, r.stdout, r.stderr)
 	}
-	entries, _ := os.ReadDir(home)
-	if len(entries) != 0 {
-		t.Errorf("files written although nothing was installed: %v", entries)
+	chrome := filepath.Join(home, ".config", "google-chrome", "NativeMessagingHosts", nativehost.HostName+".json")
+	if runtime.GOOS == "darwin" {
+		chrome = filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts", nativehost.HostName+".json")
+	}
+	data, err := os.ReadFile(chrome)
+	if err != nil || !strings.Contains(string(data), nativehost.BuiltinChromiumOrigin) {
+		t.Errorf("chrome manifest = %s, %v", data, err)
 	}
 }

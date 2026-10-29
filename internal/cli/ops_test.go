@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sabadia/dlm-server/internal/api"
+	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/client"
 	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/daemon"
@@ -67,8 +68,12 @@ func newE2E(t *testing.T) *e2e {
 		Defaults: func() settings.Settings { return defaults },
 	})
 	jar := cookies.NewStore(store.Cookies(), cipher, cookies.Options{})
+	tokens := auth.NewRegistry(store.Tokens())
+	if err := tokens.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	base := startAPIWith(t, api.Deps{
-		Token: testToken, Version: testSrvVersion,
+		Token: testToken, Version: testSrvVersion, Tokens: tokens, Pairings: auth.NewPairings(tokens, nil),
 		Settings: svc.Settings, Queues: svc.Queues, Tasks: svc.Tasks,
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(svc.Tasks, jar, svc.Refresh), Refresh: svc.Refresh, Browser: service.NewBrowserService(fb, svc.Tasks), Categories: svc.Categories,
 		Webhooks:    service.NewWebhookService(service.Deps{Store: store}, cipher, webhook.New(nil, nil, webhook.Options{})),

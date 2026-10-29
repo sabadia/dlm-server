@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/sabadia/dlm-server/internal/platform"
@@ -53,6 +54,18 @@ type Target struct {
 	// IDs for Firefox. A browser without any is skipped.
 	ChromiumOrigins []string
 	FirefoxIDs      []string
+}
+
+// WithBuiltinIDs adds the published extension's ids to the target, so every
+// browser is registered for it without anyone typing an id.
+func (t Target) WithBuiltinIDs() Target {
+	if !slices.Contains(t.ChromiumOrigins, BuiltinChromiumOrigin) {
+		t.ChromiumOrigins = append(slices.Clone(t.ChromiumOrigins), BuiltinChromiumOrigin)
+	}
+	if !slices.Contains(t.FirefoxIDs, BuiltinFirefoxID) {
+		t.FirefoxIDs = append(slices.Clone(t.FirefoxIDs), BuiltinFirefoxID)
+	}
+	return t
 }
 
 // Result is the outcome for one browser.

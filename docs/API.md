@@ -319,8 +319,13 @@ access at once and does not touch any other client.
 the request through (checked with Chrome and Firefox), so no `allowed_origins` entry is needed.
 The token is the only gate.
 
-`dlm native-host install` registers the Native Messaging host; the published extension's ids are
-built in.
+`dlm native-host install` registers the Native Messaging host. The published extension's ids are
+built in (Chrome and every Chromium browser `gfjgahdobbldpjiijaakihgmmjemdalg`, Firefox
+`dlm-extension@sabadia.github.io`), so nothing needs typing and `server.allowed_origins` is not
+needed for it. The host answers `connect` (where the daemon is *now*: it reads `runtime.json`, so a
+daemon on a random port or one that restarted is found; plus version, API version and, for HTTPS,
+the certificate fingerprint), `pair` and `pair.status`. **It no longer hands out the primary token:**
+a `connect` reply has no `token` (v0.5.0 had one); an extension gets a token only by pairing.
 
 ## MCP
 

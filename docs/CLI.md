@@ -1996,7 +1996,7 @@ Native Messaging host for the browser extension
 
 ### Synopsis
 
-Run the Native Messaging host. Browsers start it (through the launcher that `native-host install` writes) when the extension calls runtime.connectNative; it answers `connect` with the daemon address and token over stdin/stdout and is not meant to be run by hand.
+Run the Native Messaging host. Browsers start it (through the launcher that `native-host install` writes) when the extension calls runtime.connectNative; it answers `connect` with where the daemon is, and `pair` / `pair.status` so the extension can be given a token of its own, over stdin/stdout. It is not meant to be run by hand.
 
 Without a subcommand it serves the protocol until stdin closes. Browser-supplied arguments (the caller's origin, --parent-window) are accepted.
 
@@ -2047,7 +2047,7 @@ Register the Native Messaging host with the browsers
 
 Write the host launcher and register it, for the current user, with Chrome, Chromium, Edge, Brave and Firefox (manifest files on Linux and macOS, registry keys on Windows).
 
-Chromium-family browsers need the extension ID (--extension-id, or the chrome-extension:// entries of server.allowed_origins); Firefox needs the add-on ID (--firefox-id). A browser without one is skipped. The daemon also has to accept the extension's origin: add chrome-extension://ID to server.allowed_origins.
+The published DLM extension (Chrome and every Chromium browser, and Firefox) is always registered; --extension-id and --firefox-id (or the chrome-extension:// entries of server.allowed_origins) add others, for example a build you made yourself. Another extension also has to be in server.allowed_origins to be answered.
 
 ```
 dlm native-host install [flags]
@@ -2056,8 +2056,8 @@ dlm native-host install [flags]
 ### Examples
 
 ```
-  dlm native-host install --extension-id abcdefghijklmnopabcdefghijklmnop
-  dlm native-host install --firefox-id dlm@example.org --browser firefox
+  dlm native-host install
+  dlm native-host install --extension-id abcdefghijklmnopabcdefghijklmnop --browser chrome
 ```
 
 ### Options
