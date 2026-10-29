@@ -19,11 +19,16 @@ const (
 	TypeTaskDeleted  Type = "task.deleted"
 	// TypeTaskRefresh: a link-refresh step happened (a strategy ran or was
 	// skipped, a wait started or ended); Data is the domain.RefreshAttempt.
-	TypeTaskRefresh     Type = "task.refresh"
-	TypeQueueCreated    Type = "queue.created"
-	TypeQueueUpdated    Type = "queue.updated"
-	TypeQueueDeleted    Type = "queue.deleted"
-	TypeSettingsUpdated Type = "settings.updated"
+	TypeTaskRefresh Type = "task.refresh"
+	// TypeTaskRefreshRequested: a task's link expired and the task waits for the
+	// browser extension to capture a fresh one (refresh strategy
+	// extension-capture); Data is RefreshRequestedData. A client that has the
+	// extension should send the user to the page.
+	TypeTaskRefreshRequested Type = "task.refresh.requested"
+	TypeQueueCreated         Type = "queue.created"
+	TypeQueueUpdated         Type = "queue.updated"
+	TypeQueueDeleted         Type = "queue.deleted"
+	TypeSettingsUpdated      Type = "settings.updated"
 	// TypeQueueCompleted: a queue with an onQueueComplete action ran out
 	// of work; the action runs after its delay unless cancelled.
 	TypeQueueCompleted Type = "queue.completed"

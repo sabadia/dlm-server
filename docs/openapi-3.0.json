@@ -3518,6 +3518,33 @@
         ],
         "type": "object"
       },
+      "RefreshRequestedData": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "fingerprint": {
+            "$ref": "#/components/schemas/Fingerprint"
+          },
+          "name": {
+            "type": "string"
+          },
+          "originalUrl": {
+            "type": "string"
+          },
+          "pageUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "pageUrl",
+          "fingerprint"
+        ],
+        "type": "object"
+      },
       "RefreshSettings": {
         "additionalProperties": false,
         "properties": {
@@ -4630,6 +4657,7 @@
             "task.deleted": "#/components/schemas/TaskDeletedEvent",
             "task.progress": "#/components/schemas/TaskProgressEvent",
             "task.refresh": "#/components/schemas/TaskRefreshEvent",
+            "task.refresh.requested": "#/components/schemas/TaskRefreshRequestedEvent",
             "task.status": "#/components/schemas/TaskStatusEvent",
             "task.updated": "#/components/schemas/TaskUpdatedEvent"
           },
@@ -4653,6 +4681,9 @@
           },
           {
             "$ref": "#/components/schemas/TaskRefreshEvent"
+          },
+          {
+            "$ref": "#/components/schemas/TaskRefreshRequestedEvent"
           },
           {
             "$ref": "#/components/schemas/QueueCreatedEvent"
@@ -5198,6 +5229,47 @@
             "description": "The event type; also the SSE event name.",
             "enum": [
               "task.refresh"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "TaskRefreshRequestedEvent": {
+        "additionalProperties": false,
+        "description": "A task's link expired and it waits for the browser extension to capture a fresh one: open pageUrl so the user can start the download again before the deadline.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RefreshRequestedData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "task.refresh.requested"
             ],
             "type": "string"
           }

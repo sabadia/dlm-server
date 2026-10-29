@@ -251,9 +251,10 @@ curl -N -H "Authorization: Bearer $TOKEN" \
 
 Each event is `id: <bootID>-<seq>`, `event: <type>`, `data: <JSON>`. Types:
 `task.created`, `task.updated`, `task.status`, `task.progress` (coalesced, several
-per second at most), `task.deleted`, `task.refresh`, `queue.created`,
+per second at most), `task.deleted`, `task.refresh`, `task.refresh.requested`, `queue.created`,
 `queue.updated`, `queue.deleted`, `queue.completed`, `queue.action_cancelled`,
-`settings.updated`, `quota.exhausted`, `quota.reset`, `system.speed`, `limits.changed` and `resource.changed`. Filter with `types`,
+`settings.updated`, `quota.exhausted`, `quota.reset`, `system.speed`, `limits.changed`, `resource.changed`,
+`pairing.requested` and `pairing.resolved`. Filter with `types`,
 `taskId` and `queueId`. The OpenAPI document describes every event type with its
 own payload schema (`StreamEvent` is a `oneOf` discriminated by `type`).
 
@@ -319,6 +320,14 @@ height plus the best audio-only one. Each has an `id`, a `label` (`1080p`, `720p
 size. Passing a format's `id` as `source.mediaHint` downloads that one. A manifest whose URL does not
 end in `.m3u8` or `.mpd` (a signed or API link) is taken as HLS or DASH when the source says
 `streamKind: hls|dash`; a capture sets it from the media candidate's `kind`.
+
+**Expired links.** When a task's link expires and its refresh chain reaches the strategy
+`extension-capture`, the task waits in `awaiting_link` and the daemon publishes
+`task.refresh.requested` (`name`, `pageUrl`, `originalUrl`, `deadline`, `fingerprint`): the
+extension tells the user, opens `pageUrl`, and the user starts the download again. The next
+capture matches the waiting task when nothing contradicts it and the size, a strong ETag, the
+file name or the clicked link (`url`) is the same; the task then gets the new link
+(`refreshed: true`) instead of a duplicate being created.
 
 **What the token may do.** Hand downloads over and follow them: `POST /v1/capture`,
 `POST /v1/tasks`, `/v1/tasks/batch` and `/v1/tasks/expand`, `POST /v1/resolve` and

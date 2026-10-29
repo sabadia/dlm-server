@@ -109,6 +109,23 @@ type PairingResolvedData struct {
 	TokenID string `json:"tokenId,omitempty"`
 }
 
+// RefreshRequestedData is the payload of task.refresh.requested events; the
+// task is Event.TaskID.
+type RefreshRequestedData struct {
+	// Name is the task's file name, for a prompt.
+	Name string `json:"name"`
+	// PageURL is the web page the download came from (the original link when
+	// there is none): open it so the user can start the download again.
+	PageURL string `json:"pageUrl"`
+	// OriginalURL is the link the task was first created with.
+	OriginalURL string `json:"originalUrl,omitempty"`
+	// Deadline is when the wait ends and the task fails; absent when it waits
+	// without limit.
+	Deadline *time.Time `json:"deadline,omitempty"`
+	// Fingerprint is what a capture has to match: size, ETag and file name.
+	Fingerprint domain.Fingerprint `json:"fingerprint"`
+}
+
 // Kinds of resources named by resource.changed events.
 const (
 	ResourceCategory   = "category"
@@ -160,6 +177,7 @@ func Catalogue() []Kind {
 		{TypeTaskProgress, ProgressData{}, "Transfer progress of a running task; coalesced per task, at most a few per second."},
 		{TypeTaskDeleted, domain.Task{}, "A task was deleted; data is its last state."},
 		{TypeTaskRefresh, domain.RefreshAttempt{}, "A link-refresh step happened: a strategy ran or was skipped, a wait started or ended."},
+		{TypeTaskRefreshRequested, RefreshRequestedData{}, "A task's link expired and it waits for the browser extension to capture a fresh one: open pageUrl so the user can start the download again before the deadline."},
 		{TypeQueueCreated, domain.Queue{}, "A queue was created."},
 		{TypeQueueUpdated, domain.Queue{}, "A queue changed (name, state, settings, position)."},
 		{TypeQueueDeleted, domain.Queue{}, "A queue was deleted; data is its last state."},
