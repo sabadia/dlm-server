@@ -26,6 +26,8 @@ type Logger struct {
 
 	// Level can be changed at runtime.
 	Level *slog.LevelVar
+	// Ring keeps the latest records in memory for the logs API.
+	Ring *Ring
 
 	closer io.Closer
 }
@@ -81,7 +83,8 @@ func New(cfg config.LogConfig, logDir string, stderr io.Writer) (*Logger, error)
 	default:
 		return nil, fmt.Errorf("logging: unknown format %q", cfg.Format)
 	}
-	return &Logger{Logger: slog.New(handler), Level: level, closer: closer}, nil
+	ring := NewRing(DefaultRingSize)
+	return &Logger{Logger: slog.New(NewTeeHandler(handler, ring)), Level: level, Ring: ring, closer: closer}, nil
 }
 
 // ParseLevel converts a level name (debug, info, warn, error) to slog.Level.

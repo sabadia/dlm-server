@@ -1093,6 +1093,43 @@
         ],
         "type": "object"
       },
+      "Entry": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {},
+          "key": {
+            "type": "string"
+          },
+          "pending": {},
+          "readOnly": {
+            "type": "boolean"
+          },
+          "restartRequired": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "required": [
+          "key",
+          "type",
+          "value",
+          "default",
+          "source",
+          "restartRequired",
+          "readOnly",
+          "secret"
+        ],
+        "type": "object"
+      },
       "ErrorDetail": {
         "additionalProperties": false,
         "properties": {
@@ -1805,6 +1842,51 @@
         "required": [
           "global",
           "queues"
+        ],
+        "type": "object"
+      },
+      "LogList": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/LogList.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "bootId": {
+            "description": "Identifies this daemon process; record ids restart with it. Stream ids are \u003cbootId\u003e-\u003cid\u003e.",
+            "type": "string"
+          },
+          "hasMore": {
+            "description": "Older matching records exist: ask again with before set to the first id.",
+            "type": "boolean"
+          },
+          "lastId": {
+            "description": "Id of the newest record the daemon has (0 when it has none), also when it does not match: start a stream after it.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "records": {
+            "description": "The newest matching records, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/Record"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "records",
+          "hasMore",
+          "lastId",
+          "bootId"
         ],
         "type": "object"
       },
@@ -2772,6 +2854,43 @@
           "period",
           "used",
           "exhausted"
+        ],
+        "type": "object"
+      },
+      "Record": {
+        "additionalProperties": false,
+        "properties": {
+          "attrs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "id": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "level": {
+            "enum": [
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "time": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "time",
+          "level",
+          "message"
         ],
         "type": "object"
       },
@@ -5017,6 +5136,30 @@
         },
         "type": "object"
       },
+      "UpdateConfigBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/UpdateConfigBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": {},
+            "description": "Keys to change, by dotted name (log.level, torrent.dht, server.fs_roots): a value sets the key in the config file, null removes it so the default applies again. Durations are text (\"30s\"), lists are arrays of strings.",
+            "minProperties": 1,
+            "type": "object"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "type": "object"
+      },
       "UpdateCredentialBody": {
         "additionalProperties": false,
         "properties": {
@@ -5338,6 +5481,48 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "View": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/View.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "file": {
+            "type": "string"
+          },
+          "fileError": {
+            "type": "string"
+          },
+          "fileExists": {
+            "type": "boolean"
+          },
+          "restartPending": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "file",
+          "fileExists",
+          "restartPending",
+          "entries"
+        ],
         "type": "object"
       },
       "Webhook": {
@@ -6371,6 +6556,130 @@
         "summary": "Update a category",
         "tags": [
           "categories"
+        ]
+      }
+    },
+    "/v1/config": {
+      "get": {
+        "description": "Every boot configuration key with the value the running daemon uses, its default, where the value came from (default, file, env or flag) and whether the config file now holds a different value that applies at the next start (pending). All of it needs a restart to take effect. Secrets are never shown.",
+        "operationId": "get-config",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/View"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Boot configuration",
+        "tags": [
+          "config",
+          "system"
+        ]
+      },
+      "patch": {
+        "description": "Writes keys into the daemon's config file (other keys are kept, comments are not) after checking that the result loads and validates; nothing is written otherwise (422). The running daemon is not changed: restart it (restart-daemon) to apply the change. A key an environment variable or a flag overrides is written as well but keeps its running value. Answers like get-config.",
+        "operationId": "update-config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConfigBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/View"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Change the boot configuration",
+        "tags": [
+          "config",
+          "system"
         ]
       }
     },
@@ -7651,6 +7960,267 @@
         "summary": "Temporarily replace the global speed limit",
         "tags": [
           "settings"
+        ]
+      }
+    },
+    "/v1/logs": {
+      "get": {
+        "description": "The daemon keeps its most recent log records (the last 5000 since it started) in memory. This lists them, newest last, filtered by level, text and time; older records are in the log file of the daemon's log directory.",
+        "operationId": "get-logs",
+        "parameters": [
+          {
+            "description": "Only records of at least this level (default: all that were kept).",
+            "explode": false,
+            "in": "query",
+            "name": "level",
+            "schema": {
+              "description": "Only records of at least this level (default: all that were kept).",
+              "enum": [
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only records whose message or attributes contain this text, ignoring case.",
+            "explode": false,
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "description": "Only records whose message or attributes contain this text, ignoring case.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only records at or after this time (RFC 3339).",
+            "explode": false,
+            "in": "query",
+            "name": "since",
+            "schema": {
+              "description": "Only records at or after this time (RFC 3339).",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only records at or before this time (RFC 3339).",
+            "explode": false,
+            "in": "query",
+            "name": "until",
+            "schema": {
+              "description": "Only records at or before this time (RFC 3339).",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only records older than this id: pass the first id of the previous answer to page backwards.",
+            "explode": false,
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "description": "Only records older than this id: pass the first id of the previous answer to page backwards.",
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "How many records, counted from the newest.",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 200,
+              "description": "How many records, counted from the newest.",
+              "format": "int64",
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read the daemon's log",
+        "tags": [
+          "logs",
+          "system"
+        ]
+      }
+    },
+    "/v1/logs/stream": {
+      "get": {
+        "description": "Streams log records as Server-Sent Events: event name log, data a LogRecord, id \u003cbootId\u003e-\u003cid\u003e. With Last-Event-ID (or lastEventId) the records after it that are still kept are sent first; when some were already dropped a reset event with reason gap comes first, and one with reason overflow when the client reads too slowly. get-logs answers the id to start from (lastId).",
+        "operationId": "stream-logs",
+        "parameters": [
+          {
+            "description": "Only records of at least this level.",
+            "explode": false,
+            "in": "query",
+            "name": "level",
+            "schema": {
+              "description": "Only records of at least this level.",
+              "enum": [
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only records whose message or attributes contain this text, ignoring case.",
+            "explode": false,
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "description": "Only records whose message or attributes contain this text, ignoring case.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Fallback for clients that cannot set the Last-Event-ID header; the header takes precedence.",
+            "explode": false,
+            "in": "query",
+            "name": "lastEventId",
+            "schema": {
+              "description": "Fallback for clients that cannot set the Last-Event-ID header; the header takes precedence.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "\u003cbootId\u003e-\u003cid\u003e of the last record the client received: later records are sent first. An id of another daemon process is ignored (the stream starts at the next record).",
+            "in": "header",
+            "name": "Last-Event-ID",
+            "schema": {
+              "description": "\u003cbootId\u003e-\u003cid\u003e of the last record the client received: later records are sent first. An id of another daemon process is ignored (the stream starts at the next record).",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "SSE messages whose data is a LogRecord or, for event name reset, a ResetEventData.",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/Record"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResetData"
+                      }
+                    ]
+                  },
+                  "title": "Server Sent Events",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Server-Sent Events stream of log records."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Stream the daemon's log (SSE)",
+        "tags": [
+          "logs",
+          "system"
         ]
       }
     },

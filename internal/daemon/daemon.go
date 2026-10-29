@@ -298,6 +298,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		})),
 		Browser:   services.Browser,
 		Limits:    service.NewLimitsService(limitsDeps, quotaSource{quotas}),
+		Logs:      logger.Ring,
 		System:    system,
 		Lifecycle: life,
 	})

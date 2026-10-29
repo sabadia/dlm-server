@@ -146,6 +146,8 @@ func newApp(version string, opts ...Option) *app {
 		a.newCredentialCommand(),
 		a.newStatsCommand(),
 		a.newLimitsCommand(),
+		a.newConfigCommand(),
+		a.newLogsCommand(),
 		a.newResolveManyCommand(),
 		a.newFSCommand(),
 		a.newPluginCommand(),

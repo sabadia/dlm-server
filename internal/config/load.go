@@ -93,14 +93,22 @@ func Load(opts LoadOptions) (*Config, error) {
 	}
 	knownKeys := k.Keys()
 
-	// Environment and flags are loaded into a separate instance first so the
-	// config-file location can honour --home/--config-dir/DLM_HOME.
-	overrides := koanf.New(".")
-	if err := loadEnv(overrides, knownKeys, opts.Environ); err != nil {
+	// Environment and flags are loaded into separate instances first so the
+	// config-file location can honour --home/--config-dir/DLM_HOME, and so
+	// every value's source can be told afterwards.
+	envK, flagK, fileK := koanf.New("."), koanf.New("."), koanf.New(".")
+	if err := loadEnv(envK, knownKeys, opts.Environ); err != nil {
 		return nil, err
 	}
-	if err := loadFlags(overrides, opts.Flags); err != nil {
+	if err := loadFlags(flagK, opts.Flags); err != nil {
 		return nil, err
+	}
+	overrides := koanf.New(".")
+	if err := overrides.Merge(envK); err != nil {
+		return nil, fmt.Errorf("config: merge environment: %w", err)
+	}
+	if err := overrides.Merge(flagK); err != nil {
+		return nil, fmt.Errorf("config: merge flags: %w", err)
 	}
 
 	path, required, err := configFilePath(opts, overrides)
@@ -108,8 +116,11 @@ func Load(opts LoadOptions) (*Config, error) {
 		return nil, err
 	}
 	if path != "" {
-		if err := loadFile(k, path, required); err != nil {
+		if err := loadFile(fileK, path, required); err != nil {
 			return nil, err
+		}
+		if err := k.Merge(fileK); err != nil {
+			return nil, fmt.Errorf("config: merge file: %w", err)
 		}
 	}
 	if err := k.Merge(overrides); err != nil {
@@ -125,6 +136,20 @@ func Load(opts LoadOptions) (*Config, error) {
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
+	}
+	cfg.configFile = path
+	cfg.sources = make(map[string]Source, len(knownKeys))
+	for _, key := range knownKeys {
+		switch {
+		case flagK.Exists(key):
+			cfg.sources[key] = SourceFlag
+		case envK.Exists(key):
+			cfg.sources[key] = SourceEnv
+		case fileK.Exists(key):
+			cfg.sources[key] = SourceFile
+		default:
+			cfg.sources[key] = SourceDefault
+		}
 	}
 	return cfg, nil
 }

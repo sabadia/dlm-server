@@ -100,7 +100,7 @@ func (s *Server) registerAddFlow() {
 		Summary:     "List directories on the daemon's machine",
 		Description: "Lists the sub-directories of a directory below server.fs_roots, for choosing a download directory on a daemon that runs elsewhere. " +
 			"Without a path it lists the roots. 404 fs.disabled when server.fs_roots is empty; 422 for a path outside the roots (also through symbolic links), not absolute or not a directory.",
-		Tags:   []string{"system"},
+		Tags:   []string{tagSystem},
 		Errors: []int{http.StatusNotFound, http.StatusUnprocessableEntity},
 	}, s.fsBrowse)
 
@@ -110,7 +110,7 @@ func (s *Server) registerAddFlow() {
 		Path:        "/v1/fs/free",
 		Summary:     "Free space of a directory on the daemon's machine",
 		Description: "The bytes available to the daemon in a directory below server.fs_roots. Same errors as get-fs-browse.",
-		Tags:        []string{"system"},
+		Tags:        []string{tagSystem},
 		Errors:      []int{http.StatusNotFound, http.StatusUnprocessableEntity},
 	}, s.fsFree)
 }

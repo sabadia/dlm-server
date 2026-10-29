@@ -166,6 +166,25 @@ or a `filter`) and answer one result per task. `update` sets the `priority`, add
   changes made meanwhile apply when it ends. A `limits.changed` event announces every change,
   including the end of an override.
 
+## Boot configuration and logs
+
+- `GET /v1/config` (`dlm config get [KEY]`): every boot configuration key (listen address, logging,
+  engines, ...) with the value the running daemon uses, its default, where it came from (`default`,
+  `file`, `env` or `flag`), and `pending` when the config file now holds another value that applies
+  at the next start. All of it needs a restart.
+- `PATCH /v1/config` (`dlm config set KEY VALUE`, `--unset`): writes keys into the config file after
+  checking that the result loads and validates (422 `config.unknown_key`, `config.read_only`,
+  `config.bad_value` or `config.invalid`, with the key in `errors[].location`); nothing is written
+  otherwise. Other keys of the file are kept, comments are not. The daemon is not changed until it is
+  restarted (`restart-daemon`). A key an environment variable or a flag overrides is written but
+  keeps its running value (`source` says so).
+- `GET /v1/logs` (`dlm logs`): the daemon keeps its last 5000 log records in memory; this lists
+  them filtered by `level`, `q` (message or attribute text) and `since`/`until`, newest last, and
+  pages backwards with `before`. `lastId` and `bootId` tell where to start a stream.
+- `GET /v1/logs/stream` (`dlm logs -f`): SSE, event `log`, id `<bootId>-<id>`; `Last-Event-ID`
+  replays what is still kept (a `reset` event with reason `gap` first when some was dropped,
+  `overflow` when the client reads too slowly).
+
 ## Task details
 
 Three read/write operations describe a task beyond its progress:

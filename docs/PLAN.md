@@ -317,8 +317,8 @@ Task status FSM: `queued → running → (paused | awaiting_link | refreshing | 
 Backend changes the Flutter app plan (https://github.com/sabadia/dlm-app/blob/main/docs/PLAN.md) depends on. Each has an issue and keeps REST, CLI and OpenAPI in parity.
 
 - [x] P13.1 Discovery and lifecycle (#110) — `--address 127.0.0.1:0`; atomic `runtime.json` (pid, address, version, startedAt, TLS fingerprint) in the config dir; single-instance lock per home; `POST /v1/system/shutdown` and `/restart`; `GET /v1/system/info` (version, apiVersion, commit, OS/arch, paths, uptime, local flag, engines enabled, tool status ffmpeg/yt-dlp/browser with version and source, DB size)
-- [ ] P13.2 Boot config API (#111) — `GET/PATCH /v1/config` (effective values with source, `restartRequired`, secrets redacted) and `dlm config get/set`
-- [ ] P13.3 Logs API (#112) — `GET /v1/logs` (filters) and `GET /v1/logs/stream` (SSE) plus `dlm logs`
+- [x] P13.2 Boot config API (#111) — `GET/PATCH /v1/config` (effective values with source, `restartRequired`, secrets redacted) and `dlm config get/set`
+- [x] P13.3 Logs API (#112) — `GET /v1/logs` (filters) and `GET /v1/logs/stream` (SSE) plus `dlm logs`
 - [x] P13.4 Task detail endpoints (#113) — `GET /v1/tasks/{id}/segments`; `PATCH /v1/tasks/{id}/files` (change file selection after creation, incl. torrents); `GET /v1/tasks/{id}/torrent` (peers, trackers, ratio, seeding state); progress events gain `uploadSpeed` and `peers`
 - [x] P13.5 List filters, sorts, counts and bulk operations (#114) — Filters `engine`, `label`, `category`, size/date ranges; sorts (name, size, created, completed); `total` count; per-queue status counts on `GET /v1/queues`; bulk `move`, `update` (priority/labels/queue/settings), `restart`, `refresh`
 - [x] P13.6 Add-flow helpers (#115) — `POST /v1/tasks/expand` (pattern preview), `dryRun` on import, `POST /v1/resolve/batch`, `duplicateOf` hint in resolve results, `GET /v1/fs/browse` and `/fs/free` (remote-safe directory picker limited to `server.fs_roots`)

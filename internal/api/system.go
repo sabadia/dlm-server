@@ -31,6 +31,9 @@ type SystemPaths struct {
 	Downloads string `json:"downloads" doc:"Default download directory."`
 }
 
+// tagSystem tags the operations about the daemon itself.
+const tagSystem = "system"
+
 // SystemInfo describes the daemon and the machine it runs on. The daemon
 // provides everything except Uptime and Local, which the operation adds.
 type SystemInfo struct {

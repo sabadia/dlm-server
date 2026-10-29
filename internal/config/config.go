@@ -46,6 +46,11 @@ type Config struct {
 	Ytdlp YtdlpConfig `koanf:"ytdlp"`
 	// HTTP configures the HTTP clients every engine and the browser use.
 	HTTP HTTPConfig `koanf:"http"`
+
+	// configFile and sources are set by Load: the config file consulted (it
+	// may not exist) and where each key's value came from.
+	configFile string
+	sources    map[string]Source
 }
 
 // ServerConfig controls the HTTP listener.

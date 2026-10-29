@@ -17,6 +17,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/config"
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/fsbrowse"
+	"github.com/sabadia/dlm-server/internal/logging"
 	"github.com/sabadia/dlm-server/internal/service"
 )
 
@@ -81,6 +82,8 @@ type Deps struct {
 	Browser *service.BrowserService
 	// Limits is the service behind the limits operations; 503 while nil.
 	Limits *service.LimitsService
+	// Logs holds the recent log records behind the logs operations; 503 while nil.
+	Logs *logging.Ring
 	// System describes the daemon for get-system-info; 503 while nil.
 	System SystemSource
 	// Lifecycle stops or restarts the daemon (shutdown-daemon,
@@ -115,6 +118,7 @@ type Server struct {
 	refresh     *service.RefreshService
 	browser     *service.BrowserService
 	limits      *service.LimitsService
+	logs        *logging.Ring
 	system      SystemSource
 	lifecycle   Lifecycle
 
@@ -182,6 +186,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		refresh:     deps.Refresh,
 		browser:     deps.Browser,
 		limits:      deps.Limits,
+		logs:        deps.Logs,
 		system:      deps.System,
 		lifecycle:   deps.Lifecycle,
 	}
@@ -213,6 +218,8 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerTaskBulk()
 	s.registerAddFlow()
 	s.registerLimitsAndTimeline()
+	s.registerConfig()
+	s.registerLogs()
 	s.registerBrowser()
 	if deps.MCP != nil {
 		s.mux.Handle(MCPPath, deps.MCP)
