@@ -331,6 +331,19 @@ Backend changes the Flutter app plan (https://github.com/sabadia/dlm-app/blob/ma
 - [x] P13.13 Local integrations (#122) — `GET/POST /v1/native-host` (status/install/uninstall, local-only) and `dlm service install|uninstall|status` (launchd / systemd user / Windows startup)
 - [x] P13.14 Housekeeping (#123) — `POST /v1/tasks/cleanup` (completed older than N days, optionally with files) and a retention setting
 
+### Phase 14: Browser extension enablers (requested by the dlm-extension browser extension)
+
+Plan: https://github.com/sabadia/dlm-extension/blob/main/docs/PLAN.md. A Chrome/Chromium and Firefox extension hands downloads, media, magnet links and torrents to the daemon, pairs with it, and helps refresh expired links. Spikes (https://github.com/sabadia/dlm-extension/tree/main/docs/spikes) showed that extension requests already reach the daemon (loopback `fetch`, no preflight, `Sec-Fetch-Site` none/same-origin), so no CORS or origin work is needed.
+
+- [ ] P14.1 Pairing and extension tokens (#137) — `POST /v1/pairing` (local only) starts a pairing with a 6-digit code and expiry; approve/deny endpoints (admin); event `pairing.requested`; approval mints a token with the new scope `extension` (capture, task create/list/pause/resume, resolve, browser-resolve, cookie import, events, health, limits; no settings, token management, cookie export, native-host or deletes), returned once. Token metadata: name, kind, browser, extension id, version, last used. Per-token revoke.
+- [x] ~~P14.2 Extension origins and CORS (#138)~~ — Not needed: the daemon accepts extension requests as they are (extension spike E0.6). Closed.
+- [ ] P14.3 Native host: pair, live address, built-in ids (#139) — `pair` message (waits for approve/deny/timeout, returns the token once); `connect` resolves the address from `runtime.json` at call time (the app starts the daemon on a random port, so the address baked into the launcher goes stale) and returns `apiVersion` and `tlsFingerprint`; built-in allowed ids for the published extension (Chrome `gfjgahdobbldpjiijaakihgmmjemdalg`, Firefox `dlm-extension@sabadia.github.io`) so no id has to be typed and `server.allowed_origins` is not needed for it.
+- [ ] P14.4 Capture: engine, per-task cookies, more fields (#140) — `POST /v1/capture` honours `resolverKind` (direct/ytdlp/browser); top-level `checksum`, `mirrors`, `name`, `method`/`body`; cookie `partitionKey`; a per-task cookie scope (cookies kept only for that task and removed when it ends; default for extension tokens) instead of always the global store.
+- [ ] P14.5 Formats in resolve; hint-based HLS/DASH (#141) — `POST /v1/resolve` returns `formats[]` (yt-dlp formats, HLS variants with bandwidth/resolution); a `kind` hint (hls|dash) for manifest URLs without `.m3u8`/`.mpd`.
+- [ ] P14.6 Event task.refresh.requested (#142) — emitted when a task enters `awaiting_link` with the extension-capture strategy (task, page URL, deadline, fingerprint); review capture matching so a browser capture of the same file refreshes the waiting task reliably.
+- [ ] P14.7 Larger .torrent uploads (#143) — `.torrent` content up to 16 MiB (multipart or a larger `data:` limit for torrent sources only); the 1 MiB limit stays elsewhere.
+- [ ] P14.8 Rate limits and size caps for extension tokens (#144) — per-token rate limit and caps on capture and task creation (cookie count/size, header size); documented defaults, 429 with `Retry-After`.
+
 ## Verification
 - **Unit tests:** settings resolution/provenance, FSM, scheduler (fake clock), limiter, refresh validation, filename parsing.
 - **Integration tests:** `httptest` servers covering ranges, no-range, 200-on-range, `Retry-After`/429, slow/dying connections, expiring signed URLs (refresh), cookie-gated files, Content-Disposition edge cases. Local HLS/DASH fixtures, a local FTP server, a local BT swarm with two in-process clients.
