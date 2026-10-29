@@ -652,3 +652,44 @@ func TestMergePatchMediaTypeDocumented(t *testing.T) {
 		}
 	}
 }
+
+// The task detail operations: segments, the choice of files and the torrent
+// description.
+func TestTaskDetailOperations(t *testing.T) {
+	f := newOpsFixture(t)
+	task := f.createTask(t, `{"url":"`+f.fileURL()+`","paused":true}`)
+
+	var segs struct {
+		Segments []domain.Segment `json:"segments"`
+	}
+	f.call(t, http.MethodGet, "/v1/tasks/"+task.ID+"/segments", "", http.StatusOK, &segs)
+	if segs.Segments == nil || len(segs.Segments) != 0 {
+		t.Errorf("a task without segments lists []: %#v", segs.Segments)
+	}
+	f.call(t, http.MethodGet, "/v1/tasks/nope/segments", "", http.StatusNotFound, nil)
+
+	// No file list yet.
+	f.call(t, http.MethodPatch, "/v1/tasks/"+task.ID+"/files", `{"selected":[0]}`, http.StatusUnprocessableEntity, nil)
+
+	stored, err := f.store.Tasks().Get(t.Context(), task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored.Resource = &domain.Resource{Name: "pack", Size: 30, Files: []domain.File{
+		{Index: 0, Name: "a", Size: 10, Selected: true}, {Index: 1, Name: "b", Size: 20, Selected: true},
+	}}
+	stored.Size = 30
+	if err := f.store.Tasks().Update(t.Context(), stored); err != nil {
+		t.Fatal(err)
+	}
+	var got domain.Task
+	f.call(t, http.MethodPatch, "/v1/tasks/"+task.ID+"/files", `{"selected":[1]}`, http.StatusOK, &got)
+	if got.Size != 20 || got.Resource.Files[0].Selected || !got.Resource.Files[1].Selected {
+		t.Errorf("selection not applied: size %d, files %+v", got.Size, got.Resource.Files)
+	}
+	f.call(t, http.MethodPatch, "/v1/tasks/"+task.ID+"/files", `{"selected":[9]}`, http.StatusUnprocessableEntity, nil)
+	f.call(t, http.MethodPatch, "/v1/tasks/"+task.ID+"/files", `{"selected":[]}`, http.StatusUnprocessableEntity, nil)
+
+	// Not a torrent.
+	f.call(t, http.MethodGet, "/v1/tasks/"+task.ID+"/torrent", "", http.StatusNotFound, nil)
+}

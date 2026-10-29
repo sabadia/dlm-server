@@ -92,6 +92,27 @@ type Progress struct {
 	Size int64
 	// Connections is the number of active transfer connections.
 	Connections int
+	// Uploaded is the number of bytes uploaded since the download started
+	// (torrents; 0 for other engines).
+	Uploaded int64
+	// Peers is the number of connected peers (torrents; 0 otherwise).
+	Peers int
+}
+
+// Inspectable is implemented by downloads that can describe their swarm
+// while they run (torrents).
+type Inspectable interface {
+	// Torrent describes the running transfer; ok is false until the
+	// transfer has joined its swarm.
+	Torrent() (info *domain.TorrentInfo, ok bool)
+}
+
+// Describer is implemented by engines that can describe a task that is not
+// running from the state its last run saved.
+type Describer interface {
+	// Describe returns what is known about the task from its saved engine
+	// state and resource; ok is false when nothing is saved yet.
+	Describe(state []byte, res *domain.Resource, set settings.Settings) (info *domain.TorrentInfo, ok bool)
 }
 
 // Checkpoint is durable resume state written by an engine.
