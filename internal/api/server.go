@@ -250,6 +250,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerCleanup()
 	s.registerAuth()
 	s.registerPairing()
+	s.registerTorrentUpload()
 	s.registerNativeHost()
 	s.registerBrowser()
 	if deps.MCP != nil {

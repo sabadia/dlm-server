@@ -4303,7 +4303,7 @@ Add one task per URL (and per line of --file; '-' reads stdin, blank lines and #
 
 One URL creates a single task (create-task); several URLs or a file create them in one batch (create-tasks) and print one result per URL. Settings flags apply to every task.
 
-A URL can be a magnet link, an ed2k:// link, or the path of a local .torrent file, which is sent to the daemon as a data URL.
+A URL can be a magnet link, an ed2k:// link, or the path of a local .torrent file, which is sent to the daemon (files above 512 KiB are uploaded as they are).
 
 --ytdlp downloads a video or audio page with yt-dlp instead of fetching the URL itself; --format picks the yt-dlp format (for example 'bv*[height<=720]+ba/b') or the quality of an HLS/DASH stream (for example 720).
 

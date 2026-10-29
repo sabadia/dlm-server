@@ -111,6 +111,7 @@ var extensionRoutes = []struct{ method, pattern string }{
 	{http.MethodPost, "/v1/tasks"},
 	{http.MethodPost, "/v1/tasks/batch"},
 	{http.MethodPost, "/v1/tasks/expand"},
+	{http.MethodPost, "/v1/tasks/torrent"},
 	{http.MethodPost, "/v1/tasks/pause"},
 	{http.MethodPost, "/v1/tasks/resume"},
 	{http.MethodPost, "/v1/tasks/{id}/refresh"},
@@ -271,6 +272,9 @@ func bodyLimitMiddleware(next http.Handler, defaultLimit int64) http.Handler {
 		limit := defaultLimit
 		if r.Method == http.MethodPost && r.URL.Path == importPath {
 			limit = MaxImportBodyBytes
+		}
+		if r.Method == http.MethodPost && r.URL.Path == torrentPath {
+			limit = MaxTorrentBodyBytes
 		}
 		if r.ContentLength > limit {
 			writeProblem(w, http.StatusRequestEntityTooLarge,

@@ -13696,6 +13696,167 @@
         ]
       }
     },
+    "/v1/tasks/torrent": {
+      "post": {
+        "description": "Creates a torrent task from the content of a .torrent file, sent as the request body (Content-Type application/x-bittorrent), up to 16 MiB. Use it instead of a data: URL in create-task, which is limited to the 1 MiB of an ordinary request.",
+        "operationId": "add-torrent-file",
+        "parameters": [
+          {
+            "description": "Queue to add the task to (default: the Main queue).",
+            "explode": false,
+            "in": "query",
+            "name": "queueId",
+            "schema": {
+              "description": "Queue to add the task to (default: the Main queue).",
+              "type": "string"
+            }
+          },
+          {
+            "description": "File or folder name without directories (default: the torrent's name).",
+            "explode": false,
+            "in": "query",
+            "name": "name",
+            "schema": {
+              "description": "File or folder name without directories (default: the torrent's name).",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Absolute download directory (default: the effective downloadDir).",
+            "explode": false,
+            "in": "query",
+            "name": "dir",
+            "schema": {
+              "description": "Absolute download directory (default: the effective downloadDir).",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Priority within the queue (default normal).",
+            "explode": false,
+            "in": "query",
+            "name": "priority",
+            "schema": {
+              "description": "Priority within the queue (default normal).",
+              "enum": [
+                "low",
+                "normal",
+                "high"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Create the task paused instead of queued.",
+            "explode": false,
+            "in": "query",
+            "name": "paused",
+            "schema": {
+              "description": "Create the task paused instead of queued.",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Add the task even when the same torrent is already a task.",
+            "explode": false,
+            "in": "query",
+            "name": "allowDuplicate",
+            "schema": {
+              "description": "Add the task even when the same torrent is already a task.",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-bittorrent": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Add a download from a .torrent file",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/v1/tasks/update": {
       "post": {
         "description": "Sets the priority, adds or removes labels, patches the settings overrides and/or moves each selected task. A task that cannot take the change (for example a settings patch it rejects) reports its own error.",

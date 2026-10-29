@@ -329,8 +329,15 @@ capture matches the waiting task when nothing contradicts it and the size, a str
 file name or the clicked link (`url`) is the same; the task then gets the new link
 (`refreshed: true`) instead of a duplicate being created.
 
+**Torrent files.** `POST /v1/tasks/torrent` (`add-torrent-file`, and `dlm task add FILE.torrent` for a
+file above 512 KiB) takes the `.torrent` file itself as the request body
+(`Content-Type: application/x-bittorrent`, up to 16 MiB) and the options in the query (`queueId`,
+`name`, `dir`, `priority`, `paused`, `allowDuplicate`). A `data:` URL in `POST /v1/tasks` still
+works but is limited to the 1 MiB of an ordinary request. An extension token may use it (a
+`.torrent` file that needs the browser's cookies is fetched by the extension and sent here).
+
 **What the token may do.** Hand downloads over and follow them: `POST /v1/capture`,
-`POST /v1/tasks`, `/v1/tasks/batch` and `/v1/tasks/expand`, `POST /v1/resolve` and
+`POST /v1/tasks`, `/v1/tasks/batch`, `/v1/tasks/expand` and `/v1/tasks/torrent`, `POST /v1/resolve` and
 `/v1/resolve/batch`, `POST /v1/browser/resolve` (and downloading a candidate),
 `POST /v1/cookies/import`, pausing and resuming, the link-refresh calls, and reading tasks,
 queues, categories, limits (and the turbo override), system info and the event stream. It may

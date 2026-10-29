@@ -62,6 +62,11 @@ type CompletedStatsRow struct {
 
 const (
 	importPath = "/v1/tasks/import"
+	// torrentPath is where a .torrent file is uploaded.
+	torrentPath = "/v1/tasks/torrent"
+	// MaxTorrentBodyBytes is the request body limit of add-torrent-file: the
+	// largest .torrent file the BitTorrent engine takes.
+	MaxTorrentBodyBytes int64 = 16 << 20
 	// MaxImportBodyBytes is the request body limit of import-tasks: a list of
 	// up to 8 MiB, which JSON escaping can roughly double.
 	MaxImportBodyBytes int64 = 16 << 20

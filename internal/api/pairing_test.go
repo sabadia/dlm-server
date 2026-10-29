@@ -193,6 +193,7 @@ func TestExtensionScope(t *testing.T) {
 		{http.MethodPost, "/v1/capture"},
 		{http.MethodPost, "/v1/tasks"},
 		{http.MethodPost, "/v1/tasks/batch"},
+		{http.MethodPost, "/v1/tasks/torrent"},
 		{http.MethodGet, "/v1/tasks"},
 		{http.MethodGet, "/v1/tasks/abc"},
 		{http.MethodPost, "/v1/tasks/pause"},
