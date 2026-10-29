@@ -9,12 +9,16 @@ import (
 )
 
 type ApiToken struct {
-	ID         string
-	Name       string
-	Scope      string
-	Hash       string
-	CreatedAt  int64
-	LastUsedAt sql.NullInt64
+	ID            string
+	Name          string
+	Scope         string
+	Hash          string
+	CreatedAt     int64
+	LastUsedAt    sql.NullInt64
+	Kind          string
+	Browser       string
+	ClientID      string
+	ClientVersion string
 }
 
 type Category struct {
