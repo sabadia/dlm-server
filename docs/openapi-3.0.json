@@ -35,6 +35,10 @@
           "task": {
             "$ref": "#/components/schemas/Task",
             "description": "The task's state after the operation (for delete: its last state)."
+          },
+          "url": {
+            "description": "The link of an imported entry (import-tasks), so results can be matched to the list after patterns were expanded.",
+            "type": "string"
           }
         },
         "required": [
@@ -950,6 +954,26 @@
         },
         "type": "object"
       },
+      "DuplicateHint": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId",
+          "name",
+          "status"
+        ],
+        "type": "object"
+      },
       "Effective": {
         "additionalProperties": false,
         "properties": {
@@ -1018,6 +1042,65 @@
         },
         "type": "object"
       },
+      "ExpandTasksBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/ExpandTasksBody.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "pattern": {
+            "description": "A URL with ranges: file[001-100].jpg, img[a-e].png, p[1-9][1-3].html; [first-last:step] steps.",
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "preview": {
+            "description": "How many of the URLs to list (default 20); count always has the full number.",
+            "format": "int64",
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "ExpandedPattern": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/ExpandedPattern.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "count": {
+            "description": "How many URLs the pattern stands for (a pattern without ranges: 1).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "urls": {
+            "description": "The first URLs, up to preview.",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "urls"
+        ],
+        "type": "object"
+      },
       "ExportCookiesResult": {
         "additionalProperties": false,
         "properties": {
@@ -1080,6 +1163,86 @@
           "format",
           "count",
           "content"
+        ],
+        "type": "object"
+      },
+      "FSEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "description": "Absolute path, usable as the path of the next listing.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path"
+        ],
+        "type": "object"
+      },
+      "FSFree": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/FSFree.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "freeBytes": {
+            "description": "Bytes available to the daemon in the directory's file system.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "freeBytes"
+        ],
+        "type": "object"
+      },
+      "FSListing": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/FSListing.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "entries": {
+            "description": "The sub-directories, sorted by name.",
+            "items": {
+              "$ref": "#/components/schemas/FSEntry"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "parent": {
+            "description": "The directory above path; absent at a root.",
+            "type": "string"
+          },
+          "path": {
+            "description": "The listed directory; empty when the roots are listed.",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "The directory has more sub-directories than were listed.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "entries"
         ],
         "type": "object"
       },
@@ -1343,6 +1506,10 @@
             "maxLength": 8388608,
             "minLength": 1,
             "type": "string"
+          },
+          "dryRun": {
+            "description": "Create nothing: answer, per entry, whether it would be added (ok) or why not (an invalid link, a duplicate of an existing task's link).",
+            "type": "boolean"
           },
           "expandPatterns": {
             "description": "Expand ranges in the URLs: file[001-100].jpg becomes 100 tasks.",
@@ -2408,6 +2575,27 @@
         ],
         "type": "object"
       },
+      "ResolveItem": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Problem",
+            "description": "Why the item failed (RFC 9457 problem with a code)."
+          },
+          "ok": {
+            "description": "Whether the probe succeeded.",
+            "type": "boolean"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ResolveResult",
+            "description": "What the source would download (as resolve-task answers), with duplicateOf when another task already has it."
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
       "ResolvePageBody": {
         "additionalProperties": false,
         "properties": {
@@ -2445,6 +2633,9 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "duplicateOf": {
+            "$ref": "#/components/schemas/DuplicateHint"
           },
           "engine": {
             "type": "string"
@@ -2503,6 +2694,56 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ResolveTasksBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/ResolveTasksBody.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "items": {
+            "description": "The downloads to probe; each is like a resolve-task request.",
+            "items": {
+              "$ref": "#/components/schemas/ResolveTaskBody"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ResolveTasksOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/ResolveTasksOutputBody.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "results": {
+            "description": "One result per item, in the order of the request.",
+            "items": {
+              "$ref": "#/components/schemas/ResolveItem"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
         "type": "object"
       },
       "Resource": {
@@ -3286,6 +3527,14 @@
             "nullable": true,
             "type": "array"
           },
+          "fsRoots": {
+            "description": "Directories clients may browse with get-fs-browse (server.fs_roots); empty means browsing is off.",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          },
           "goVersion": {
             "description": "Go toolchain the daemon was built with.",
             "type": "string"
@@ -3354,7 +3603,8 @@
           "paths",
           "engines",
           "tools",
-          "databaseBytes"
+          "databaseBytes",
+          "fsRoots"
         ],
         "type": "object"
       },
@@ -6339,6 +6589,154 @@
         ]
       }
     },
+    "/v1/fs/browse": {
+      "get": {
+        "description": "Lists the sub-directories of a directory below server.fs_roots, for choosing a download directory on a daemon that runs elsewhere. Without a path it lists the roots. 404 fs.disabled when server.fs_roots is empty; 422 for a path outside the roots (also through symbolic links), not absolute or not a directory.",
+        "operationId": "get-fs-browse",
+        "parameters": [
+          {
+            "description": "An absolute directory below server.fs_roots; empty lists the roots.",
+            "explode": false,
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "description": "An absolute directory below server.fs_roots; empty lists the roots.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FSListing"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List directories on the daemon's machine",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/v1/fs/free": {
+      "get": {
+        "description": "The bytes available to the daemon in a directory below server.fs_roots. Same errors as get-fs-browse.",
+        "operationId": "get-fs-free",
+        "parameters": [
+          {
+            "description": "An absolute directory below server.fs_roots; empty lists the roots.",
+            "explode": false,
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "description": "An absolute directory below server.fs_roots; empty lists the roots.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FSFree"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Free space of a directory on the daemon's machine",
+        "tags": [
+          "system"
+        ]
+      }
+    },
     "/v1/health": {
       "get": {
         "description": "Reports that the daemon is up, its version, and whether the presented bearer token (if any) is valid. Does not require authentication.",
@@ -7702,6 +8100,78 @@
         ]
       }
     },
+    "/v1/resolve/batch": {
+      "post": {
+        "description": "Probes up to 100 sources, a few at a time, and answers one result per item (200 even when some failed). Each success has a resolveId like resolve-task, and duplicateOf when another task already has the link or the file name and size.",
+        "operationId": "resolve-tasks",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveTasksBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveTasksOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Resolve several downloads",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/v1/settings": {
       "get": {
         "description": "Returns the stored global settings layer; unset fields inherit the defaults (see get-default-settings).",
@@ -8772,6 +9242,68 @@
           }
         },
         "summary": "Delete tasks",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/tasks/expand": {
+      "post": {
+        "description": "Says how many URLs a pattern with ranges stands for and lists the first ones, so a client can show a preview before adding them. A pattern that expands to more than 10000 URLs, or a malformed range, is 422.",
+        "operationId": "expand-tasks",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpandTasksBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpandedPattern"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Preview a URL pattern",
         "tags": [
           "tasks"
         ]

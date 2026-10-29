@@ -57,6 +57,8 @@ type ImportRequest struct {
 	Paused         bool   `json:"paused,omitempty"`
 	AllowDuplicate bool   `json:"allowDuplicate,omitempty"`
 	ExpandPatterns bool   `json:"expandPatterns,omitempty"`
+	// DryRun creates nothing and reports per entry whether it would be added.
+	DryRun bool `json:"dryRun,omitempty"`
 }
 
 // ImportTasks calls import-tasks (POST /v1/tasks/import); the result has one

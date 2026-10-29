@@ -110,6 +110,7 @@ type BatchItem struct {
 	OK    bool         `json:"ok" doc:"Whether the item succeeded."`
 	Task  *domain.Task `json:"task,omitempty" doc:"The task's state after the operation (for delete: its last state)."`
 	Error *Problem     `json:"error,omitempty" doc:"Why the item failed (RFC 9457 problem with a code)."`
+	URL   string       `json:"url,omitempty" doc:"The link of an imported entry (import-tasks), so results can be matched to the list after patterns were expanded."`
 }
 
 // BatchOutput is the response of a bulk operation. It is 200 even when some
@@ -578,7 +579,7 @@ func (s *Server) selectTasks(ctx context.Context, op string, sel TaskSelector) (
 
 // batchItem converts a service batch result.
 func (s *Server) batchItem(ctx context.Context, op string, r service.BatchResult) BatchItem {
-	item := BatchItem{ID: r.ID, Task: r.Task, OK: r.Err == nil}
+	item := BatchItem{ID: r.ID, Task: r.Task, OK: r.Err == nil, URL: r.URL}
 	if item.ID == "" && r.Task != nil {
 		item.ID = r.Task.ID
 	}

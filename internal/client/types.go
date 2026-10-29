@@ -119,6 +119,15 @@ type ResolveResult struct {
 	Resource  Resource  `json:"resource"`
 	Name      string    `json:"name"`
 	ExpiresAt time.Time `json:"expiresAt"`
+	// DuplicateOf is set when another task already has this download.
+	DuplicateOf *DuplicateHint `json:"duplicateOf,omitempty"`
+}
+
+// DuplicateHint names the task a new download would repeat.
+type DuplicateHint struct {
+	TaskID string `json:"taskId"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
 
 // EffectiveSettings are resolved settings with the level ("default",
@@ -144,6 +153,8 @@ type BatchItem struct {
 	OK    bool      `json:"ok"`
 	Task  *Task     `json:"task,omitempty"`
 	Error *APIError `json:"error,omitempty"`
+	// URL is the link of an imported entry.
+	URL string `json:"url,omitempty"`
 }
 
 // ResolveRequest is the request of resolve-task. Set URL or Source.

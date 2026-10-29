@@ -51,6 +51,7 @@ type SystemInfo struct {
 	Engines       []string     `json:"engines" doc:"Enabled download engines."`
 	Tools         []ToolStatus `json:"tools" doc:"External programs dlm can use."`
 	DatabaseBytes int64        `json:"databaseBytes" doc:"Size of the database file."`
+	FSRoots       []string     `json:"fsRoots" doc:"Directories clients may browse with get-fs-browse (server.fs_roots); empty means browsing is off."`
 }
 
 // SystemSource provides the daemon's SystemInfo.
@@ -147,6 +148,10 @@ func (s *Server) getSystemInfo(ctx context.Context, _ *struct{}) (*SystemInfoOut
 	}
 	if info.Tools == nil {
 		info.Tools = []ToolStatus{}
+	}
+	info.FSRoots = s.fs.Roots()
+	if info.FSRoots == nil {
+		info.FSRoots = []string{}
 	}
 	return &SystemInfoOutput{Body: info}, nil
 }

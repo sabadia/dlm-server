@@ -32,7 +32,7 @@ const configFileName = "config.yaml"
 const flagConfig = "config"
 
 // listKeys are keys whose environment values are comma-separated lists.
-var listKeys = map[string]bool{"server.allowed_origins": true}
+var listKeys = map[string]bool{"server.allowed_origins": true, "server.fs_roots": true}
 
 // flagKeys maps the flags registered by BindFlags to configuration keys.
 var flagKeys = map[string]string{

@@ -62,6 +62,10 @@ type ServerConfig struct {
 	AllowedOrigins []string `koanf:"allowed_origins"`
 	// ShutdownTimeout bounds graceful shutdown.
 	ShutdownTimeout time.Duration `koanf:"shutdown_timeout"`
+	// FSRoots are the absolute directories clients may browse through
+	// GET /v1/fs/browse (and read the free space of). Empty turns browsing
+	// off, which is the safe default for a daemon others can reach.
+	FSRoots []string `koanf:"fs_roots"`
 }
 
 // PathsConfig holds the directories used by the daemon. Empty values are
@@ -324,6 +328,11 @@ func (c *Config) Validate() error {
 	}
 	if (c.Server.TLSCert == "") != (c.Server.TLSKey == "") {
 		errs = append(errs, errors.New("server.tls_cert and server.tls_key must be set together"))
+	}
+	for _, r := range c.Server.FSRoots {
+		if !filepath.IsAbs(r) {
+			errs = append(errs, fmt.Errorf("server.fs_roots entry %q is not an absolute path", r))
+		}
 	}
 	if c.HTTP.ImpersonationTTL <= 0 {
 		errs = append(errs, errors.New("http.impersonation_ttl must be positive"))

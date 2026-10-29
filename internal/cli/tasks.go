@@ -206,6 +206,7 @@ func (a *app) newTaskCommand() *cobra.Command {
 		a.newTaskSetURLCommand(),
 		a.newTaskRefreshHistoryCommand(),
 		a.newTaskSegmentsCommand(),
+		a.newTaskExpandCommand(),
 		a.newTaskFilesCommand(),
 		a.newTaskTorrentCommand(),
 		a.newTaskRemoveCommand(),

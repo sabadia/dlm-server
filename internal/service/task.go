@@ -50,6 +50,16 @@ type ResolveResult struct {
 	Resource  domain.Resource `json:"resource"`
 	Name      string          `json:"name"`
 	ExpiresAt time.Time       `json:"expiresAt"`
+	// DuplicateOf is set when another task already has this link, or the
+	// file name and size the probe found.
+	DuplicateOf *DuplicateHint `json:"duplicateOf,omitempty"`
+}
+
+// DuplicateHint names the task a new download would repeat.
+type DuplicateHint struct {
+	TaskID string            `json:"taskId"`
+	Name   string            `json:"name"`
+	Status domain.TaskStatus `json:"status"`
 }
 
 // CreateTaskInput are the fields of a new task.
@@ -138,6 +148,11 @@ func (s *TaskService) Resolve(ctx context.Context, in ResolveInput) (*ResolveRes
 		Source:   probe.Source,
 		Resource: probe.Resource,
 		Name:     strings.TrimSpace(probe.Suggested),
+	}
+	if dup, err := s.d.Store.Tasks().FindDuplicate(ctx, storage.DuplicateQuery{
+		URLs: []string{probe.Source.CurrentURL, probe.Source.OriginalURL}, Name: res.Name, Size: probe.Resource.Size,
+	}); err == nil && dup != nil {
+		res.DuplicateOf = &DuplicateHint{TaskID: dup.ID, Name: dup.Name, Status: dup.Status}
 	}
 	res.ResolveID = s.d.Resolves.Put(probe)
 	res.ExpiresAt = s.d.now().Add(s.d.Resolves.TTL())

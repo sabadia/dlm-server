@@ -16,6 +16,7 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/config"
 	"github.com/sabadia/dlm-server/internal/events"
+	"github.com/sabadia/dlm-server/internal/fsbrowse"
 	"github.com/sabadia/dlm-server/internal/service"
 )
 
@@ -88,6 +89,7 @@ type Deps struct {
 // Server is the REST API server.
 type Server struct {
 	cfg     *config.Config
+	fs      *fsbrowse.Browser
 	log     *slog.Logger
 	version string
 	token   []byte
@@ -147,8 +149,14 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		heartbeat = DefaultEventsHeartbeat
 	}
 
+	fsb, err := fsbrowse.New(cfg.Server.FSRoots)
+	if err != nil {
+		return nil, fmt.Errorf("api: server.fs_roots: %w", err)
+	}
+
 	s := &Server{
 		cfg:     cfg,
+		fs:      fsb,
 		log:     log,
 		version: version,
 		token:   []byte(deps.Token),
@@ -199,6 +207,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerRefresh()
 	s.registerTaskDetail()
 	s.registerTaskBulk()
+	s.registerAddFlow()
 	s.registerBrowser()
 	if deps.MCP != nil {
 		s.mux.Handle(MCPPath, deps.MCP)

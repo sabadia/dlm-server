@@ -133,6 +133,24 @@ matching tasks. `GET /v1/queues` answers `counts`: per queue ID, the tasks per s
 or a `filter`) and answer one result per task. `update` sets the `priority`, adds or changes
 `labels`, drops `removeLabels`, patches the `settings` overrides and/or moves the tasks (`queueId`).
 
+## Adding downloads
+
+- `POST /v1/tasks/expand` (`dlm task expand`): how many URLs a pattern such as
+  `https://host/img[001-100].jpg` stands for, and the first ones (`preview`), before adding them.
+- `POST /v1/tasks/import` with `"dryRun": true` (`dlm task import --dry-run`): creates nothing and
+  answers, per entry (after expanding patterns), whether it would be added or why not (an invalid
+  link, or a duplicate: 409 `task.duplicate` with the id of the task that has it). Every import
+  result also carries the entry's `url`.
+- `POST /v1/resolve/batch` (`dlm resolve-many`): probes up to 100 sources a few at a time and
+  answers one result per item. Resolve results (single and batch) carry `duplicateOf` when another
+  task already has the link, or the file name and size the probe found.
+- `GET /v1/fs/browse` and `GET /v1/fs/free` (`dlm fs browse|free`): list the sub-directories of
+  a directory, and the free space, on the daemon's machine, for choosing a download directory when
+  the daemon runs elsewhere. They only work below the directories in `server.fs_roots`
+  (`DLM_SERVER_FS_ROOTS`, comma-separated; empty turns them off: 404 `fs.disabled`). A path outside
+  the roots, also through a symbolic link, is 422 `fs.outside_roots`, and it does not say whether
+  such a path exists. `get-system-info` lists the roots as `fsRoots`.
+
 ## Task details
 
 Three read/write operations describe a task beyond its progress:

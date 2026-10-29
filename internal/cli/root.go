@@ -145,6 +145,8 @@ func newApp(version string, opts ...Option) *app {
 		a.newWebhookCommand(),
 		a.newCredentialCommand(),
 		a.newStatsCommand(),
+		a.newResolveManyCommand(),
+		a.newFSCommand(),
 		a.newPluginCommand(),
 		a.newOpenAPICommand(),
 		a.newDocsCommand(),
