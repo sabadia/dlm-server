@@ -7,6 +7,8 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | Command | Description |
 |---|---|
 | [`dlm`](#dlm) | dlm download manager: daemon and command-line client |
+| [`dlm auth`](#dlm-auth) | Who you are to the daemon, and API tokens |
+| [`dlm auth whoami`](#dlm-auth-whoami) | Show the token this client uses: its name and scope |
 | [`dlm browser`](#dlm-browser) | Use the internal headless browser |
 | [`dlm browser download`](#dlm-browser-download) | Download a candidate found by `browser resolve` |
 | [`dlm browser profiles`](#dlm-browser-profiles) | Manage browser profiles |
@@ -46,6 +48,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm logs`](#dlm-logs) | Show the daemon's log |
 | [`dlm native-host`](#dlm-native-host) | Native Messaging host for the browser extension |
 | [`dlm native-host install`](#dlm-native-host-install) | Register the Native Messaging host with the browsers |
+| [`dlm native-host status`](#dlm-native-host-status) | Show where the Native Messaging host is registered |
 | [`dlm native-host uninstall`](#dlm-native-host-uninstall) | Remove the Native Messaging host registrations |
 | [`dlm openapi`](#dlm-openapi) | Print the OpenAPI 3.1 document of the REST API |
 | [`dlm plugin`](#dlm-plugin) | Manage JavaScript plugins |
@@ -70,6 +73,10 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm resolve`](#dlm-resolve) | Probe a URL without downloading it |
 | [`dlm resolve-many`](#dlm-resolve-many) | Probe several URLs without downloading them |
 | [`dlm serve`](#dlm-serve) | Run the dlm daemon |
+| [`dlm service`](#dlm-service) | Start the daemon when you log in |
+| [`dlm service install`](#dlm-service-install) | Start the daemon at login, and now |
+| [`dlm service status`](#dlm-service-status) | Show whether the daemon starts at login |
+| [`dlm service uninstall`](#dlm-service-uninstall) | Stop starting the daemon at login |
 | [`dlm settings`](#dlm-settings) | Manage the global settings |
 | [`dlm settings defaults`](#dlm-settings-defaults) | Show the built-in default settings |
 | [`dlm settings get`](#dlm-settings-get) | Show the global settings layer |
@@ -86,6 +93,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm task`](#dlm-task) | Manage download tasks |
 | [`dlm task add`](#dlm-task-add) | Add download tasks |
 | [`dlm task await-link`](#dlm-task-await-link) | Wait for the browser extension to capture a new link |
+| [`dlm task cleanup`](#dlm-task-cleanup) | Remove old completed downloads |
 | [`dlm task expand`](#dlm-task-expand) | Show the URLs a pattern with ranges stands for |
 | [`dlm task export`](#dlm-task-export) | Write tasks as a list (JSON, URL list or aria2 input file) |
 | [`dlm task files`](#dlm-task-files) | List a task's files or choose which are downloaded |
@@ -109,7 +117,13 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm task settings`](#dlm-task-settings) | Show a task's effective settings and where each value comes from |
 | [`dlm task torrent`](#dlm-task-torrent) | Show the swarm of a torrent task |
 | [`dlm task update-tasks`](#dlm-task-update-tasks) | Change several tasks at once |
+| [`dlm tls`](#dlm-tls) | Set up TLS for a daemon other machines connect to |
+| [`dlm tls init`](#dlm-tls-init) | Create a self-signed certificate and print its fingerprint |
 | [`dlm token`](#dlm-token) | Manage the API token |
+| [`dlm token add`](#dlm-token-add) | Create a named token |
+| [`dlm token list`](#dlm-token-list) | List the named tokens |
+| [`dlm token rm`](#dlm-token-rm) | Revoke a named token |
+| [`dlm token rotate`](#dlm-token-rotate) | Replace the primary token |
 | [`dlm token show`](#dlm-token-show) | Show the API token file (and, with --reveal, the token) |
 | [`dlm version`](#dlm-version) | Print the CLI and daemon versions |
 | [`dlm watch`](#dlm-watch) | Stream live events from the daemon |
@@ -156,6 +170,7 @@ Run `dlm serve` to start the daemon; every other command talks to it over its RE
 
 ### SEE ALSO
 
+* [dlm auth](#dlm-auth)	 - Who you are to the daemon, and API tokens
 * [dlm browser](#dlm-browser)	 - Use the internal headless browser
 * [dlm capture](#dlm-capture)	 - Create a task from a captured browser download
 * [dlm category](#dlm-category)	 - Manage the categories that sort downloads into directories
@@ -173,14 +188,93 @@ Run `dlm serve` to start the daemon; every other command talks to it over its RE
 * [dlm resolve](#dlm-resolve)	 - Probe a URL without downloading it
 * [dlm resolve-many](#dlm-resolve-many)	 - Probe several URLs without downloading them
 * [dlm serve](#dlm-serve)	 - Run the dlm daemon
+* [dlm service](#dlm-service)	 - Start the daemon when you log in
 * [dlm settings](#dlm-settings)	 - Manage the global settings
 * [dlm stats](#dlm-stats)	 - Show download statistics
 * [dlm system](#dlm-system)	 - Inspect and control the running daemon
 * [dlm task](#dlm-task)	 - Manage download tasks
+* [dlm tls](#dlm-tls)	 - Set up TLS for a daemon other machines connect to
 * [dlm token](#dlm-token)	 - Manage the API token
 * [dlm version](#dlm-version)	 - Print the CLI and daemon versions
 * [dlm watch](#dlm-watch)	 - Stream live events from the daemon
 * [dlm webhook](#dlm-webhook)	 - Manage the webhooks that receive events
+
+
+## dlm auth
+
+Who you are to the daemon, and API tokens
+
+### Options
+
+```
+  -h, --help   help for auth
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm auth whoami](#dlm-auth-whoami)	 - Show the token this client uses: its name and scope
+
+
+## dlm auth whoami
+
+Show the token this client uses: its name and scope
+
+```
+dlm auth whoami [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for whoami
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm auth](#dlm-auth)	 - Who you are to the daemon, and API tokens
 
 
 ## dlm browser
@@ -1934,6 +2028,7 @@ dlm native-host [ORIGIN] [flags]
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
 * [dlm native-host install](#dlm-native-host-install)	 - Register the Native Messaging host with the browsers
+* [dlm native-host status](#dlm-native-host-status)	 - Show where the Native Messaging host is registered
 * [dlm native-host uninstall](#dlm-native-host-uninstall)	 - Remove the Native Messaging host registrations
 
 
@@ -1965,6 +2060,50 @@ dlm native-host install [flags]
       --extension-id stringArray   Chromium extension ID or chrome-extension://ID/ origin to allow (repeatable; default: the chrome-extension:// entries of server.allowed_origins)
       --firefox-id stringArray     Firefox add-on ID to allow, e.g. dlm@example.org (repeatable)
   -h, --help                       help for install
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm native-host](#dlm-native-host)	 - Native Messaging host for the browser extension
+
+
+## dlm native-host status
+
+Show where the Native Messaging host is registered
+
+### Synopsis
+
+Ask the daemon (it must run on this machine) whether the host is registered with each browser, for the user the daemon runs as.
+
+```
+dlm native-host status [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for status
 ```
 
 ### Options inherited from parent commands
@@ -3066,6 +3205,177 @@ dlm serve [flags]
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
 
 
+## dlm service
+
+Start the daemon when you log in
+
+### Synopsis
+
+Install or remove a login item for the current user that runs `dlm serve`: a launchd agent on macOS, a systemd user unit on Linux and a Run registry value on Windows. It does not need administrator rights.
+
+### Options
+
+```
+  -h, --help   help for service
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm service install](#dlm-service-install)	 - Start the daemon at login, and now
+* [dlm service status](#dlm-service-status)	 - Show whether the daemon starts at login
+* [dlm service uninstall](#dlm-service-uninstall)	 - Stop starting the daemon at login
+
+
+## dlm service install
+
+Start the daemon at login, and now
+
+### Synopsis
+
+Install the login item and start the daemon through it now. It runs this `dlm` binary with `serve`, and with --home when this command was given one, so a portable setup stays portable.
+
+```
+dlm service install [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for install
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm service](#dlm-service)	 - Start the daemon when you log in
+
+
+## dlm service status
+
+Show whether the daemon starts at login
+
+```
+dlm service status [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for status
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm service](#dlm-service)	 - Start the daemon when you log in
+
+
+## dlm service uninstall
+
+Stop starting the daemon at login
+
+### Synopsis
+
+Remove the login item and stop the daemon it started. A daemon you started yourself is not touched.
+
+```
+dlm service uninstall [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for uninstall
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm service](#dlm-service)	 - Start the daemon when you log in
+
+
 ## dlm settings
 
 Manage the global settings
@@ -3696,6 +4006,7 @@ dlm task [flags]
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
 * [dlm task add](#dlm-task-add)	 - Add download tasks
 * [dlm task await-link](#dlm-task-await-link)	 - Wait for the browser extension to capture a new link
+* [dlm task cleanup](#dlm-task-cleanup)	 - Remove old completed downloads
 * [dlm task expand](#dlm-task-expand)	 - Show the URLs a pattern with ranges stands for
 * [dlm task export](#dlm-task-export)	 - Write tasks as a list (JSON, URL list or aria2 input file)
 * [dlm task files](#dlm-task-files)	 - List a task's files or choose which are downloaded
@@ -3816,6 +4127,62 @@ dlm task await-link ID [flags]
 
 ```
   -h, --help   help for await-link
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
+## dlm task cleanup
+
+Remove old completed downloads
+
+### Synopsis
+
+Remove the completed tasks that finished at least --older-than days ago from the list, or every completed task with --all. --files also deletes their downloaded files. --dry-run only shows what would go. The retentionDays setting does this automatically (without touching files).
+
+```
+dlm task cleanup [flags]
+```
+
+### Examples
+
+```
+  dlm task cleanup --older-than 30 --dry-run
+  dlm task cleanup --all --files
+```
+
+### Options
+
+```
+      --all              remove every completed task
+      --dry-run          only show what would be removed
+      --files            also delete the downloaded files
+  -h, --help             help for cleanup
+      --older-than int   remove tasks that completed at least this many days ago
+      --queue string     only tasks of this queue ID
 ```
 
 ### Options inherited from parent commands
@@ -4952,6 +5319,99 @@ dlm task update-tasks [ID...] [flags]
 * [dlm task](#dlm-task)	 - Manage download tasks
 
 
+## dlm tls
+
+Set up TLS for a daemon other machines connect to
+
+### Options
+
+```
+  -h, --help   help for tls
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm tls init](#dlm-tls-init)	 - Create a self-signed certificate and print its fingerprint
+
+
+## dlm tls init
+
+Create a self-signed certificate and print its fingerprint
+
+### Synopsis
+
+Create a self-signed certificate and key (cert.pem and key.pem in the config directory, the key readable by you only) for a daemon that other machines connect to, and print the fingerprint clients pin. Name the hosts and addresses clients use with --host. --apply also writes server.tls_cert and server.tls_key into the config file; the daemon reads them when it starts. To accept remote clients also set server.allow_remote and a listen address (see 'dlm config set').
+
+```
+dlm tls init [flags]
+```
+
+### Examples
+
+```
+  dlm tls init --host nas.local --host 192.168.1.10 --apply
+  dlm config set server.allow_remote true && dlm config set server.address 0.0.0.0:17171
+```
+
+### Options
+
+```
+      --apply              also set server.tls_cert and server.tls_key in the config file
+      --days int           how many days the certificate is valid (default 825)
+      --dir string         where to write the files (default: the config directory)
+      --force              replace an existing certificate and key
+  -h, --help               help for init
+      --host stringArray   a host name or IP address clients connect to (repeatable); localhost is always included
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm tls](#dlm-tls)	 - Set up TLS for a daemon other machines connect to
+
+
 ## dlm token
 
 Manage the API token
@@ -4990,7 +5450,186 @@ dlm token [flags]
 ### SEE ALSO
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm token add](#dlm-token-add)	 - Create a named token
+* [dlm token list](#dlm-token-list)	 - List the named tokens
+* [dlm token rm](#dlm-token-rm)	 - Revoke a named token
+* [dlm token rotate](#dlm-token-rotate)	 - Replace the primary token
 * [dlm token show](#dlm-token-show)	 - Show the API token file (and, with --reveal, the token)
+
+
+## dlm token add
+
+Create a named token
+
+### Synopsis
+
+Create a named token for a dashboard, a script or another device and print its secret once. --scope read makes it read-only (it can read everything except cookie exports and the token list, and change nothing).
+
+```
+dlm token add NAME [flags]
+```
+
+### Examples
+
+```
+  dlm auth token add dashboard --scope read
+```
+
+### Options
+
+```
+  -h, --help           help for add
+      --scope string   admin (everything) or read (read-only) (default "admin")
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm token](#dlm-token)	 - Manage the API token
+
+
+## dlm token list
+
+List the named tokens
+
+```
+dlm token list [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for list
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm token](#dlm-token)	 - Manage the API token
+
+
+## dlm token rm
+
+Revoke a named token
+
+```
+dlm token rm ID [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for rm
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm token](#dlm-token)	 - Manage the API token
+
+
+## dlm token rotate
+
+Replace the primary token
+
+### Synopsis
+
+Generate a new primary token, write it to the daemon's token file and stop accepting the old one at once. The new token is printed so a remote client can switch to it; clients on this machine read the file.
+
+```
+dlm token rotate [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for rotate
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm token](#dlm-token)	 - Manage the API token
 
 
 ## dlm token show

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+
+	"github.com/sabadia/dlm-server/internal/auth"
 )
 
 const (
@@ -72,15 +74,40 @@ func Authenticated(ctx context.Context) bool {
 	return ok
 }
 
+type principalKey struct{}
+
+// PrincipalOf returns who made the request carrying ctx; ok is false for an
+// unauthenticated request (to a public operation).
+func PrincipalOf(ctx context.Context) (auth.Principal, bool) {
+	p, ok := ctx.Value(principalKey{}).(auth.Principal)
+	return p, ok
+}
+
+// readOnlyDenied are the paths a read-only token may not even read: the ones
+// that hand out secrets or manage access.
+func readOnlyDenied(path string) bool {
+	return path == "/v1/cookies/export" || path == MCPPath || strings.HasPrefix(path, MCPPath+"/") ||
+		path == "/v1/auth/tokens" || strings.HasPrefix(path, "/v1/auth/tokens/")
+}
+
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authed := s.validToken(r.Header.Get("Authorization"))
+		p, authed := s.authenticate(r.Context(), r.Header.Get("Authorization"))
 		if !authed && s.requiresAuth(r) {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="dlm"`)
 			writeProblem(w, http.StatusUnauthorized, "missing or invalid bearer token")
 			return
 		}
+		if authed && p.Scope == auth.ScopeRead {
+			if (r.Method != http.MethodGet && r.Method != http.MethodHead) || readOnlyDenied(r.URL.Path) {
+				writeCodedProblem(w, http.StatusForbidden, "auth.read_only", "this token is read-only")
+				return
+			}
+		}
 		ctx := context.WithValue(r.Context(), authKey{}, authed)
+		if authed {
+			ctx = context.WithValue(ctx, principalKey{}, p)
+		}
 		ctx = context.WithValue(ctx, localKey{}, isLoopbackRemote(r.RemoteAddr))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -105,13 +132,29 @@ func (s *Server) requiresAuth(r *http.Request) bool {
 	return path == "/v1" || strings.HasPrefix(path, PathPrefix) || path == MCPPath
 }
 
-func (s *Server) validToken(header string) bool {
+// authenticate checks a presented bearer token: the primary one, or a named
+// token.
+func (s *Server) authenticate(ctx context.Context, header string) (auth.Principal, bool) {
 	scheme, token, ok := strings.Cut(header, " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return false
+		return auth.Principal{}, false
 	}
 	token = strings.TrimSpace(token)
-	return token != "" && subtle.ConstantTimeCompare([]byte(token), s.token) == 1
+	if token == "" {
+		return auth.Principal{}, false
+	}
+	if primary := s.token.Load(); primary != nil && subtle.ConstantTimeCompare([]byte(token), *primary) == 1 {
+		return auth.Principal{Name: "primary", Scope: auth.ScopeAdmin, Primary: true}, true
+	}
+	return s.tokens.Authenticate(ctx, token)
+}
+
+// writeCodedProblem is writeProblem with a stable code.
+func writeCodedProblem(w http.ResponseWriter, status int, code, detail string) {
+	p := newProblem(status, detail).withCode(code, nil)
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(p)
 }
 
 // --- CORS -----------------------------------------------------------------

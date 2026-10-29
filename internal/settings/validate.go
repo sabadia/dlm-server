@@ -32,6 +32,9 @@ type FieldError struct {
 	Message string
 }
 
+// MaxRetentionDays is the largest retentionDays.
+const MaxRetentionDays = 36500
+
 func (e *FieldError) Error() string { return e.Path + ": " + e.Message }
 
 // ValidationError lists every invalid field found by Validate.
@@ -70,6 +73,7 @@ func (s *Settings) Validate(level Level) error {
 	v.intRange("maxConnections", s.MaxConnections, 1, MaxConnectionsLimit)
 	v.intRange("maxConcurrentDownloads", s.MaxConcurrentDownloads, 1, MaxConcurrentDownloadsLimit)
 	v.intRange("maxActiveDownloadsTotal", s.MaxActiveDownloadsTotal, 0, 10_000)
+	v.intRange("retentionDays", s.RetentionDays, 0, MaxRetentionDays)
 	if n, ok := s.SpeedLimit.Get(); ok && n < 0 {
 		v.add("speedLimit", "must be >= 0 (0 = unlimited)")
 	}

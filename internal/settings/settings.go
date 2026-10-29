@@ -63,6 +63,9 @@ type Settings struct {
 	// MaxActiveDownloadsTotal caps running tasks across all queues; 0 means
 	// no global cap.
 	MaxActiveDownloadsTotal Optional[int] `json:"maxActiveDownloadsTotal,omitzero" levels:"global"`
+	// RetentionDays removes completed tasks from the list this many days
+	// after they completed (their files are never touched); 0 keeps them.
+	RetentionDays Optional[int] `json:"retentionDays,omitzero" levels:"global"`
 	// SpeedLimit is in bytes per second; 0 means unlimited. Limits nest:
 	// a task is bounded by its own, its queue's and the global limit.
 	SpeedLimit Optional[int64] `json:"speedLimit,omitzero"`
@@ -417,6 +420,7 @@ func Defaults(downloadDir string) Settings {
 		MaxConnections:          Some(16),
 		MaxConcurrentDownloads:  Some(4),
 		MaxActiveDownloadsTotal: Some(0),
+		RetentionDays:           Some(0),
 		SpeedLimit:              Some[int64](0),
 		Retry: RetrySettings{
 			MaxAttempts:       Some(5),

@@ -197,6 +197,32 @@ or a `filter`) and answer one result per task. `update` sets the `priority`, add
   several windows or devices stay current. An empty `id` means several changed (a cookie import) or
   there is only one (`config`): refetch the list.
 
+## Access, remote use and housekeeping
+
+- **Tokens.** The primary token lives in the daemon's token file. `GET /v1/auth/whoami` (`dlm auth
+  whoami`) says which token a client uses (`name`, `scope`, `primary`, `local`, `tls`).
+  `POST /v1/auth/tokens` (`dlm token add NAME --scope admin|read`) creates a named token for a
+  dashboard, script or device and shows its secret once (only a hash is kept); `GET /v1/auth/tokens`
+  lists them, `DELETE /v1/auth/tokens/{id}` (`dlm token rm`) revokes one at once. A **read** token
+  may only `GET` (403 `auth.read_only` otherwise), and not read cookie exports, the token list or MCP.
+  `POST /v1/auth/token/rotate` (`dlm token rotate`) replaces the primary token: the new one is
+  written to the token file and returned once, the old one stops working at once, named tokens are
+  unaffected. Token management needs an admin token (403 `auth.admin_required`).
+- **TLS for remote use.** `dlm tls init --host nas.local --apply` creates a self-signed certificate
+  and key in the config directory, prints the fingerprint clients pin, and with `--apply` sets
+  `server.tls_cert` and `server.tls_key`; also set `server.allow_remote` and a listen address, then
+  restart.
+- **Browser extension host.** `GET /v1/native-host` (`dlm native-host status`) and `POST
+  /v1/native-host` with `{"action":"install"|"uninstall", ...}` register or remove the Native
+  Messaging host with the browsers of the user the daemon runs as; only from the machine the daemon
+  runs on (403 `native_host.local_only`).
+- **Start at login.** `dlm service install|uninstall|status` installs a launchd agent (macOS), a
+  systemd user unit (Linux) or a Run registry value (Windows) that runs `dlm serve`.
+- **Cleanup.** `POST /v1/tasks/cleanup` (`dlm task cleanup`) removes completed tasks that finished
+  at least `olderThanDays` days ago (0: all), optionally with their files (`files`), or only counts
+  (`dryRun`). The global setting `retentionDays` does the same automatically every hour, never
+  touching files; 0 (the default) keeps everything.
+
 ## Task details
 
 Three read/write operations describe a task beyond its progress:

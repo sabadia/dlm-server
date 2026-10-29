@@ -152,6 +152,7 @@ func (a *app) newTokenCommand() *cobra.Command {
 	}
 	show.Flags().BoolVar(&reveal, "reveal", false, "also print the token (keep it secret)")
 	tokenCmd.AddCommand(show)
+	tokenCmd.AddCommand(a.tokenAPICommands()...)
 	return tokenCmd
 }
 

@@ -8,6 +8,15 @@ import (
 	"database/sql"
 )
 
+type ApiToken struct {
+	ID         string
+	Name       string
+	Scope      string
+	Hash       string
+	CreatedAt  int64
+	LastUsedAt sql.NullInt64
+}
+
 type Category struct {
 	ID        string
 	Name      string

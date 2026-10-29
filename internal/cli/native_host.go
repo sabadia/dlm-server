@@ -55,7 +55,7 @@ func (a *app) newNativeHostCommand() *cobra.Command {
 			return h.Serve(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout()) //nolint:wrapcheck // protocol errors are already prefixed
 		},
 	}
-	cmd.AddCommand(a.newNativeHostInstallCommand(), a.newNativeHostUninstallCommand())
+	cmd.AddCommand(a.newNativeHostInstallCommand(), a.newNativeHostUninstallCommand(), a.newNativeHostStatusCommand())
 	return cmd
 }
 
@@ -161,7 +161,8 @@ func (a *app) newNativeHostInstallCommand() *cobra.Command {
 			"The daemon also has to accept the extension's origin: add chrome-extension://ID to server.allowed_origins.",
 		Example: "  dlm native-host install --extension-id abcdefghijklmnopabcdefghijklmnop\n" +
 			"  dlm native-host install --firefox-id dlm@example.org --browser firefox",
-		Args: cobra.NoArgs,
+		Args:        cobra.NoArgs,
+		Annotations: map[string]string{annotationOperationID: "update-native-host"}, // the same installer as the API, run here
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			browsers, err := f.parsedBrowsers()
 			if err != nil {
@@ -209,10 +210,11 @@ func (a *app) newNativeHostInstallCommand() *cobra.Command {
 func (a *app) newNativeHostUninstallCommand() *cobra.Command {
 	var f nativeHostFlags
 	cmd := &cobra.Command{
-		Use:   "uninstall",
-		Short: "Remove the Native Messaging host registrations",
-		Long:  "Remove the host registration from the selected browsers (default: all) and, when all were selected, the launcher.",
-		Args:  cobra.NoArgs,
+		Use:         "uninstall",
+		Short:       "Remove the Native Messaging host registrations",
+		Long:        "Remove the host registration from the selected browsers (default: all) and, when all were selected, the launcher.",
+		Args:        cobra.NoArgs,
+		Annotations: map[string]string{annotationOperationID: "update-native-host"}, // the same installer as the API, run here
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			browsers, err := f.parsedBrowsers()
 			if err != nil {
@@ -258,4 +260,31 @@ func chromiumOrigins(origins []string) []string {
 		}
 	}
 	return out
+}
+
+func (a *app) newNativeHostStatusCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:         "status",
+		Short:       "Show where the Native Messaging host is registered",
+		Long:        "Ask the daemon (it must run on this machine) whether the host is registered with each browser, for the user the daemon runs as.",
+		Args:        cobra.NoArgs,
+		Annotations: map[string]string{annotationOperationID: "get-native-host"},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			c, err := a.newClient(cmd, client.DefaultTimeout)
+			if err != nil {
+				return err
+			}
+			st, err := c.NativeHostStatus(cmd.Context())
+			if err != nil {
+				return err //nolint:wrapcheck // client errors are already user-facing
+			}
+			return a.printer(cmd).Print(st, func() output.Table { //nolint:wrapcheck // stdout write errors need no context
+				t := output.Table{Columns: []string{"browser", "status", "manifest", "registry"}}
+				for _, r := range st.Browsers {
+					t.Rows = append(t.Rows, []string{r.Browser, r.Status, r.Manifest, r.Registry})
+				}
+				return t
+			})
+		},
+	}
 }

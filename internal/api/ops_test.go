@@ -855,3 +855,54 @@ func TestLimitsAndTimelineOperations(t *testing.T) {
 	f.call(t, http.MethodGet, "/v1/stats/timeline?from="+rfc(day.AddDate(-5, 0, 0))+"&to="+rfc(day), "", http.StatusUnprocessableEntity, nil)
 	f.call(t, http.MethodGet, "/v1/stats/timeline?from="+rfc(day)+"&to="+rfc(day), "", http.StatusUnprocessableEntity, nil)
 }
+
+func TestCleanupOperation(t *testing.T) {
+	f := newOpsFixture(t)
+	mk := func(daysAgo int) *domain.Task {
+		task := f.createTask(t, `{"url":"`+f.fileURL()+`","paused":true}`)
+		stored, err := f.store.Tasks().Get(t.Context(), task.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, st := range []domain.TaskStatus{domain.StatusQueued, domain.StatusRunning, domain.StatusPostprocessing, domain.StatusCompleted} {
+			if stored.Status == st {
+				continue
+			}
+			if st == domain.StatusQueued && stored.Status == domain.StatusPaused {
+				if err := stored.TransitionTo(domain.StatusQueued, time.Now()); err != nil {
+					t.Fatal(err)
+				}
+				continue
+			}
+			if err := stored.TransitionTo(st, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		done := time.Now().Add(-time.Duration(daysAgo) * 24 * time.Hour)
+		stored.CompletedAt = &done
+		if err := f.store.Tasks().Update(t.Context(), stored); err != nil {
+			t.Fatal(err)
+		}
+		return stored
+	}
+	old := mk(60)
+	recent := mk(1)
+
+	var res service.CleanupResult
+	f.call(t, http.MethodPost, "/v1/tasks/cleanup", `{"olderThanDays":30,"dryRun":true}`, http.StatusOK, &res)
+	if res.Matched != 1 || res.Deleted != 0 {
+		t.Errorf("dry run = %+v", res)
+	}
+	f.call(t, http.MethodPost, "/v1/tasks/cleanup", `{"olderThanDays":30}`, http.StatusOK, &res)
+	if res.Matched != 1 || res.Deleted != 1 {
+		t.Errorf("cleanup = %+v", res)
+	}
+	f.call(t, http.MethodGet, "/v1/tasks/"+old.ID, "", http.StatusNotFound, nil)
+	f.call(t, http.MethodGet, "/v1/tasks/"+recent.ID, "", http.StatusOK, nil)
+	f.call(t, http.MethodPost, "/v1/tasks/cleanup", `{"olderThanDays":-1}`, http.StatusUnprocessableEntity, nil)
+	f.call(t, http.MethodPost, "/v1/tasks/cleanup", `{"olderThanDays":0,"queueId":"nope"}`, http.StatusNotFound, nil)
+	f.call(t, http.MethodPost, "/v1/tasks/cleanup", `{"olderThanDays":0}`, http.StatusOK, &res)
+	if res.Deleted != 1 {
+		t.Errorf("everything completed = %+v", res)
+	}
+}

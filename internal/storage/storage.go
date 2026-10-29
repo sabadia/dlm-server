@@ -352,6 +352,30 @@ type PluginRepository interface {
 	Delete(ctx context.Context, name string) error
 }
 
+// TokenRecord is a named API token: what is stored about it, never the token.
+type TokenRecord struct {
+	ID    string
+	Name  string
+	Scope string
+	// Hash is the hex SHA-256 of the token.
+	Hash       string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
+// TokenRepository persists named API tokens.
+type TokenRepository interface {
+	// Create inserts the token; a duplicate name or hash returns
+	// domain.ErrAlreadyExists.
+	Create(ctx context.Context, t *TokenRecord) error
+	// List returns every token ordered by creation time.
+	List(ctx context.Context) ([]*TokenRecord, error)
+	// Delete removes the token; a missing one returns domain.ErrNotFound.
+	Delete(ctx context.Context, id string) error
+	// Touch records that the token was used at the given time.
+	Touch(ctx context.Context, id string, at time.Time) error
+}
+
 // TransferRow is the bytes one queue and engine transferred in one hour.
 type TransferRow struct {
 	// Bucket is the start of the hour (UTC).
@@ -439,6 +463,8 @@ type Store interface {
 	Plugins() PluginRepository
 	// Transfer returns the transfer history.
 	Transfer() TransferRepository
+	// Tokens returns the named API tokens.
+	Tokens() TokenRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

@@ -9,15 +9,18 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
+	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/config"
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/fsbrowse"
 	"github.com/sabadia/dlm-server/internal/logging"
+	"github.com/sabadia/dlm-server/internal/nativehost"
 	"github.com/sabadia/dlm-server/internal/service"
 )
 
@@ -41,8 +44,15 @@ type Deps struct {
 	Logger *slog.Logger
 	// Version is reported by /v1/health and the OpenAPI document.
 	Version string
-	// Token is the bearer token clients must present. It must not be empty.
+	// Token is the primary bearer token clients must present. It must not be
+	// empty.
 	Token string
+	// TokenFile is where the primary token is stored; rotate-token writes the
+	// new one there. Empty makes rotating unavailable.
+	TokenFile string
+	// Tokens holds the named tokens (admin or read-only); nil means there are
+	// none and the token operations answer 503.
+	Tokens *auth.Registry
 	// Bus is the event bus streamed by stream-events. When nil the operation
 	// is still registered (OpenAPI document, CLI parity) but answers 503.
 	Bus *events.Bus
@@ -82,6 +92,10 @@ type Deps struct {
 	Browser *service.BrowserService
 	// Limits is the service behind the limits operations; 503 while nil.
 	Limits *service.LimitsService
+	// NativeHost builds the installer behind the native-host operations;
+	// nil uses the running binary and the current user's browser directories
+	// (tests inject a temporary home).
+	NativeHost func() (*nativehost.Installer, error)
 	// Logs holds the recent log records behind the logs operations; 503 while nil.
 	Logs *logging.Ring
 	// System describes the daemon for get-system-info; 503 while nil.
@@ -93,14 +107,16 @@ type Deps struct {
 
 // Server is the REST API server.
 type Server struct {
-	cfg     *config.Config
-	fs      *fsbrowse.Browser
-	log     *slog.Logger
-	version string
-	token   []byte
-	mux     *http.ServeMux
-	api     huma.API
-	handler http.Handler
+	cfg       *config.Config
+	fs        *fsbrowse.Browser
+	log       *slog.Logger
+	version   string
+	token     atomic.Pointer[[]byte]
+	tokenFile string
+	tokens    *auth.Registry
+	mux       *http.ServeMux
+	api       huma.API
+	handler   http.Handler
 
 	bus       *events.Bus
 	bootID    string
@@ -119,6 +135,7 @@ type Server struct {
 	browser     *service.BrowserService
 	limits      *service.LimitsService
 	logs        *logging.Ring
+	nativeHost  func() (*nativehost.Installer, error)
 	system      SystemSource
 	lifecycle   Lifecycle
 
@@ -162,13 +179,14 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	}
 
 	s := &Server{
-		cfg:     cfg,
-		fs:      fsb,
-		log:     log,
-		version: version,
-		token:   []byte(deps.Token),
-		mux:     http.NewServeMux(),
-		public:  make(map[string]struct{}),
+		cfg:       cfg,
+		fs:        fsb,
+		log:       log,
+		version:   version,
+		tokenFile: deps.TokenFile,
+		tokens:    deps.Tokens,
+		mux:       http.NewServeMux(),
+		public:    make(map[string]struct{}),
 
 		bus:       deps.Bus,
 		bootID:    bootID,
@@ -187,9 +205,12 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		browser:     deps.Browser,
 		limits:      deps.Limits,
 		logs:        deps.Logs,
+		nativeHost:  deps.NativeHost,
 		system:      deps.System,
 		lifecycle:   deps.Lifecycle,
 	}
+	tok := []byte(deps.Token)
+	s.token.Store(&tok)
 	useProblemModel()
 	s.api = humago.New(s.mux, humaConfig(version))
 
@@ -221,6 +242,9 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerConfig()
 	s.registerLogs()
 	s.registerIntegrationsObservability()
+	s.registerCleanup()
+	s.registerAuth()
+	s.registerNativeHost()
 	s.registerBrowser()
 	if deps.MCP != nil {
 		s.mux.Handle(MCPPath, deps.MCP)
