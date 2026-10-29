@@ -12,6 +12,7 @@ import (
 
 	"github.com/anacrolix/torrent"
 
+	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/ratelimit"
 )
@@ -352,4 +353,77 @@ func verifiedPieces(e *Engine) int {
 		n += stats.PiecesComplete
 	}
 	return n
+}
+
+func TestTorrentInfoWhileSeedingAndAfter(t *testing.T) {
+	data := payload(300_000, 26)
+	sw := newSwarm(t, "single.bin", content{"": data}, false)
+	e := newEngine(t, testConfig())
+	rec := &recorder{}
+	sp := spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(withSeeding(0, 0, true)), rec)
+	dl, err := e.NewDownload(sp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insp, ok := dl.(engine.Inspectable)
+	if !ok {
+		t.Fatal("a torrent download is not Inspectable")
+	}
+	if _, ok := insp.Torrent(); ok {
+		t.Error("a download that has not started describes a swarm")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- dl.Run(ctx) }()
+	waitComplete(t, rec)
+
+	leech(t, sw, enginePort(t, e))
+	var info *domain.TorrentInfo
+	waitUntil(t, "an upload was counted", func() bool {
+		info, ok = insp.Torrent()
+		return ok && info.Uploaded > 0
+	})
+	if info.State != domain.TorrentSeeding {
+		t.Errorf("state = %q, want seeding", info.State)
+	}
+	if want := sw.mi.HashInfoBytes().HexString(); info.InfoHash != want {
+		t.Errorf("info hash = %q, want %q", info.InfoHash, want)
+	}
+	if info.Name != "single.bin" || info.Ratio <= 0 || info.Downloaded != int64(len(data)) {
+		t.Errorf("info = %+v", info)
+	}
+	// Progress follows on the engine's next poll.
+	waitUntil(t, "progress to show the upload", func() bool { return dl.Progress().Uploaded > 0 })
+
+	cancel()
+	if err := <-done; !isCanceled(err) {
+		t.Fatalf("Run = %v, want context.Canceled", err)
+	}
+	_, blob := rec.last()
+	res := &domain.Resource{Name: "single.bin", Size: int64(len(data))}
+	stopped, ok := e.Describe(blob, res, sp.Settings)
+	if !ok {
+		t.Fatal("nothing described from the saved state")
+	}
+	if stopped.State != domain.TorrentStopped || stopped.InfoHash != info.InfoHash || stopped.Uploaded <= 0 || stopped.Ratio <= 0 {
+		t.Errorf("stopped = %+v", stopped)
+	}
+	if _, ok := e.Describe(nil, res, sp.Settings); ok {
+		t.Error("an empty state described a torrent")
+	}
+	if _, ok := insp.Torrent(); ok {
+		t.Error("a finished download still describes a swarm")
+	}
+}
+
+func waitUntil(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
 }

@@ -61,7 +61,10 @@ type Download struct {
 	downloaded atomic.Int64
 	size       atomic.Int64
 	conns      atomic.Int32
+	peers      atomic.Int32
+	uploaded   atomic.Int64 // bytes uploaded by this run
 	writeErr   atomic.Pointer[error]
+	live       atomic.Pointer[liveTorrent] // set once the torrent joined the client
 
 	fresh    bool      // the metadata was not in the engine state; owned by Run
 	lastCkpt time.Time // owned by the goroutine running Run
@@ -83,7 +86,10 @@ func newDownload(e *Engine, spec engine.Spec, mi *metainfo.MetaInfo) *Download {
 
 // Progress implements engine.Download.
 func (d *Download) Progress() engine.Progress {
-	return engine.Progress{Downloaded: d.downloaded.Load(), Size: d.size.Load(), Connections: int(d.conns.Load())}
+	return engine.Progress{
+		Downloaded: d.downloaded.Load(), Size: d.size.Load(), Connections: int(d.conns.Load()),
+		Uploaded: d.uploaded.Load(), Peers: int(d.peers.Load()),
+	}
 }
 
 // Run downloads the selected files and then seeds them as the settings say.
@@ -427,6 +433,12 @@ func (d *Download) transfer(ctx context.Context, cl *torrent.Client, mi *metainf
 	d.mu.Lock()
 	st := d.st
 	d.mu.Unlock()
+	lt := &liveTorrent{
+		t: t, hash: hash, name: info.BestName(), private: info.Private != nil && *info.Private,
+		trackers: trackersOf(mi, d.spec.Settings.Torrent), baseUploaded: st.Uploaded, baseSeedMillis: st.SeedMillis, size: size,
+	}
+	d.live.Store(lt)
+	defer d.live.Store(nil)
 	var (
 		seedStart time.Time // zero while downloading
 		lastState = d.e.env.Clock()
@@ -452,6 +464,8 @@ func (d *Download) transfer(ctx context.Context, cl *torrent.Client, mi *metainf
 		d.downloaded.Store(got)
 		stats := t.Stats()
 		d.conns.Store(int32(stats.ActivePeers)) //nolint:gosec // a peer count
+		d.peers.Store(int32(stats.ActivePeers)) //nolint:gosec // a peer count
+		d.uploaded.Store(stats.BytesWrittenData.Int64())
 		if seedStart.IsZero() && activity.stalled(d.e.env.Clock(), d.e.opts.stallReset, got, stats.BytesReadData.Int64(), stats.BytesHashed.Int64()) && stats.ActivePeers > 0 {
 			d.log.WarnContext(ctx, "bt: no progress; resetting the peer connections", "peers", stats.ActivePeers, "stalled_for", d.e.opts.stallReset)
 			for _, pc := range t.PeerConns() {
@@ -464,6 +478,7 @@ func (d *Download) transfer(ctx context.Context, cl *torrent.Client, mi *metainf
 		now := d.e.env.Clock()
 		if seedStart.IsZero() && completeAt() {
 			seedStart = now
+			lt.seedingSince.Store(now.UnixNano())
 			lastState = now
 			d.update(func(s *state) { s.Complete = true })
 			d.checkpoint(ctx, true)

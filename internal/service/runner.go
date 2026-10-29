@@ -107,6 +107,8 @@ type Runner struct {
 
 	mu     sync.Mutex
 	probes map[string]*engine.Probe // attached resolve probes by task ID
+	// live holds the downloads that are running, by task ID.
+	live map[string]engine.Download
 	// redownloads counts, by task ID, how often a download was repeated
 	// because its checksum did not match. It starts over with the daemon.
 	redownloads map[string]int
@@ -129,7 +131,7 @@ func NewRunner(d RunnerDeps) *Runner {
 	if d.Defaults == nil {
 		d.Defaults = func() settings.Settings { return settings.Settings{} }
 	}
-	return &Runner{d: d, probes: make(map[string]*engine.Probe), redownloads: make(map[string]int)}
+	return &Runner{d: d, probes: make(map[string]*engine.Probe), live: make(map[string]engine.Download), redownloads: make(map[string]int)}
 }
 
 // AttachProbe hands a fresh resolve probe to the next Run of taskID, which
@@ -353,9 +355,26 @@ func (r *Runner) download(ctx context.Context, task *domain.Task, eff settings.S
 		return err //nolint:wrapcheck // engine errors are classified; kept intact
 	}
 
+	r.mu.Lock()
+	r.live[task.ID] = dl
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.live, task.ID)
+		r.mu.Unlock()
+	}()
+
 	stopProgress := r.publishProgress(task, dl)
 	defer stopProgress()
 	return dl.Run(ctx) //nolint:wrapcheck // engine errors are classified; kept intact
+}
+
+// Running returns the download that is running for taskID, if any.
+func (r *Runner) Running(taskID string) (engine.Download, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dl, ok := r.live[taskID]
+	return dl, ok
 }
 
 // engineFor returns the task's engine, selecting and recording one for a
@@ -698,6 +717,8 @@ func (r *Runner) publishProgress(task *domain.Task, dl engine.Download) (stop fu
 			last    = dl.Progress().Downloaded
 			lastAt  = r.d.Clock()
 			smoothd float64
+			lastUp  = dl.Progress().Uploaded
+			smoothu float64
 		)
 		for {
 			select {
@@ -713,8 +734,9 @@ func (r *Runner) publishProgress(task *domain.Task, dl engine.Download) (stop fu
 				if dt := now.Sub(lastAt).Seconds(); dt > 0 {
 					inst := float64(p.Downloaded-last) / dt
 					smoothd = 0.3*inst + 0.7*smoothd
+					smoothu = 0.3*float64(p.Uploaded-lastUp)/dt + 0.7*smoothu
 				}
-				last, lastAt = p.Downloaded, now
+				last, lastAt, lastUp = p.Downloaded, now, p.Uploaded
 				r.d.Bus.Publish(events.Event{
 					Type:    events.TypeTaskProgress,
 					TaskID:  task.ID,
@@ -722,6 +744,7 @@ func (r *Runner) publishProgress(task *domain.Task, dl engine.Download) (stop fu
 					Data: ProgressData{
 						Downloaded: p.Downloaded, Size: p.Size,
 						Speed: int64(max(smoothd, 0)), Connections: p.Connections,
+						UploadSpeed: int64(max(smoothu, 0)), Peers: p.Peers,
 					},
 				})
 			}

@@ -119,6 +119,23 @@ as `img[001-100].jpg` becomes a task per value.
 A task moves through `queued → running → postprocessing → completed`, with
 `paused`, `awaiting_link`, `refreshing` and `error` on the side.
 
+## Task details
+
+Three read/write operations describe a task beyond its progress:
+
+- `GET /v1/tasks/{id}/segments` (`dlm task segments`): the byte ranges downloaded in parallel and
+  how much of each is done, as last saved (about once a second while the task runs).
+- `PATCH /v1/tasks/{id}/files` (`dlm task files --select 0,3`): choose which files of a
+  multi-file task, such as a torrent, are downloaded, also after it was created. The task's size
+  follows the selection; files already downloaded and no longer selected stay on disk. Active and
+  completed tasks cannot change (409 `task.files_locked`): pause the task first.
+- `GET /v1/tasks/{id}/torrent` (`dlm task torrent`): state (`metadata`, `downloading`, `seeding`,
+  `stopped`), info hash, trackers, connected peers, uploaded bytes and share ratio. Live while the
+  task runs, otherwise what its last run saved; 404 `task.no_torrent` for other engines.
+
+`task.progress` events also carry `uploadSpeed` (bytes per second sent to peers) and `peers`
+(connected peers) for torrents.
+
 ## Events (Server-Sent Events)
 
 `GET /v1/events` streams what happens, so a client need not poll:

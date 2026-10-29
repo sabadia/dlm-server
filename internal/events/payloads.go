@@ -13,6 +13,10 @@ type ProgressData struct {
 	Size        int64 `json:"size"`
 	Speed       int64 `json:"speed"` // bytes per second, smoothed
 	Connections int   `json:"connections"`
+	// UploadSpeed is bytes per second sent to peers, smoothed (torrents).
+	UploadSpeed int64 `json:"uploadSpeed,omitempty"`
+	// Peers is the number of connected peers (torrents).
+	Peers int `json:"peers,omitempty"`
 }
 
 // StatusData is the payload of task.status events.

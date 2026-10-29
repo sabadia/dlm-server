@@ -126,6 +126,14 @@ func conflict(format string, args ...any) *domainError {
 	return &domainError{kind: ErrConflict, msg: "domain: " + cause.Error(), cause: cause}
 }
 
+// NotFoundCode is an error matching ErrNotFound with a machine-readable code
+// and parameters (see Describe), for a missing thing that is not an entity.
+func NotFoundCode(code string, params map[string]string, format string, args ...any) error {
+	e := newError(ErrNotFound, nil, format, args...)
+	e.code, e.params = code, params
+	return e
+}
+
 // ConflictCode is Conflict with a machine-readable code and parameters (see
 // Describe): clients show a localised message for the code and use the
 // parameters in it. The formatted message stays the English fallback.

@@ -197,6 +197,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerPlugins()
 	s.registerCapture()
 	s.registerRefresh()
+	s.registerTaskDetail()
 	s.registerBrowser()
 	if deps.MCP != nil {
 		s.mux.Handle(MCPPath, deps.MCP)

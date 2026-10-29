@@ -75,6 +75,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm task add`](#dlm-task-add) | Add download tasks |
 | [`dlm task await-link`](#dlm-task-await-link) | Wait for the browser extension to capture a new link |
 | [`dlm task export`](#dlm-task-export) | Write tasks as a list (JSON, URL list or aria2 input file) |
+| [`dlm task files`](#dlm-task-files) | List a task's files or choose which are downloaded |
 | [`dlm task get`](#dlm-task-get) | Show a task |
 | [`dlm task import`](#dlm-task-import) | Add the downloads of a list (JSON, URL list or aria2 input file) |
 | [`dlm task list`](#dlm-task-list) | List tasks |
@@ -86,9 +87,11 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm task restart`](#dlm-task-restart) | Download a completed or failed task again from scratch |
 | [`dlm task resume`](#dlm-task-resume) | Resume paused or failed tasks |
 | [`dlm task rm`](#dlm-task-rm) | Delete tasks |
+| [`dlm task segments`](#dlm-task-segments) | Show the segments of a task's download |
 | [`dlm task set`](#dlm-task-set) | Change a task |
 | [`dlm task set-url`](#dlm-task-set-url) | Replace a task's link |
 | [`dlm task settings`](#dlm-task-settings) | Show a task's effective settings and where each value comes from |
+| [`dlm task torrent`](#dlm-task-torrent) | Show the swarm of a torrent task |
 | [`dlm token`](#dlm-token) | Manage the API token |
 | [`dlm token show`](#dlm-token-show) | Show the API token file (and, with --reveal, the token) |
 | [`dlm version`](#dlm-version) | Print the CLI and daemon versions |
@@ -3101,6 +3104,7 @@ dlm task [flags]
 * [dlm task add](#dlm-task-add)	 - Add download tasks
 * [dlm task await-link](#dlm-task-await-link)	 - Wait for the browser extension to capture a new link
 * [dlm task export](#dlm-task-export)	 - Write tasks as a list (JSON, URL list or aria2 input file)
+* [dlm task files](#dlm-task-files)	 - List a task's files or choose which are downloaded
 * [dlm task get](#dlm-task-get)	 - Show a task
 * [dlm task import](#dlm-task-import)	 - Add the downloads of a list (JSON, URL list or aria2 input file)
 * [dlm task list](#dlm-task-list)	 - List tasks
@@ -3112,9 +3116,11 @@ dlm task [flags]
 * [dlm task restart](#dlm-task-restart)	 - Download a completed or failed task again from scratch
 * [dlm task resume](#dlm-task-resume)	 - Resume paused or failed tasks
 * [dlm task rm](#dlm-task-rm)	 - Delete tasks
+* [dlm task segments](#dlm-task-segments)	 - Show the segments of a task's download
 * [dlm task set](#dlm-task-set)	 - Change a task
 * [dlm task set-url](#dlm-task-set-url)	 - Replace a task's link
 * [dlm task settings](#dlm-task-settings)	 - Show a task's effective settings and where each value comes from
+* [dlm task torrent](#dlm-task-torrent)	 - Show the swarm of a torrent task
 
 
 ## dlm task add
@@ -3268,6 +3274,58 @@ dlm task export [flags]
       --queue string     only tasks of this queue ID
       --search string    only tasks whose name or URL contains this text
       --status strings   only tasks in this status (repeatable or comma-separated)
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
+## dlm task files
+
+List a task's files or choose which are downloaded
+
+### Synopsis
+
+Without --select, list the files of a multi-file task (a torrent) and whether each is selected. With --select INDEX[,INDEX…] download only those files from now on (every other file is skipped). The task must be paused or not started: active and completed tasks cannot change.
+
+```
+dlm task files ID [flags]
+```
+
+### Examples
+
+```
+  dlm task files 01J…
+  dlm task files 01J… --select 0,3
+```
+
+### Options
+
+```
+  -h, --help          help for files
+      --select ints   indexes of the files to download
 ```
 
 ### Options inherited from parent commands
@@ -3794,6 +3852,50 @@ dlm task rm [ID...] [flags]
 * [dlm task](#dlm-task)	 - Manage download tasks
 
 
+## dlm task segments
+
+Show the segments of a task's download
+
+### Synopsis
+
+Show the byte ranges a task downloads in parallel and how much of each is done, as last saved (about once a second while it runs).
+
+```
+dlm task segments ID [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for segments
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
 ## dlm task set
 
 Change a task
@@ -3923,6 +4025,50 @@ dlm task settings ID [flags]
 
 ```
   -h, --help   help for settings
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
+## dlm task torrent
+
+Show the swarm of a torrent task
+
+### Synopsis
+
+Show the state, trackers, peers, bytes shared and share ratio of a torrent task: live while it runs, otherwise what its last run saved.
+
+```
+dlm task torrent ID [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for torrent
 ```
 
 ### Options inherited from parent commands
