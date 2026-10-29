@@ -806,3 +806,68 @@ func TestFilenameFromHeaderCountsForValidation(t *testing.T) {
 		t.Errorf("same announced file name: %v", err)
 	}
 }
+
+func TestWaitingForTheExtensionIsAnnounced(t *testing.T) {
+	e := newRefreshEnv(t)
+	task := e.task(t, domain.StatusRunning, 0)
+	e.setSettings(t, task.ID, refreshSettings(settings.RefreshSettings{
+		Strategies:   settings.Some([]settings.RefreshStrategy{settings.RefreshExtensionCapture}),
+		AwaitTimeout: settings.Some(settings.Duration(time.Minute)),
+	}))
+	sub := e.bus.Subscribe(t.Context(), events.Filter{Types: []events.Type{events.TypeTaskRefreshRequested}})
+	if err := e.refresher.HandleExpired(t.Context(), task.ID, engine.LinkExpired(errors.New("403"))); err != nil {
+		t.Fatal(err)
+	}
+	got := collect(sub)
+	if len(got) != 1 || got[0].TaskID != task.ID {
+		t.Fatalf("events = %+v, want one for the task", got)
+	}
+	d, ok := got[0].Data.(events.RefreshRequestedData)
+	if !ok {
+		t.Fatalf("data = %T", got[0].Data)
+	}
+	// The page defaults to the link the task started from.
+	if d.Name != "file.bin" || d.PageURL != e.origin.URL+"/click" || d.OriginalURL != e.origin.URL+"/click" ||
+		d.Deadline == nil || d.Deadline.Sub(e.clock.Now()).Abs() > time.Second+time.Minute || d.Fingerprint.Size != int64(len(e.data)) {
+		t.Errorf("data = %+v", d)
+	}
+
+	// A manual wait is not for the extension.
+	manual := e.task(t, domain.StatusRunning, 0)
+	e.setSettings(t, manual.ID, refreshSettings(settings.RefreshSettings{
+		Strategies: settings.Some([]settings.RefreshStrategy{settings.RefreshManual}),
+	}))
+	sub = e.bus.Subscribe(t.Context(), events.Filter{Types: []events.Type{events.TypeTaskRefreshRequested}})
+	if err := e.refresher.HandleExpired(t.Context(), manual.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := collect(sub); len(got) != 0 {
+		t.Errorf("a manual wait was announced to the extension: %+v", got)
+	}
+}
+
+func TestCaptureOfTheSameClickedLinkMatchesWithoutAFileName(t *testing.T) {
+	e := newRefreshEnv(t)
+	task := e.task(t, domain.StatusRunning, 0)
+	e.setSettings(t, task.ID, refreshSettings(settings.RefreshSettings{
+		Strategies: settings.Some([]settings.RefreshStrategy{settings.RefreshExtensionCapture}),
+	}))
+	if err := e.refresher.HandleExpired(t.Context(), task.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	newLink := e.origin.URL + "/file?token=new"
+
+	// Another link, nothing known about the file: no match.
+	if got, err := e.refresher.AttachCapture(t.Context(), domain.Source{CurrentURL: newLink, OriginalURL: "https://example.com/other"}); err != nil || got != nil {
+		t.Errorf("a different link matched: %+v, %v", got, err)
+	}
+	// The same clicked link with a size that contradicts the task: no match.
+	if got, err := e.refresher.AttachCapture(t.Context(), domain.Source{CurrentURL: newLink, OriginalURL: e.origin.URL + "/click", Fingerprint: domain.Fingerprint{Size: 7}}); err != nil || got != nil {
+		t.Errorf("a contradicting capture matched: %+v, %v", got, err)
+	}
+	// The same clicked link, with no fingerprint at all (the browser knew nothing): the task gets it.
+	got, err := e.refresher.AttachCapture(t.Context(), domain.Source{CurrentURL: newLink, OriginalURL: e.origin.URL + "/click"})
+	if err != nil || got == nil || got.ID != task.ID || got.Source.CurrentURL != newLink {
+		t.Fatalf("AttachCapture = %+v, %v; want the task with the new link", got, err)
+	}
+}

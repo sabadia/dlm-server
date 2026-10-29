@@ -61,6 +61,7 @@ type Source struct {
 	CookieDomains []string          `json:"cookieDomains,omitempty"`
 	MediaHint     string            `json:"mediaHint,omitempty"`
 	Mirrors       []string          `json:"mirrors,omitempty"`
+	StreamKind    string            `json:"streamKind,omitempty"` // hls or dash, for a manifest whose URL does not say so
 	ResolverKind  string            `json:"resolverKind,omitempty"`
 	Fingerprint   *Fingerprint      `json:"fingerprint,omitempty"`
 }
@@ -121,6 +122,22 @@ type ResolveResult struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 	// DuplicateOf is set when another task already has this download.
 	DuplicateOf *DuplicateHint `json:"duplicateOf,omitempty"`
+	// Formats are the qualities a stream offers, best first; pass an id as the
+	// source's mediaHint to download that one.
+	Formats []Format `json:"formats,omitempty"`
+}
+
+// Format is one quality a stream can be downloaded in.
+type Format struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Kind      string `json:"kind"` // video or audio
+	Width     int    `json:"width,omitempty"`
+	Height    int    `json:"height,omitempty"`
+	Bandwidth int64  `json:"bandwidth,omitempty"`
+	Codecs    string `json:"codecs,omitempty"`
+	Container string `json:"container,omitempty"`
+	Size      int64  `json:"size"`
 }
 
 // DuplicateHint names the task a new download would repeat.

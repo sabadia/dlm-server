@@ -288,8 +288,9 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		bus.Close()
 		return fmt.Errorf("daemon: %w", err)
 	}
+	pairings := auth.NewPairings(tokens, func(e auth.PairingEvent) { publishPairing(bus, e) })
 	srv, err := BuildServer(cfg, api.Deps{
-		Logger: log, Version: version, Token: token, TokenFile: cfg.TokenFile(), Tokens: tokens, Bus: bus,
+		Logger: log, Version: version, Token: token, TokenFile: cfg.TokenFile(), Tokens: tokens, Pairings: pairings, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
 		Cookies:     service.NewCookieService(jar).WithBus(bus),
 		Capture:     service.NewCaptureService(services.Tasks, jar, services.Refresh),
@@ -352,6 +353,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	defer stopSweep()
 	g.Go(func() error { return resolves.Run(sweepCtx, time.Minute) })
 	g.Go(func() error { return jar.Run(sweepCtx, time.Hour) })
+	g.Go(func() error { return jar.RunTaskCleanup(sweepCtx, bus) })
 	g.Go(func() error { return services.Refresh.Run(sweepCtx) })
 	g.Go(func() error { return service.NewHousekeeper(limitsDeps, services.Tasks).Run(sweepCtx) })
 	g.Go(func() error { return resolver.Run(sweepCtx) })
@@ -455,4 +457,17 @@ func (q quotaSource) Usage(queueID string) (service.QuotaUsage, bool) {
 		return service.QuotaUsage{}, false
 	}
 	return service.QuotaUsage{Quota: u.Quota, Used: u.Used, WindowStart: u.WindowStart, Exhausted: u.Exhausted}, true
+}
+
+// publishPairing tells the clients that a browser extension asked to pair, or
+// that the request was answered or ran out.
+func publishPairing(bus *events.Bus, e auth.PairingEvent) {
+	p := e.Pairing
+	if e.Requested {
+		bus.Publish(events.Event{Type: events.TypePairingRequested, Data: events.PairingRequestedData{
+			ID: p.ID, Name: p.Name, Browser: p.Browser, ClientID: p.ClientID, ClientVersion: p.ClientVersion, Code: p.Code, ExpiresAt: p.ExpiresAt,
+		}})
+		return
+	}
+	bus.Publish(events.Event{Type: events.TypePairingResolved, Data: events.PairingResolvedData{ID: p.ID, Status: string(p.Status), TokenID: p.TokenID}})
 }

@@ -164,6 +164,8 @@ type Probe struct {
 	Resource domain.Resource
 	// Suggested is the suggested file name.
 	Suggested string
+	// Formats are the qualities the stream offers (a picker); nil for a plain file.
+	Formats []domain.Format
 
 	mu         sync.Mutex
 	attachment io.Closer

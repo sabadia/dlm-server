@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -305,4 +306,32 @@ func pickAudio(m *master, v variant) (rendition, bool) {
 		return *first, true
 	}
 	return rendition{}, false
+}
+
+// formats lists the streams of a master playlist for a picker, best first. A
+// format's id selects it through Source.MediaHint: its height ("720p") when no
+// other stream has that height, else an exact match on its URL.
+func formats(vs []variant) []domain.Format {
+	heights := map[int]int{}
+	for _, v := range vs {
+		heights[v.height]++
+	}
+	out := make([]domain.Format, 0, len(vs))
+	for _, v := range vs {
+		id := "^" + regexp.QuoteMeta(v.url) + "$"
+		if v.height > 0 && heights[v.height] == 1 {
+			id = strconv.Itoa(v.height) + "p"
+		}
+		out = append(out, domain.Format{
+			ID: id, Label: domain.FormatLabel(v.height, v.bandwidth, heights[v.height] > 1), Kind: domain.FormatVideo,
+			Width: v.width, Height: v.height, Bandwidth: v.bandwidth, Codecs: v.codecs, Size: -1,
+		})
+	}
+	slices.SortStableFunc(out, func(a, b domain.Format) int {
+		if a.Height != b.Height {
+			return b.Height - a.Height
+		}
+		return int(b.Bandwidth - a.Bandwidth)
+	})
+	return out
 }

@@ -50,6 +50,9 @@ type ResolveResult struct {
 	Resource  domain.Resource `json:"resource"`
 	Name      string          `json:"name"`
 	ExpiresAt time.Time       `json:"expiresAt"`
+	// Formats are the qualities a stream (HLS, DASH, a video page) offers, best
+	// first. Pass a format's id as source.mediaHint to download that one.
+	Formats []domain.Format `json:"formats,omitempty"`
 	// DuplicateOf is set when another task already has this link, or the
 	// file name and size the probe found.
 	DuplicateOf *DuplicateHint `json:"duplicateOf,omitempty"`
@@ -82,6 +85,10 @@ type CreateTaskInput struct {
 	Labels   map[string]string
 	// Paused creates the task paused instead of queued.
 	Paused bool
+	// ID, when set, is the new task's id instead of a generated one. A caller
+	// that has to store something under the id before the task exists (the
+	// cookies of a capture) chooses it; it must be unique.
+	ID string
 	// AllowDuplicate skips the duplicate check: without it a task for a link,
 	// a checksum, or (once resolved) a file name and size that another task
 	// already has is refused with domain.ErrConflict.
@@ -148,6 +155,7 @@ func (s *TaskService) Resolve(ctx context.Context, in ResolveInput) (*ResolveRes
 		Source:   probe.Source,
 		Resource: probe.Resource,
 		Name:     strings.TrimSpace(probe.Suggested),
+		Formats:  probe.Formats,
 	}
 	if dup, err := s.d.Store.Tasks().FindDuplicate(ctx, storage.DuplicateQuery{
 		URLs: []string{probe.Source.CurrentURL, probe.Source.OriginalURL}, Name: res.Name, Size: probe.Resource.Size,
@@ -206,7 +214,7 @@ func (s *TaskService) Create(ctx context.Context, in CreateTaskInput) (*domain.T
 		}
 		params.Engine, params.Source = peeked.Engine, peeked.Source
 	}
-	t, err := s.buildTask(params, peeked, dir, in.Paused)
+	t, err := s.buildTask(cmpOr(in.ID, s.d.NewID()), params, peeked, dir, in.Paused)
 	if err != nil {
 		return nil, err
 	}
@@ -285,9 +293,9 @@ func (s *TaskService) checkDuplicate(ctx context.Context, t *domain.Task, task s
 
 // buildTask builds a validated task; probe, when set, supplies the
 // resolved resource and suggested name.
-func (s *TaskService) buildTask(p domain.NewTaskParams, probe *engine.Probe, dir string, paused bool) (*domain.Task, error) {
+func (s *TaskService) buildTask(id string, p domain.NewTaskParams, probe *engine.Probe, dir string, paused bool) (*domain.Task, error) {
 	now := s.d.now()
-	t, err := domain.NewTask(s.d.NewID(), now, p)
+	t, err := domain.NewTask(id, now, p)
 	if err != nil {
 		return nil, fmt.Errorf("service: create task: %w", err)
 	}

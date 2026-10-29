@@ -123,3 +123,29 @@ func TestTokensSurviveARestartAndLastUseIsRecordedOncePerMinute(t *testing.T) {
 		t.Error("a nil registry authenticated")
 	}
 }
+
+func TestExtensionTokenMetadataSurvivesAReload(t *testing.T) {
+	r, store := newRegistry(t)
+	secret, info, err := r.CreateExtension(t.Context(), "Firefox extension", ExtensionInfo{Browser: "firefox", ID: "dlm-extension@sabadia.github.io", Version: "0.2.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Scope != ScopeExtension || info.Kind != KindExtension {
+		t.Fatalf("info = %+v", info)
+	}
+	again := NewRegistry(store.Tokens())
+	if err := again.Load(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if p, ok := again.Authenticate(t.Context(), secret); !ok || p.Scope != ScopeExtension || p.Name != "Firefox extension" {
+		t.Fatalf("principal = %+v, %v", p, ok)
+	}
+	list, _ := again.List(t.Context())
+	if len(list) != 1 || list[0].Browser != "firefox" || list[0].ClientID != "dlm-extension@sabadia.github.io" || list[0].ClientVersion != "0.2.0" {
+		t.Fatalf("listing = %+v", list)
+	}
+	// An extension token cannot be made by hand through Create.
+	if _, _, err := r.Create(t.Context(), "sneaky", ScopeExtension); !errors.Is(err, domain.ErrInvalidArgument) {
+		t.Errorf("Create(extension) = %v, want invalid argument", err)
+	}
+}

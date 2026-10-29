@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/cli/output"
 	"github.com/sabadia/dlm-server/internal/client"
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/instance"
 	"github.com/sabadia/dlm-server/internal/nativehost"
 	"github.com/sabadia/dlm-server/internal/platform"
 )
@@ -24,8 +26,8 @@ func (a *app) newNativeHostCommand() *cobra.Command {
 		Use:   "native-host [ORIGIN]",
 		Short: "Native Messaging host for the browser extension",
 		Long: "Run the Native Messaging host. Browsers start it (through the launcher that `native-host install` writes) " +
-			"when the extension calls runtime.connectNative; it answers `connect` with the daemon address and token " +
-			"over stdin/stdout and is not meant to be run by hand.\n\n" +
+			"when the extension calls runtime.connectNative; it answers `connect` with where the daemon is, and `pair` / " +
+			"`pair.status` so the extension can be given a token of its own, over stdin/stdout. It is not meant to be run by hand.\n\n" +
 			"Without a subcommand it serves the protocol until stdin closes. Browser-supplied arguments (the caller's " +
 			"origin, --parent-window) are accepted.",
 		Args:               cobra.ArbitraryArgs,
@@ -39,17 +41,20 @@ func (a *app) newNativeHostCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			origin := ""
+			origin, addon := "", ""
 			for _, arg := range args {
-				if strings.HasPrefix(arg, "chrome-extension://") {
+				switch {
+				case strings.HasPrefix(arg, "chrome-extension://"):
 					origin = arg
+				case strings.Contains(arg, "@") && !strings.ContainsAny(arg, `/\`):
+					addon = arg // Firefox passes the manifest path and then the add-on id
 				}
 			}
 			h := &nativehost.Host{
-				BaseURL:        baseURL,
-				Token:          func() (string, error) { return auth.ReadToken(cfg.TokenFile()) },
-				Health:         func(ctx context.Context) (string, error) { return a.daemonVersion(ctx, baseURL) },
+				Daemon:         func(ctx context.Context) nativehost.DaemonInfo { return a.hostDaemonInfo(ctx, cfg, baseURL) },
+				Pairing:        hostPairing{newClient: func() (*client.Client, error) { return a.hostClient(cfg, baseURL) }},
 				Origin:         origin,
+				AddonID:        addon,
 				AllowedOrigins: cfg.Server.AllowedOrigins,
 			}
 			return h.Serve(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout()) //nolint:wrapcheck // protocol errors are already prefixed
@@ -69,6 +74,72 @@ func (a *app) baseURL(cfg *config.Config) (string, error) {
 		return "", fmt.Errorf("cli: %w", err)
 	}
 	return u, nil
+}
+
+// hostDaemonInfo says where the daemon is right now. A running daemon of this
+// configuration directory publishes its real address (it may have started on
+// a random port, so what was baked into the launcher can be stale); otherwise
+// the configured address is tried, which also covers a daemon on another
+// machine.
+func (a *app) hostDaemonInfo(ctx context.Context, cfg *config.Config, baseURL string) nativehost.DaemonInfo {
+	if info, err := instance.Discover(cfg.Paths.ConfigDir); err == nil && info.URL != "" {
+		return nativehost.DaemonInfo{BaseURL: info.URL, Running: true, Version: info.Version, APIVersion: info.APIVersion, TLSFingerprint: info.TLSFingerprint}
+	}
+	out := nativehost.DaemonInfo{BaseURL: baseURL}
+	if v, err := a.daemonVersion(ctx, baseURL); err == nil {
+		out.Running, out.Version = true, v
+	}
+	return out
+}
+
+// hostClient is a client for the daemon of this host with the primary token,
+// read from the token file on every call so a rotated token is picked up.
+func (a *app) hostClient(cfg *config.Config, baseURL string) (*client.Client, error) {
+	if info, err := instance.Discover(cfg.Paths.ConfigDir); err == nil && info.URL != "" {
+		baseURL = info.URL
+	}
+	token, err := auth.ReadToken(cfg.TokenFile())
+	if err != nil || token == "" {
+		return nil, errors.New("the daemon has no token yet: run `dlm serve` once")
+	}
+	c, err := client.New(baseURL, token, client.WithUserAgent("dlm-native-host/"+a.version), client.WithTimeout(10*time.Second))
+	if err != nil {
+		return nil, fmt.Errorf("cli: %w", err)
+	}
+	return c, nil
+}
+
+// hostPairing adapts the API client to what the host needs.
+type hostPairing struct {
+	newClient func() (*client.Client, error)
+}
+
+func pairingInfo(p client.Pairing, token string) nativehost.PairingInfo {
+	return nativehost.PairingInfo{ID: p.ID, Status: p.Status, Code: p.Code, ExpiresAt: p.ExpiresAt, Token: token}
+}
+
+func (h hostPairing) Start(ctx context.Context, req nativehost.PairingRequest) (nativehost.PairingInfo, error) {
+	c, err := h.newClient()
+	if err != nil {
+		return nativehost.PairingInfo{}, err
+	}
+	p, err := c.StartPairing(ctx, client.PairingRequest{Name: req.Name, Browser: req.Browser, ClientID: req.ClientID, Version: req.Version})
+	if err != nil {
+		return nativehost.PairingInfo{}, err //nolint:wrapcheck // client errors are already user-facing
+	}
+	return pairingInfo(*p, ""), nil
+}
+
+func (h hostPairing) Status(ctx context.Context, id string) (nativehost.PairingInfo, error) {
+	c, err := h.newClient()
+	if err != nil {
+		return nativehost.PairingInfo{}, err
+	}
+	st, err := c.GetPairing(ctx, id)
+	if err != nil {
+		return nativehost.PairingInfo{}, err //nolint:wrapcheck // client errors are already user-facing
+	}
+	return pairingInfo(st.Pairing, st.Token), nil
 }
 
 // daemonVersion asks the daemon's public health endpoint for its version.
@@ -156,11 +227,11 @@ func (a *app) newNativeHostInstallCommand() *cobra.Command {
 		Short: "Register the Native Messaging host with the browsers",
 		Long: "Write the host launcher and register it, for the current user, with Chrome, Chromium, Edge, Brave and " +
 			"Firefox (manifest files on Linux and macOS, registry keys on Windows).\n\n" +
-			"Chromium-family browsers need the extension ID (--extension-id, or the chrome-extension:// entries of " +
-			"server.allowed_origins); Firefox needs the add-on ID (--firefox-id). A browser without one is skipped. " +
-			"The daemon also has to accept the extension's origin: add chrome-extension://ID to server.allowed_origins.",
-		Example: "  dlm native-host install --extension-id abcdefghijklmnopabcdefghijklmnop\n" +
-			"  dlm native-host install --firefox-id dlm@example.org --browser firefox",
+			"The published DLM extension (Chrome and every Chromium browser, and Firefox) is always registered; " +
+			"--extension-id and --firefox-id (or the chrome-extension:// entries of server.allowed_origins) add others, " +
+			"for example a build you made yourself. Another extension also has to be in server.allowed_origins to be answered.",
+		Example: "  dlm native-host install\n" +
+			"  dlm native-host install --extension-id abcdefghijklmnopabcdefghijklmnop --browser chrome",
 		Args:        cobra.NoArgs,
 		Annotations: map[string]string{annotationOperationID: "update-native-host"}, // the same installer as the API, run here
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -186,7 +257,7 @@ func (a *app) newNativeHostInstallCommand() *cobra.Command {
 					t.ChromiumOrigins = append(t.ChromiumOrigins, origin)
 				}
 			}
-			results, err := in.Install(t)
+			results, err := in.Install(t.WithBuiltinIDs())
 			if perr := a.printNativeHost(cmd, results); perr != nil {
 				return perr
 			}

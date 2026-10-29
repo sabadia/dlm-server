@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -25,10 +26,17 @@ const (
 	ScopeAdmin Scope = "admin"
 	// ScopeRead may only read: GET requests, and not what exposes secrets.
 	ScopeRead Scope = "read"
+	// ScopeExtension is what a paired browser extension gets: it may hand
+	// downloads to the daemon and follow them, and nothing that changes
+	// settings, manages access, exports secrets or deletes data.
+	ScopeExtension Scope = "extension"
 )
 
+// KindExtension is the Token.Kind of a paired browser extension.
+const KindExtension = "extension"
+
 // Valid reports whether s is a known scope.
-func (s Scope) Valid() bool { return s == ScopeAdmin || s == ScopeRead }
+func (s Scope) Valid() bool { return s == ScopeAdmin || s == ScopeRead || s == ScopeExtension }
 
 // TokenPrefix starts every generated named token, so a leaked one is easy to
 // recognise.
@@ -58,6 +66,14 @@ type Token struct {
 	Scope      Scope      `json:"scope"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	// Kind says what the token was issued to ("extension" for a paired
+	// browser extension); empty for a token created by hand.
+	Kind string `json:"kind,omitempty"`
+	// Browser, ClientID and ClientVersion describe the client of an
+	// extension token: the browser, the extension's id and its version.
+	Browser       string `json:"browser,omitempty"`
+	ClientID      string `json:"clientId,omitempty"`
+	ClientVersion string `json:"clientVersion,omitempty"`
 }
 
 // HashToken returns the hex SHA-256 of a token, which is all that is stored.
@@ -111,7 +127,10 @@ func (r *Registry) Load(ctx context.Context) error {
 }
 
 func tokenOf(rec *storage.TokenRecord) Token {
-	return Token{ID: rec.ID, Name: rec.Name, Scope: Scope(rec.Scope), CreatedAt: rec.CreatedAt, LastUsedAt: rec.LastUsedAt}
+	return Token{
+		ID: rec.ID, Name: rec.Name, Scope: Scope(rec.Scope), CreatedAt: rec.CreatedAt, LastUsedAt: rec.LastUsedAt,
+		Kind: rec.Kind, Browser: rec.Browser, ClientID: rec.ClientID, ClientVersion: rec.ClientVersion,
+	}
 }
 
 // List returns the named tokens, oldest first.
@@ -150,21 +169,58 @@ func (r *Registry) Create(ctx context.Context, name string, scope Scope) (string
 	if err := ValidateName(name); err != nil {
 		return "", Token{}, err
 	}
-	if !scope.Valid() {
+	if scope != ScopeAdmin && scope != ScopeRead {
 		return "", Token{}, domain.InvalidArgumentCode("token.bad_scope", nil, "auth: scope must be admin or read")
 	}
+	return r.create(ctx, &storage.TokenRecord{Name: name, Scope: string(scope)})
+}
+
+// ExtensionInfo describes the browser extension a token is issued to.
+type ExtensionInfo struct {
+	Browser string
+	// ID is the extension's id (Chrome) or add-on id (Firefox).
+	ID      string
+	Version string
+}
+
+// CreateExtension makes a token with ScopeExtension for a paired browser
+// extension. A name that is taken (ignoring case) gets a number appended, so
+// pairing a second browser of the same kind works.
+func (r *Registry) CreateExtension(ctx context.Context, name string, info ExtensionInfo) (string, Token, error) {
+	name = strings.TrimSpace(name)
+	if err := ValidateName(name); err != nil {
+		return "", Token{}, err
+	}
+	rec := &storage.TokenRecord{Scope: string(ScopeExtension), Kind: KindExtension, Browser: info.Browser, ClientID: info.ID, ClientVersion: info.Version}
+	for n := 1; ; n++ {
+		rec.Name = name
+		if n > 1 {
+			rec.Name = fmt.Sprintf("%s (%d)", name, n)
+		}
+		secret, tok, err := r.create(ctx, rec)
+		if errors.Is(err, domain.ErrAlreadyExists) && n < 100 {
+			continue
+		}
+		return secret, tok, err
+	}
+}
+
+// create stores rec (whose Name, Scope and metadata are set) under a fresh
+// token and returns the secret and the listing.
+func (r *Registry) create(ctx context.Context, template *storage.TokenRecord) (string, Token, error) {
 	token, err := NewToken()
 	if err != nil {
 		return "", Token{}, err
 	}
-	rec := &storage.TokenRecord{ID: r.newID(), Name: name, Scope: string(scope), Hash: HashToken(token), CreatedAt: r.clock().UTC()}
-	if err := r.repo.Create(ctx, rec); err != nil {
+	rec := *template
+	rec.ID, rec.Hash, rec.CreatedAt = r.newID(), HashToken(token), r.clock().UTC()
+	if err := r.repo.Create(ctx, &rec); err != nil {
 		return "", Token{}, fmt.Errorf("auth: create token: %w", err)
 	}
 	r.mu.Lock()
-	r.byHash[rec.Hash] = rec
+	r.byHash[rec.Hash] = &rec
 	r.mu.Unlock()
-	return token, tokenOf(rec), nil
+	return token, tokenOf(&rec), nil
 }
 
 // Delete revokes a token at once. An unknown ID matches domain.ErrNotFound.

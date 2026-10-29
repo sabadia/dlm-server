@@ -102,6 +102,8 @@ type Plan struct {
 	// Bandwidth of the chosen variant in bits per second, for size estimates;
 	// 0 when unknown.
 	Bandwidth int64
+	// Formats are the qualities the master playlist or manifest offers.
+	Formats []domain.Format
 }
 
 func (p *Plan) live() bool {

@@ -103,6 +103,40 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	return c.doAs(ctx, method, path, "application/json", in, out)
 }
 
+// doBytes sends data as the request body with the given media type and decodes
+// the JSON answer into out.
+func (c *Client) doBytes(ctx context.Context, method, path, contentType string, data []byte, out any) error {
+	if c.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.timeout)
+		defer cancel()
+	}
+	req, err := c.newRequest(ctx, method, path, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json, application/problem+json")
+	req.Header.Set("Content-Type", contentType)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return c.transportError(method, path, err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxErrorBody))
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return decodeError(resp)
+	}
+	if out == nil || resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("client: decode %s %s response: %w", method, path, err)
+	}
+	return nil
+}
+
 // doAs is do with the media type of the request body (a JSON-based type
 // such as application/merge-patch+json).
 func (c *Client) doAs(ctx context.Context, method, path, contentType string, in, out any) error {

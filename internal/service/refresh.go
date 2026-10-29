@@ -196,7 +196,7 @@ func (s *RefreshService) AttachCapture(ctx context.Context, src domain.Source) (
 		return nil, err
 	}
 	for _, t := range waiting {
-		if !captureMatches(t, src.Fingerprint) {
+		if !captureMatches(t, src) {
 			continue
 		}
 		t, eff, err := s.load(ctx, t.ID)
@@ -681,6 +681,12 @@ func (s *RefreshService) parkFrom(ctx context.Context, t *domain.Task, eff setti
 	if t.Status != from {
 		s.d.publishStatus(t, from)
 	}
+	if name == settings.RefreshExtensionCapture {
+		s.d.publish(events.TypeTaskRefreshRequested, t.ID, t.QueueID, events.RefreshRequestedData{
+			Name: t.Name, PageURL: cmpOr(t.Source.PageURL, cmpOr(t.Source.OriginalURL, t.Source.CurrentURL)), OriginalURL: t.Source.OriginalURL,
+			Deadline: deadline, Fingerprint: t.Source.Fingerprint,
+		})
+	}
 	if deadline != nil {
 		select {
 		case s.kick <- struct{}{}:
@@ -721,13 +727,18 @@ func (s *RefreshService) awaitingCapture(ctx context.Context) ([]*domain.Task, e
 	return out, nil
 }
 
-// captureMatches reports whether a capture with fingerprint fp plausibly is
-// the file of task t: nothing contradicts it and at least one property
-// (size, strong ETag, file name) is known on both sides and equal.
-func captureMatches(t *domain.Task, fp domain.Fingerprint) bool {
-	have := t.Source.Fingerprint
+// captureMatches reports whether the capture src plausibly is the file of task
+// t: nothing contradicts it and at least one property is known on both sides
+// and equal: the size, a strong ETag, the file name, or the link the user
+// clicked (the same original link, which is what the user does when told to
+// open the page and start the download again).
+func captureMatches(t *domain.Task, src domain.Source) bool {
+	have, fp := t.Source.Fingerprint, src.Fingerprint
 	if ok, _ := have.Matches(fp); !ok {
 		return false
+	}
+	if o := t.Source.OriginalURL; o != "" && o == src.OriginalURL {
+		return true
 	}
 	if have.Size > 0 && have.Size == fp.Size {
 		return true

@@ -76,7 +76,29 @@ type CaptureInput struct {
 	Paused   bool
 	// AllowDuplicate adds the task although another one has the same link.
 	AllowDuplicate bool
+
+	// Name is the file name; it wins over Filename (what the browser chose).
+	Name string
+	// ResolverKind picks the engine family: direct (the default), ytdlp (the
+	// link is a page yt-dlp can extract) or browser (a page that needs the
+	// headless browser).
+	ResolverKind domain.ResolverKind
+	// Checksum is the expected hash of the file (a task setting).
+	Checksum *settings.Checksum
+	// Mirrors are other links to the same file.
+	Mirrors []string
+	// Method and Body replay a request that is not a plain GET (a form that
+	// answers with a file). Body is at most MaxCaptureBody bytes.
+	Method string
+	Body   []byte
+	// TaskCookies keeps Cookies for this download only: they are not added to
+	// the user's cookie store but removed when the task completes or is
+	// deleted (cookies.Store.ImportForTask).
+	TaskCookies bool
 }
+
+// MaxCaptureBody bounds the request body of a captured download.
+const MaxCaptureBody = 256 << 10
 
 // CaptureResult is the outcome of CaptureService.Capture.
 type CaptureResult struct {
@@ -115,7 +137,19 @@ func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (*Capture
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.cookies.ImportCookies(ctx, in.Cookies)
+	if in.Checksum != nil {
+		in.Settings.Checksum = settings.Some(*in.Checksum)
+	}
+	// A task's own cookies are stored under the id of the task, so the id is
+	// chosen first.
+	taskID := ""
+	var res cookies.ImportResult
+	if in.TaskCookies {
+		taskID = domain.NewID()
+		res, err = s.cookies.ImportForTask(ctx, taskID, in.Cookies)
+	} else {
+		res, err = s.cookies.ImportCookies(ctx, in.Cookies)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("service: capture: %w", err)
 	}
@@ -125,20 +159,38 @@ func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (*Capture
 		// capture matches gets the link instead of a duplicate being created.
 		waiting, err := s.refresh.AttachCapture(ctx, src)
 		if err != nil {
+			s.dropTaskCookies(ctx, taskID)
 			return nil, err
 		}
 		if waiting != nil {
+			if in.TaskCookies {
+				// The cookies belong to the task that received the link.
+				s.dropTaskCookies(ctx, taskID)
+				if _, err := s.cookies.ImportForTask(ctx, waiting.ID, in.Cookies); err != nil {
+					return nil, fmt.Errorf("service: capture: %w", err)
+				}
+			}
 			return &CaptureResult{Task: waiting, Cookies: res, Refreshed: true}, nil
 		}
 	}
 	t, err := s.tasks.Create(ctx, CreateTaskInput{
-		Source: src, QueueID: in.QueueID, Name: captureName(in.Filename), Dir: in.Dir,
-		Settings: in.Settings, Priority: in.Priority, Labels: in.Labels, Paused: in.Paused, AllowDuplicate: in.AllowDuplicate,
+		Source: src, QueueID: in.QueueID, Name: cmpOr(captureName(in.Name), captureName(in.Filename)), Dir: in.Dir,
+		Settings: in.Settings, Priority: in.Priority, Labels: in.Labels, Paused: in.Paused, AllowDuplicate: in.AllowDuplicate, ID: taskID,
 	})
 	if err != nil {
+		s.dropTaskCookies(ctx, taskID) // nothing will ever remove them
 		return nil, err
 	}
 	return &CaptureResult{Task: t, Cookies: res}, nil
+}
+
+// dropTaskCookies removes the cookies stored for a task that does not exist
+// (after a failed capture); a failure to do so is logged by nobody and the
+// cookies expire with TaskCookieTTL.
+func (s *CaptureService) dropTaskCookies(ctx context.Context, taskID string) {
+	if taskID != "" {
+		_, _ = s.cookies.DeleteTask(ctx, taskID) //nolint:errcheck // best effort: the cookies expire anyway
+	}
 }
 
 // captureSource builds and validates the Source of a capture, except for its
@@ -152,6 +204,14 @@ func captureSource(in CaptureInput) (domain.Source, error) {
 		if c.Kind != "" && !c.Kind.Valid() {
 			return domain.Source{}, domain.InvalidArgument("service: capture: mediaCandidates[%d]: unknown kind %q", i, c.Kind)
 		}
+	}
+	switch in.ResolverKind {
+	case "", domain.ResolverDirect, domain.ResolverYtdlp, domain.ResolverBrowser:
+	default:
+		return domain.Source{}, domain.InvalidArgumentCode("capture.bad_resolver", nil, "service: capture: resolverKind must be direct, ytdlp or browser")
+	}
+	if len(in.Body) > MaxCaptureBody {
+		return domain.Source{}, domain.InvalidArgumentCode("capture.body_too_large", nil, "service: capture: body is at most %d bytes", MaxCaptureBody)
 	}
 	var chosen MediaCandidate
 	var found bool
@@ -179,11 +239,25 @@ func captureSource(in CaptureInput) (domain.Source, error) {
 		UserAgent:    in.UserAgent,
 		MediaHint:    hint,
 		ResolverKind: domain.ResolverDirect,
+		Mirrors:      in.Mirrors,
+		Method:       in.Method,
+		Body:         in.Body,
 		Fingerprint: domain.Fingerprint{
 			Size:        max(size, 0),
 			Filename:    captureName(in.Filename),
 			ContentType: mime,
 		},
+	}
+	if in.ResolverKind != "" {
+		src.ResolverKind = in.ResolverKind
+	}
+	// A manifest whose URL says nothing (a signed or API link) is told apart by
+	// what the extension saw.
+	switch {
+	case found && chosen.Kind == MediaHLS:
+		src.StreamKind = domain.StreamHLS
+	case found && chosen.Kind == MediaDASH:
+		src.StreamKind = domain.StreamDASH
 	}
 	if in.FinalURL != "" && in.FinalURL != primary {
 		src.RedirectURL = in.FinalURL

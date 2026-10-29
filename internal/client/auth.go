@@ -10,7 +10,7 @@ import (
 // WhoAmI is the answer of whoami.
 type WhoAmI struct {
 	Name    string `json:"name"`
-	Scope   string `json:"scope"` // admin or read
+	Scope   string `json:"scope"` // admin, read or extension
 	Primary bool   `json:"primary"`
 	Local   bool   `json:"local"`
 	TLS     bool   `json:"tls"`
@@ -32,6 +32,12 @@ type APIToken struct {
 	Scope      string     `json:"scope"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	// Kind is "extension" for a paired browser extension; Browser, ClientID
+	// and ClientVersion describe it.
+	Kind          string `json:"kind,omitempty"`
+	Browser       string `json:"browser,omitempty"`
+	ClientID      string `json:"clientId,omitempty"`
+	ClientVersion string `json:"clientVersion,omitempty"`
 }
 
 // CreatedToken is the answer of create-token and rotate-token.

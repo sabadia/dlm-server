@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -34,6 +35,16 @@ func formatProgress(t *client.Task) string {
 	return strconv.FormatFloat(p*100, 'f', 1, 64) + "%"
 }
 
+// displayURL shortens what is not meant to be read: a data: URL (an embedded
+// .torrent file can be megabytes) becomes its type and size.
+func displayURL(u string) string {
+	if !strings.HasPrefix(strings.ToLower(u), "data:") {
+		return u
+	}
+	head, _, _ := strings.Cut(u, ",")
+	return fmt.Sprintf("%s,… (%s)", head, formatSize(int64(len(u))))
+}
+
 // taskTable renders tasks; fullID shows complete IDs instead of short ones.
 func taskTable(tasks []*client.Task, fullID bool) output.Table {
 	t := output.Table{Columns: []string{"id", "name", "status", "progress", "size", "queue"}}
@@ -44,7 +55,7 @@ func taskTable(tasks []*client.Task, fullID bool) output.Table {
 		}
 		name := task.Name
 		if name == "" {
-			name = task.Source.CurrentURL
+			name = displayURL(task.Source.CurrentURL)
 		}
 		t.Rows = append(t.Rows, []string{id, name, task.Status, formatProgress(task), formatSize(task.Size), task.QueueID})
 	}
@@ -164,10 +175,11 @@ func (a *app) newResolveCommand() *cobra.Command {
 			}
 			return a.printer(cmd).Print(res, func() output.Table {
 				return output.Table{
-					Columns: []string{"resolve id", "name", "size", "ranges", "engine", "expires"},
+					Columns: []string{"resolve id", "name", "size", "ranges", "engine", "expires", "formats"},
 					Rows: [][]string{{
 						res.ResolveID, res.Name, formatSize(res.Resource.Size),
 						strconv.FormatBool(res.Resource.RangeSupported), res.Engine, res.ExpiresAt.Local().Format(time.TimeOnly),
+						formatLabels(res.Formats),
 					}},
 				}
 			})
@@ -284,7 +296,7 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 		Long: "Add one task per URL (and per line of --file; '-' reads stdin, blank lines and # comments are skipped).\n\n" +
 			"One URL creates a single task (create-task); several URLs or a file create them in one batch " +
 			"(create-tasks) and print one result per URL. Settings flags apply to every task.\n\n" +
-			"A URL can be a magnet link, an ed2k:// link, or the path of a local .torrent file, which is sent to the daemon as a data URL.\n\n" +
+			"A URL can be a magnet link, an ed2k:// link, or the path of a local .torrent file, which is sent to the daemon (files above 512 KiB are uploaded as they are).\n\n" +
 			"--ytdlp downloads a video or audio page with yt-dlp instead of fetching the URL itself; --format picks the " +
 			"yt-dlp format (for example 'bv*[height<=720]+ba/b') or the quality of an HLS/DASH stream (for example 720).",
 		Example: "  dlm task add https://example.com/file.iso --queue <id> --speed-limit 1MB\n" +
@@ -295,7 +307,7 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 			"  dlm task add https://example.com/file.iso --checksum sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\n" +
 			"  dlm task add --ytdlp 'https://video.example/watch?v=abc' --format 'bv*[height<=720]+ba/b'\n" +
 			"  dlm task add https://example.com/a.bin --header 'Cookie=x=1' --set retry.maxAttempts=10",
-		Annotations: map[string]string{annotationOperationID: "create-task,create-tasks"},
+		Annotations: map[string]string{annotationOperationID: "create-task,create-tasks,add-torrent-file"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			urls := slices.Clone(args)
 			if f.file != "" {
@@ -323,6 +335,35 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			c, err := a.newClient(cmd, client.DefaultTimeout)
+			if err != nil {
+				return err
+			}
+			// A big .torrent file does not fit in the JSON of create-task: it is uploaded as it is.
+			var rest []string
+			for _, u := range urls {
+				data, ok, err := largeTorrentFile(u)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					rest = append(rest, u)
+					continue
+				}
+				t, err := c.AddTorrentFile(cmd.Context(), data, client.TorrentUpload{
+					QueueID: f.queue, Name: f.name, Dir: f.dir, Priority: f.priority, Paused: f.paused, AllowDuplicate: f.allowDup,
+				})
+				if err != nil {
+					return err //nolint:wrapcheck // client errors are already user-facing
+				}
+				if err := a.printTask(cmd, t); err != nil {
+					return err
+				}
+			}
+			if urls = rest; len(urls) == 0 {
+				return nil
+			}
+			batch = len(urls) > 1 || f.file != "" || f.expand
 			reqs := make([]client.CreateTaskRequest, len(urls))
 			for i, u := range urls {
 				u, err := resolveTorrentFile(u)
@@ -340,10 +381,6 @@ func (a *app) newTaskAddCommand() *cobra.Command {
 					}
 					reqs[i].URL, reqs[i].Source = "", src
 				}
-			}
-			c, err := a.newClient(cmd, client.DefaultTimeout)
-			if err != nil {
-				return err
 			}
 			if !batch {
 				t, err := c.CreateTask(cmd.Context(), reqs[0])
@@ -728,4 +765,13 @@ func (a *app) printEffective(cmd *cobra.Command, eff *client.EffectiveSettings) 
 		}
 		return t
 	})
+}
+
+// formatLabels lists the qualities of a stream for a table cell.
+func formatLabels(fs []client.Format) string {
+	labels := make([]string, len(fs))
+	for i, f := range fs {
+		labels[i] = f.Label
+	}
+	return strings.Join(labels, ", ")
 }

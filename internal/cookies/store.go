@@ -112,6 +112,9 @@ func (s *Store) List(ctx context.Context, filter storage.CookieFilter) ([]*domai
 	}
 	out := make([]*domain.Cookie, 0, len(recs))
 	for _, r := range recs {
+		if isTaskPartition(r.PartitionKey) {
+			continue // a task's own cookies are not part of the user's cookie list or exports
+		}
 		c, err := s.decrypt(r)
 		if err != nil {
 			return nil, err
@@ -127,9 +130,11 @@ func (s *Store) ListMetadata(ctx context.Context, filter storage.CookieFilter) (
 	if err != nil {
 		return nil, fmt.Errorf("cookies: list: %w", err)
 	}
-	out := make([]*domain.Cookie, len(recs))
-	for i, r := range recs {
-		out[i] = metadata(r)
+	out := make([]*domain.Cookie, 0, len(recs))
+	for _, r := range recs {
+		if !isTaskPartition(r.PartitionKey) {
+			out = append(out, metadata(r))
+		}
 	}
 	return out, nil
 }
@@ -209,11 +214,17 @@ func (s *Store) ForURL(ctx context.Context, u *url.URL) ([]*domain.Cookie, error
 			return nil, fmt.Errorf("cookies: list: %w", err)
 		}
 		for _, r := range recs {
-			if r.PartitionKey == "" && metadata(r).MatchesRequest(u, "", now) {
+			if r.PartitionKey != "" && !isTaskPartition(r.PartitionKey) {
+				continue
+			}
+			m := metadata(r)
+			m.PartitionKey = "" // a task's cookies are sent like ordinary ones
+			if m.MatchesRequest(u, "", now) {
 				matched = append(matched, r)
 			}
 		}
 	}
+	matched = preferTaskCookies(matched)
 	slices.SortStableFunc(matched, func(a, b *storage.CookieRecord) int {
 		if len(a.Path) != len(b.Path) {
 			return len(b.Path) - len(a.Path)
@@ -230,6 +241,30 @@ func (s *Store) ForURL(ctx context.Context, u *url.URL) ([]*domain.Cookie, error
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// preferTaskCookies drops a stored cookie when a task's cookie has the same
+// domain, name and path: what the extension captured for a download wins over
+// an older value in the shared jar.
+func preferTaskCookies(rs []*storage.CookieRecord) []*storage.CookieRecord {
+	type key struct{ domain, name, path string }
+	task := map[key]bool{}
+	for _, r := range rs {
+		if isTaskPartition(r.PartitionKey) {
+			task[key{r.Domain, r.Name, r.Path}] = true
+		}
+	}
+	if len(task) == 0 {
+		return rs
+	}
+	out := rs[:0:0]
+	for _, r := range rs {
+		if !isTaskPartition(r.PartitionKey) && task[key{r.Domain, r.Name, r.Path}] {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // ForSite returns the unexpired cookies of a registrable domain and of its
@@ -378,4 +413,65 @@ func candidateDomains(host string) []string {
 		out = append(out, after)
 		rest = after
 	}
+}
+
+// Cookies a browser extension captured for one download live in the shared
+// jar (the download engines look cookies up by URL only), under a partition
+// key that names the task, and are removed when the task is. That keeps them
+// out of the user's cookie list and exports, and keeps them from replacing
+// the user's own cookies of the same name.
+const (
+	// TaskPartitionPrefix starts the partition key of a task's cookies.
+	TaskPartitionPrefix = "dlm-task:"
+	// TaskCookieTTL is the longest a task's cookie is kept, whatever its own
+	// expiry says: the task may never finish, and nothing else removes it.
+	TaskCookieTTL = 7 * 24 * time.Hour
+)
+
+// TaskPartition is the partition key of a task's cookies.
+func TaskPartition(taskID string) string { return TaskPartitionPrefix + taskID }
+
+func isTaskPartition(pk string) bool { return strings.HasPrefix(pk, TaskPartitionPrefix) }
+
+// ImportForTask stores cs as cookies of the task taskID (see TaskPartition).
+// They are sent with the task's requests like any cookie of the jar, are not
+// listed or exported, and are removed by DeleteTask, or after TaskCookieTTL.
+// A partition key the browser reported is dropped.
+func (s *Store) ImportForTask(ctx context.Context, taskID string, cs []*domain.Cookie) (ImportResult, error) {
+	if taskID == "" {
+		return ImportResult{}, domain.InvalidArgument("cookies: a task id is required")
+	}
+	limit := s.now().Add(TaskCookieTTL).UTC()
+	scoped := make([]*domain.Cookie, len(cs))
+	for i, c := range cs {
+		cc := *c
+		cc.PartitionKey = TaskPartition(taskID)
+		if cc.ExpiresAt == nil || cc.ExpiresAt.After(limit) {
+			cc.ExpiresAt = &limit
+		}
+		scoped[i] = &cc
+	}
+	return s.ImportCookies(ctx, scoped)
+}
+
+// DeleteTask removes the cookies stored for the task and returns how many.
+func (s *Store) DeleteTask(ctx context.Context, taskID string) (int, error) {
+	if taskID == "" {
+		return 0, nil
+	}
+	recs, err := s.repo.List(ctx, storage.CookieFilter{PartitionKey: TaskPartition(taskID)})
+	if err != nil {
+		return 0, fmt.Errorf("cookies: list: %w", err)
+	}
+	n := 0
+	for _, r := range recs {
+		if err := s.repo.Delete(ctx, r.ID); err != nil {
+			if errors.Is(err, domain.ErrNotFound) { // removed concurrently
+				continue
+			}
+			return n, fmt.Errorf("cookies: delete: %w", err)
+		}
+		n++
+	}
+	return n, nil
 }

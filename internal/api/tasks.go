@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
@@ -29,6 +30,7 @@ type SourceInput struct {
 	MediaHint     string              `json:"mediaHint,omitempty" doc:"Manifest pattern or variant hint for streams."`
 	Mirrors       []string            `json:"mirrors,omitempty" maxItems:"16" doc:"Other http(s) links to the same file. A ranged download spreads its connections over the mirrors that serve a file of the same size and supports ranges; the others are ignored."`
 	ResolverKind  domain.ResolverKind `json:"resolverKind,omitempty" enum:"direct,browser,ytdlp,plugin" doc:"How the link was obtained (default direct)."`
+	StreamKind    string              `json:"streamKind,omitempty" enum:"hls,dash" doc:"Says the link is an HLS or DASH manifest although its path does not end in .m3u8 or .mpd."`
 }
 
 func (in *SourceInput) toDomain() domain.Source {
@@ -36,6 +38,7 @@ func (in *SourceInput) toDomain() domain.Source {
 		CurrentURL: in.CurrentURL, OriginalURL: in.OriginalURL, PageURL: in.PageURL, Referrer: in.Referrer,
 		Method: in.Method, Body: in.Body, Headers: in.Headers, UserAgent: in.UserAgent,
 		CookieDomains: in.CookieDomains, MediaHint: in.MediaHint, Mirrors: in.Mirrors, ResolverKind: in.ResolverKind,
+		StreamKind: in.StreamKind,
 	}
 }
 
@@ -344,6 +347,9 @@ type CreateTasksBody struct {
 func (s *Server) createTasks(ctx context.Context, in *struct{ Body CreateTasksBody }) (*BatchOutput, error) {
 	if s.tasks == nil {
 		return nil, errServicesUnavailable()
+	}
+	if p, _ := PrincipalOf(ctx); p.Scope == auth.ScopeExtension && len(in.Body.Items) > MaxExtensionBatchItems {
+		return nil, captureTooBig("tasks in one batch", MaxExtensionBatchItems)
 	}
 	out := &BatchOutput{}
 	// slots has one entry per result; inputs are the ones that go to the

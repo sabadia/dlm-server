@@ -68,18 +68,19 @@ func (*Engine) Match(src domain.Source) bool {
 		return false
 	}
 	s := strings.ToLower(u.Scheme)
-	return (s == "http" || s == "https") && strings.HasSuffix(strings.ToLower(u.Path), ".mpd")
+	return (s == "http" || s == "https") && (strings.HasSuffix(strings.ToLower(u.Path), ".mpd") || (src.StreamKind == domain.StreamDASH && src.ResolverKind != domain.ResolverYtdlp && src.ResolverKind != domain.ResolverBrowser))
 }
 
 // Resolve implements engine.Engine: it reads the manifest, selects the
 // representations (Source.MediaHint) and describes the result.
 func (e *Engine) Resolve(ctx context.Context, req engine.Request) (*engine.Probe, error) {
-	if _, err := e.r.Resolve(ctx, e.fe, req.Source, req.Settings); err != nil {
+	plan, err := e.r.Resolve(ctx, e.fe, req.Source, req.Settings)
+	if err != nil {
 		return nil, err //nolint:wrapcheck // engine errors are classified; kept intact
 	}
 	name := suggestName(req.Source.CurrentURL)
 	return &engine.Probe{
-		Engine: EngineName, Source: req.Source, Suggested: name,
+		Engine: EngineName, Source: req.Source, Suggested: name, Formats: plan.Formats,
 		Resource: domain.Resource{Name: name, Size: -1, Files: []domain.File{{Index: 0, Name: name, Size: -1, Selected: true}}},
 	}, nil
 }
@@ -104,11 +105,11 @@ var _ segmented.Frontend = frontend{}
 // Build implements segmented.Frontend: a video track (by Source.MediaHint) and
 // an audio track.
 func (frontend) Build(ctx context.Context, c segmented.Client) (*segmented.Plan, error) {
-	tms, err := load(ctx, c, c.Source.CurrentURL)
+	tms, mf, err := loadManifest(ctx, c, c.Source.CurrentURL)
 	if err != nil {
 		return nil, err
 	}
-	p := &segmented.Plan{}
+	p := &segmented.Plan{Formats: mf.formats()}
 	for i, tm := range tms {
 		if len(tm.media.Segments) == 0 {
 			return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w (%s)", ErrNoSegments, segmented.Redact(c.Source.CurrentURL)))
@@ -140,9 +141,15 @@ func (frontend) Reload(ctx context.Context, c segmented.Client, t *segmented.Tra
 // load fetches the manifest and lists the tracks it describes. A page of HTML
 // where a manifest was expected is an expired link.
 func load(ctx context.Context, c segmented.Client, rawURL string) ([]trackMedia, error) {
+	tms, _, err := loadManifest(ctx, c, rawURL)
+	return tms, err
+}
+
+// loadManifest is load that also returns the parsed manifest.
+func loadManifest(ctx context.Context, c segmented.Client, rawURL string) ([]trackMedia, *manifest, error) {
 	data, m, err := c.Fetch(ctx, rawURL, nil, segmented.MaxDocumentBytes)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // classified by Fetch
+		return nil, nil, err //nolint:wrapcheck // classified by Fetch
 	}
 	mf, err := parse(data, m.URL)
 	if err != nil {
@@ -150,15 +157,15 @@ func load(ctx context.Context, c segmented.Client, rawURL string) ([]trackMedia,
 			(strings.Contains(strings.ToLower(m.ContentType), "text/html") || bytes.HasPrefix(bytes.TrimSpace(data), []byte("<!"))) {
 			e := engine.LinkExpired(fmt.Errorf("dash: %s is an HTML page, not a manifest", segmented.Redact(rawURL)))
 			e.StatusCode = m.Status
-			return nil, e
+			return nil, nil, e
 		}
-		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w (%s)", err, segmented.Redact(rawURL)))
+		return nil, nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w (%s)", err, segmented.Redact(rawURL)))
 	}
 	tms, err := mf.tracks(c.Source.MediaHint)
 	if err != nil {
-		return nil, engineFatal(err)
+		return nil, nil, engineFatal(err)
 	}
-	return tms, nil
+	return tms, mf, nil
 }
 
 func engineFatal(err error) error { return engine.Fatal(domain.ErrorCodeFatal, err) }

@@ -86,6 +86,46 @@ type SpeedOverride struct {
 	Until time.Time `json:"until"`
 }
 
+// PairingRequestedData is the payload of pairing.requested events.
+type PairingRequestedData struct {
+	ID string `json:"id"`
+	// Name is what the client calls itself, Browser the browser it runs in.
+	Name    string `json:"name"`
+	Browser string `json:"browser"`
+	// ClientID and ClientVersion are the extension's id and version.
+	ClientID      string `json:"clientId,omitempty"`
+	ClientVersion string `json:"clientVersion,omitempty"`
+	// Code is six digits the client shows; the user compares them before allowing.
+	Code string `json:"code"`
+	// ExpiresAt is when the request is dropped if nobody answers.
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// PairingResolvedData is the payload of pairing.resolved events.
+type PairingResolvedData struct {
+	ID     string `json:"id"`
+	Status string `json:"status" enum:"approved,denied,expired"`
+	// TokenID is the issued token's id when the pairing was approved.
+	TokenID string `json:"tokenId,omitempty"`
+}
+
+// RefreshRequestedData is the payload of task.refresh.requested events; the
+// task is Event.TaskID.
+type RefreshRequestedData struct {
+	// Name is the task's file name, for a prompt.
+	Name string `json:"name"`
+	// PageURL is the web page the download came from (the original link when
+	// there is none): open it so the user can start the download again.
+	PageURL string `json:"pageUrl"`
+	// OriginalURL is the link the task was first created with.
+	OriginalURL string `json:"originalUrl,omitempty"`
+	// Deadline is when the wait ends and the task fails; absent when it waits
+	// without limit.
+	Deadline *time.Time `json:"deadline,omitempty"`
+	// Fingerprint is what a capture has to match: size, ETag and file name.
+	Fingerprint domain.Fingerprint `json:"fingerprint"`
+}
+
 // Kinds of resources named by resource.changed events.
 const (
 	ResourceCategory   = "category"
@@ -137,6 +177,7 @@ func Catalogue() []Kind {
 		{TypeTaskProgress, ProgressData{}, "Transfer progress of a running task; coalesced per task, at most a few per second."},
 		{TypeTaskDeleted, domain.Task{}, "A task was deleted; data is its last state."},
 		{TypeTaskRefresh, domain.RefreshAttempt{}, "A link-refresh step happened: a strategy ran or was skipped, a wait started or ended."},
+		{TypeTaskRefreshRequested, RefreshRequestedData{}, "A task's link expired and it waits for the browser extension to capture a fresh one: open pageUrl so the user can start the download again before the deadline."},
 		{TypeQueueCreated, domain.Queue{}, "A queue was created."},
 		{TypeQueueUpdated, domain.Queue{}, "A queue changed (name, state, settings, position)."},
 		{TypeQueueDeleted, domain.Queue{}, "A queue was deleted; data is its last state."},
@@ -148,5 +189,7 @@ func Catalogue() []Kind {
 		{TypeSystemSpeed, SpeedData{}, "The transfer speed of the whole daemon: once a second while anything moves, and once more (zeros) when it stops."},
 		{TypeResourceChanged, ResourceChangedData{}, "A category, webhook, credential, cookie, plugin or the boot configuration was created, changed or deleted, by this or another client; refetch it."},
 		{TypeLimitsChanged, LimitsChangedData{}, "The temporary global speed override was set, cleared or ran out; data is the limit now in force."},
+		{TypePairingRequested, PairingRequestedData{}, "A browser extension asked to be paired and waits for the user to allow or deny it; compare the code with the one the extension shows."},
+		{TypePairingResolved, PairingResolvedData{}, "A pairing was allowed, denied or ran out of time; close the prompt."},
 	}
 }

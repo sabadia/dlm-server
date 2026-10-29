@@ -201,7 +201,7 @@ or a `filter`) and answer one result per task. `update` sets the `priority`, add
 
 - **Tokens.** The primary token lives in the daemon's token file. `GET /v1/auth/whoami` (`dlm auth
   whoami`) says which token a client uses (`name`, `scope`, `primary`, `local`, `tls`).
-  `POST /v1/auth/tokens` (`dlm token add NAME --scope admin|read`) creates a named token for a
+  `POST /v1/auth/tokens` (`dlm token add NAME --scope admin|read`; extension tokens are made by pairing, see below) creates a named token for a
   dashboard, script or device and shows its secret once (only a hash is kept); `GET /v1/auth/tokens`
   lists them, `DELETE /v1/auth/tokens/{id}` (`dlm token rm`) revokes one at once. A **read** token
   may only `GET` (403 `auth.read_only` otherwise), and not read cookie exports, the token list or MCP.
@@ -251,9 +251,10 @@ curl -N -H "Authorization: Bearer $TOKEN" \
 
 Each event is `id: <bootID>-<seq>`, `event: <type>`, `data: <JSON>`. Types:
 `task.created`, `task.updated`, `task.status`, `task.progress` (coalesced, several
-per second at most), `task.deleted`, `task.refresh`, `queue.created`,
+per second at most), `task.deleted`, `task.refresh`, `task.refresh.requested`, `queue.created`,
 `queue.updated`, `queue.deleted`, `queue.completed`, `queue.action_cancelled`,
-`settings.updated`, `quota.exhausted`, `quota.reset`, `system.speed`, `limits.changed` and `resource.changed`. Filter with `types`,
+`settings.updated`, `quota.exhausted`, `quota.reset`, `system.speed`, `limits.changed`, `resource.changed`,
+`pairing.requested` and `pairing.resolved`. Filter with `types`,
 `taskId` and `queueId`. The OpenAPI document describes every event type with its
 own payload schema (`StreamEvent` is a `oneOf` discriminated by `type`).
 
@@ -287,10 +288,85 @@ not followed. Secrets are stored encrypted and never returned.
 
 ## Browser extension
 
-`POST /v1/capture` creates a task from a download the extension caught, with the
-page, referrer, cookies and headers that make it work; `POST /v1/cookies/import`
-loads cookies. `dlm native-host install` registers the Native Messaging host that
-tells the extension the daemon's port and token.
+A browser extension (Chrome, Chromium-based browsers and Firefox) hands downloads to the
+daemon. It never holds the primary token: it is **paired**, and the daemon issues it a token
+of its own with the scope `extension`.
+
+**Pairing.** The extension asks its Native Messaging host (`dlm native-host`) to pair. The
+host calls `POST /v1/pairing` (`dlm pairing start`) with the primary token, from the machine
+the daemon runs on, and gets back a six-digit `code` that the extension shows. The daemon
+publishes the event `pairing.requested`; the DLM app asks the user to allow or deny it
+(`POST /v1/pairing/{id}/approve` or `/deny`, `dlm pairing approve|deny`) and the user
+compares the code. On approval the daemon issues the token. The first `GET /v1/pairing/{id}`
+after that returns it, once (`token`); if nobody reads it within five minutes it is revoked.
+A pairing waits two minutes for an answer and at most five wait at once (409
+`pairing.too_many`). `GET /v1/pairing` lists the ones waiting, for an app that started late;
+`pairing.resolved` tells clients to close the prompt.
+
+**What a capture can carry.** Besides the page, referrer, user agent, headers, cookies and media
+candidates, `POST /v1/capture` takes `name`, `resolverKind` (`direct`, `ytdlp` for a page yt-dlp can
+extract, `browser` for a page that needs the headless browser), `checksum` (`algorithm`, `expected`),
+`mirrors`, `method` and `body` (base64, at most 256 KiB, for a form that answers with a file) and a
+cookie's `partitionKey`. `cookieScope` says where the cookies go: `task` keeps them for this
+download only: they are not in the cookie store or its exports, never replace the user's own cookie
+of the same name, are sent with the download's requests, and are removed when the task completes or
+is deleted (or after 7 days); `store` adds them to the cookie store. The default is `task` for an
+extension token and `store` for any other token.
+
+**Quality picker and manifests.** `POST /v1/resolve` returns `formats` for a stream, best first:
+HLS variants, DASH video representations, and for a video page (`resolverKind: ytdlp`) one format per
+height plus the best audio-only one. Each has an `id`, a `label` (`1080p`, `720p, 2.5 Mbit/s`,
+`audio only (m4a)`), the size in pixels, bandwidth, codecs, container and, when yt-dlp knows it, the
+size. Passing a format's `id` as `source.mediaHint` downloads that one. A manifest whose URL does not
+end in `.m3u8` or `.mpd` (a signed or API link) is taken as HLS or DASH when the source says
+`streamKind: hls|dash`; a capture sets it from the media candidate's `kind`.
+
+**Expired links.** When a task's link expires and its refresh chain reaches the strategy
+`extension-capture`, the task waits in `awaiting_link` and the daemon publishes
+`task.refresh.requested` (`name`, `pageUrl`, `originalUrl`, `deadline`, `fingerprint`): the
+extension tells the user, opens `pageUrl`, and the user starts the download again. The next
+capture matches the waiting task when nothing contradicts it and the size, a strong ETag, the
+file name or the clicked link (`url`) is the same; the task then gets the new link
+(`refreshed: true`) instead of a duplicate being created.
+
+**Torrent files.** `POST /v1/tasks/torrent` (`add-torrent-file`, and `dlm task add FILE.torrent` for a
+file above 512 KiB) takes the `.torrent` file itself as the request body
+(`Content-Type: application/x-bittorrent`, up to 16 MiB) and the options in the query (`queueId`,
+`name`, `dir`, `priority`, `paused`, `allowDuplicate`). A `data:` URL in `POST /v1/tasks` still
+works but is limited to the 1 MiB of an ordinary request. An extension token may use it (a
+`.torrent` file that needs the browser's cookies is fetched by the extension and sent here).
+
+**Limits of an extension token.** So a leaked token cannot flood the daemon, requests with it are
+rate limited per token: writes (anything but GET and HEAD) at 10 per second with a burst of 30,
+reads at 50 per second with a burst of 100; over the limit the answer is 429 `rate_limited` with
+`Retry-After` (seconds). A capture from it may carry at most 200 cookies (8 KiB per name and value,
+256 KiB together), 64 headers (32 KiB together) and 100 media candidates, and a batch at most 100
+tasks; more is 422 `capture.too_large`. Other tokens are not limited.
+
+**What the token may do.** Hand downloads over and follow them: `POST /v1/capture`,
+`POST /v1/tasks`, `/v1/tasks/batch`, `/v1/tasks/expand` and `/v1/tasks/torrent`, `POST /v1/resolve` and
+`/v1/resolve/batch`, `POST /v1/browser/resolve` (and downloading a candidate),
+`POST /v1/cookies/import`, pausing and resuming, the link-refresh calls, and reading tasks,
+queues, categories, limits (and the turbo override), system info and the event stream. It may
+**not** change settings, read or export cookies, manage tokens or pairings, install the native
+host, delete anything, or use MCP: those answer 403 `auth.extension_scope`.
+
+The extension appears in `GET /v1/auth/tokens` (`dlm auth token list`) with its browser, the
+extension's id and version (`kind: extension`); revoking that token (`dlm auth token rm`) ends its
+access at once and does not touch any other client.
+
+**Calling the API from an extension.** An extension that has host access calls the daemon with
+`fetch` from its background: no preflight is sent and the daemon's cross-origin protection lets
+the request through (checked with Chrome and Firefox), so no `allowed_origins` entry is needed.
+The token is the only gate.
+
+`dlm native-host install` registers the Native Messaging host. The published extension's ids are
+built in (Chrome and every Chromium browser `gfjgahdobbldpjiijaakihgmmjemdalg`, Firefox
+`dlm-extension@sabadia.github.io`), so nothing needs typing and `server.allowed_origins` is not
+needed for it. The host answers `connect` (where the daemon is *now*: it reads `runtime.json`, so a
+daemon on a random port or one that restarted is found; plus version, API version and, for HTTPS,
+the certificate fingerprint), `pair` and `pair.status`. **It no longer hands out the primary token:**
+a `connect` reply has no `token` (v0.5.0 had one); an extension gets a token only by pairing.
 
 ## MCP
 

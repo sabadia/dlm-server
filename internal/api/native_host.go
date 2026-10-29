@@ -28,8 +28,8 @@ type NativeHostStatus struct {
 type NativeHostRequest struct {
 	Action       string   `json:"action" enum:"install,uninstall" doc:"install registers the host with the browsers, uninstall removes it."`
 	Browsers     []string `json:"browsers,omitempty" doc:"Limit to these browsers (see get-native-host for the names); default: all."`
-	ExtensionIDs []string `json:"extensionIds,omitempty" doc:"Chromium extension IDs or chrome-extension://ID/ origins to allow (install); default: the chrome-extension:// entries of server.allowed_origins."`
-	FirefoxIDs   []string `json:"firefoxIds,omitempty" doc:"Firefox add-on IDs to allow (install)."`
+	ExtensionIDs []string `json:"extensionIds,omitempty" doc:"More Chromium extension IDs or chrome-extension://ID/ origins to allow (install), besides the published extension; default: the chrome-extension:// entries of server.allowed_origins."`
+	FirefoxIDs   []string `json:"firefoxIds,omitempty" doc:"More Firefox add-on IDs to allow (install), besides the published extension."`
 }
 
 func (s *Server) registerNativeHost() {
@@ -50,7 +50,7 @@ func (s *Server) registerNativeHost() {
 		Path:        "/v1/native-host",
 		Summary:     "Register or remove the browser extension host",
 		Description: "Writes (install) or removes (uninstall) the Native Messaging host registration of the selected browsers, as `dlm native-host install|uninstall` does. " +
-			"Install needs the extension ID(s): Chromium browsers also need the extension's origin in server.allowed_origins. Only from the machine the daemon runs on (403 native_host.local_only otherwise).",
+			"The published DLM extension is always registered; extensionIds and firefoxIds add others (another Chromium extension also needs its origin in server.allowed_origins). Only from the machine the daemon runs on (403 native_host.local_only otherwise).",
 		Tags:   []string{tagNativeHost},
 		Errors: []int{http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusInternalServerError},
 	}, s.updateNativeHost)
@@ -164,7 +164,7 @@ func (s *Server) updateNativeHost(ctx context.Context, in *struct{ Body NativeHo
 				t.ChromiumOrigins = append(t.ChromiumOrigins, origin)
 			}
 		}
-		results, err = inst.Install(t)
+		results, err = inst.Install(t.WithBuiltinIDs())
 	}
 	if err != nil {
 		anyInstalled := slices.ContainsFunc(results, func(r nativehost.Result) bool { return r.Status == nativehost.StatusInstalled })

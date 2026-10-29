@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"os"
@@ -46,5 +47,34 @@ func TestResolveTorrentFile(t *testing.T) {
 		if !errors.As(err, &ue) {
 			t.Errorf("resolveTorrentFile(%q) err = %v, want a usage error", in, err)
 		}
+	}
+}
+
+func TestDisplayURLShortensEmbeddedFiles(t *testing.T) {
+	big := "data:application/x-bittorrent;base64," + strings.Repeat("QUJD", 1<<18)
+	if got := displayURL(big); !strings.HasPrefix(got, "data:application/x-bittorrent;base64,…") || len(got) > 80 {
+		t.Errorf("displayURL(data) = %q", got)
+	}
+	if got := displayURL("https://example.com/a.zip"); got != "https://example.com/a.zip" {
+		t.Errorf("displayURL(https) = %q", got)
+	}
+}
+
+func TestLargeTorrentFileIsUploadedAndSmallOnesAreNot(t *testing.T) {
+	dir := t.TempDir()
+	small, large := filepath.Join(dir, "s.torrent"), filepath.Join(dir, "l.torrent")
+	if err := os.WriteFile(small, bytes.Repeat([]byte("x"), 1000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(large, bytes.Repeat([]byte("x"), uploadTorrentFile+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, arg := range []string{small, "https://example.com/a.torrent", "magnet:?xt=urn:btih:abc", filepath.Join(dir, "missing.torrent"), dir} {
+		if _, ok, err := largeTorrentFile(arg); ok || err != nil {
+			t.Errorf("largeTorrentFile(%q) = ok %v, %v; want it left to resolveTorrentFile", arg, ok, err)
+		}
+	}
+	if data, ok, err := largeTorrentFile(large); !ok || err != nil || len(data) != uploadTorrentFile+1 {
+		t.Errorf("largeTorrentFile(large) = %d bytes, %v, %v", len(data), ok, err)
 	}
 }

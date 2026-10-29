@@ -53,6 +53,9 @@ type Deps struct {
 	// Tokens holds the named tokens (admin or read-only); nil means there are
 	// none and the token operations answer 503.
 	Tokens *auth.Registry
+	// Pairings holds the pending browser-extension pairings; nil makes the
+	// pairing operations answer 503.
+	Pairings *auth.Pairings
 	// Bus is the event bus streamed by stream-events. When nil the operation
 	// is still registered (OpenAPI document, CLI parity) but answers 503.
 	Bus *events.Bus
@@ -114,6 +117,8 @@ type Server struct {
 	token     atomic.Pointer[[]byte]
 	tokenFile string
 	tokens    *auth.Registry
+	pairings  *auth.Pairings
+	limiter   *rateLimiter
 	mux       *http.ServeMux
 	api       huma.API
 	handler   http.Handler
@@ -185,6 +190,8 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		version:   version,
 		tokenFile: deps.TokenFile,
 		tokens:    deps.Tokens,
+		pairings:  deps.Pairings,
+		limiter:   newRateLimiter(),
 		mux:       http.NewServeMux(),
 		public:    make(map[string]struct{}),
 
@@ -244,6 +251,8 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerIntegrationsObservability()
 	s.registerCleanup()
 	s.registerAuth()
+	s.registerPairing()
+	s.registerTorrentUpload()
 	s.registerNativeHost()
 	s.registerBrowser()
 	if deps.MCP != nil {

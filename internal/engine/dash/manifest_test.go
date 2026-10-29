@@ -200,3 +200,33 @@ func TestMatchAndSuggestName(t *testing.T) {
 		}
 	}
 }
+
+func TestManifestFormatsAndTheirIDsSelectTheRepresentation(t *testing.T) {
+	base, _ := url.Parse("https://cdn.example.com/a.mpd")
+	m := &manifest{periods: []period{{reps: []rep{
+		{id: "v-low", kind: "video", bandwidth: 800_000, height: 480, base: base},
+		{id: "v-hd", kind: "video", bandwidth: 4_000_000, height: 1080, base: base},
+		{id: "v-hd2", kind: "video", bandwidth: 2_000_000, height: 1080, base: base},
+		{id: "a1", kind: "audio", bandwidth: 128_000, base: base},
+	}}}}
+	got := m.formats()
+	if len(got) != 3 {
+		t.Fatalf("formats = %+v (audio is not a picture format)", got)
+	}
+	if got[0].Label != "1080p, 4.0 Mbit/s" || got[1].Label != "1080p, 2.0 Mbit/s" || got[2].ID != "480p" {
+		t.Errorf("formats = %+v", got)
+	}
+	reps := m.periods[0].reps
+	for i, wantID := range map[int]string{1: "v-hd", 2: "v-hd2", 0: "v-low"} {
+		var id string
+		for _, f := range got {
+			if f.Bandwidth == int64(reps[i].bandwidth) {
+				id = f.ID
+			}
+		}
+		r, err := selectRep(reps[:3], id)
+		if err != nil || r.id != wantID {
+			t.Errorf("selectRep(%q) = %q, %v; want %q", id, r.id, err, wantID)
+		}
+	}
+}

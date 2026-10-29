@@ -157,7 +157,7 @@ func (e *Engine) Resolve(ctx context.Context, req engine.Request) (*engine.Probe
 	src := req.Source
 	src.Fingerprint = domain.Fingerprint{Size: info.size(), Filename: name}
 	return &engine.Probe{
-		Engine: EngineName, Source: src, Suggested: name,
+		Engine: EngineName, Source: src, Suggested: name, Formats: info.pickFormats(),
 		Resource: domain.Resource{Name: name, Size: info.size(), Files: []domain.File{{Index: 0, Name: name, Size: info.size(), Selected: true}}},
 	}, nil
 }

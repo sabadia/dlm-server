@@ -126,7 +126,6 @@ func TestNativeHostRefusals(t *testing.T) {
 		t.Errorf("remote post = %d", remote.Code)
 	}
 
-	localCall(t, s, http.MethodPost, `{"action":"install"}`, http.StatusUnprocessableEntity, nil)
 	localCall(t, s, http.MethodPost, `{"action":"install","extensionIds":["not an id"]}`, http.StatusUnprocessableEntity, nil)
 	localCall(t, s, http.MethodPost, `{"action":"install","browsers":["netscape"],"extensionIds":["aaaabbbbccccddddeeeeffffgggghhhh"]}`, http.StatusUnprocessableEntity, nil)
 	localCall(t, s, http.MethodPost, `{"action":"explode"}`, http.StatusUnprocessableEntity, nil)

@@ -188,3 +188,36 @@ func TestIV(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatsListTheStreamsAndTheirIDsSelectThem(t *testing.T) {
+	vs := []variant{
+		{url: "https://cdn.example.com/720-lo.m3u8", bandwidth: 1_200_000, width: 1280, height: 720, codecs: "avc1.4d401f"},
+		{url: "https://cdn.example.com/1080.m3u8", bandwidth: 5_000_000, width: 1920, height: 1080},
+		{url: "https://cdn.example.com/720-hi.m3u8", bandwidth: 2_500_000, width: 1280, height: 720},
+		{url: "https://cdn.example.com/audio.m3u8", bandwidth: 64_000},
+	}
+	got := formats(vs)
+	if len(got) != 4 {
+		t.Fatalf("formats = %+v", got)
+	}
+	// Best first; a height is the id when it is unique, else the label carries the bitrate.
+	if got[0].ID != "1080p" || got[0].Label != "1080p" || got[0].Height != 1080 || got[0].Width != 1920 {
+		t.Errorf("first = %+v", got[0])
+	}
+	if got[1].Label != "720p, 2.5 Mbit/s" || got[2].Label != "720p, 1.2 Mbit/s" || got[3].Label != "64 kbit/s" {
+		t.Errorf("labels = %q %q %q", got[1].Label, got[2].Label, got[3].Label)
+	}
+	// Every id picks the stream it names.
+	byID := map[string]string{
+		got[0].ID: "https://cdn.example.com/1080.m3u8",
+		got[1].ID: "https://cdn.example.com/720-hi.m3u8",
+		got[2].ID: "https://cdn.example.com/720-lo.m3u8",
+		got[3].ID: "https://cdn.example.com/audio.m3u8",
+	}
+	for id, want := range byID {
+		v, err := selectVariant(vs, id)
+		if err != nil || v.url != want {
+			t.Errorf("selectVariant(%q) = %q, %v; want %q", id, v.url, err, want)
+		}
+	}
+}
