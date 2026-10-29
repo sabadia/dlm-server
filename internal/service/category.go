@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sabadia/dlm-server/internal/events"
+
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/storage"
 )
@@ -114,6 +116,7 @@ func (s *CategoryService) Create(ctx context.Context, in CreateCategoryInput) (*
 	if err != nil {
 		return nil, fmt.Errorf("service: create category: %w", err)
 	}
+	publishResource(s.d.Bus, events.ResourceCategory, c.ID, events.OpCreated)
 	return c, nil
 }
 
@@ -155,6 +158,7 @@ func (s *CategoryService) Update(ctx context.Context, id string, in UpdateCatego
 	if err != nil {
 		return nil, fmt.Errorf("service: update category: %w", err)
 	}
+	publishResource(s.d.Bus, events.ResourceCategory, c.ID, events.OpUpdated)
 	return c, nil
 }
 
@@ -164,6 +168,7 @@ func (s *CategoryService) Delete(ctx context.Context, id string) error {
 	if err := s.d.Store.Categories().Delete(ctx, id); err != nil {
 		return fmt.Errorf("service: delete category: %w", err)
 	}
+	publishResource(s.d.Bus, events.ResourceCategory, id, events.OpDeleted)
 	return nil
 }
 

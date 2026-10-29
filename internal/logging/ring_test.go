@@ -199,3 +199,19 @@ func TestLoggerNewKeepsRecentRecords(t *testing.T) {
 func configDefaultLog() config.LogConfig { return config.Default().Log }
 
 func levelPtr(l slog.Level) *slog.Level { return &l }
+
+func TestCaptureHandlerKeepsEveryLevelButWritesOnlyWhatTheInnerAccepts(t *testing.T) {
+	r := NewRing(10)
+	var out strings.Builder
+	h := NewCaptureHandler(slog.NewTextHandler(&out, &slog.HandlerOptions{Level: slog.LevelWarn}), r)
+	l := slog.New(h).With("plugin", "p")
+	l.Debug("debugging")
+	l.Warn("careful")
+	recs, _ := r.Query(Filter{}, 0, 10)
+	if len(recs) != 2 || recs[0].Message != "debugging" || recs[0].Level != "debug" || recs[0].Attrs["plugin"] != "p" {
+		t.Errorf("records = %+v", recs)
+	}
+	if strings.Contains(out.String(), "debugging") || !strings.Contains(out.String(), "careful") {
+		t.Errorf("the inner handler wrote %q", out.String())
+	}
+}

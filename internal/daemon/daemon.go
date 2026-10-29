@@ -118,7 +118,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	}
 	jar := cookies.NewStore(store.Cookies(), cookieCipher, cookies.Options{Logger: log})
 	// Stored logins answer the Basic/Digest challenges of every client.
-	credentials := service.NewCredentialService(service.Deps{Store: store, Logger: log}, cookieCipher)
+	credentials := service.NewCredentialService(service.Deps{Store: store, Logger: log, Bus: bus}, cookieCipher)
 	netOpts := netclient.Options{Logger: log, CookieJar: jar, Credentials: credentials}
 	if cfg.HTTP.TLSImpersonation {
 		netOpts.Fallback = netclient.NewImpersonation(netclient.ImpersonationOptions{Logger: log, TTL: cfg.HTTP.ImpersonationTTL})
@@ -265,7 +265,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		TaskLocks: locks,
 		Plugins:   plugins,
 	}, refresh.PageReload{Resolver: resolver}, refresh.Plugin{Plugins: plugins})
-	services.Plugins = service.NewPluginService(plugins)
+	services.Plugins = service.NewPluginService(plugins).WithBus(bus)
 	services.Browser = service.NewBrowserService(resolver, services.Tasks)
 	// The dispatcher reads its endpoints through the webhook service, which in
 	// turn tests endpoints through the dispatcher.
@@ -274,7 +274,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		VersionFunc: func() uint64 { return services.Webhooks.Version() },
 	}, webhook.Options{Logger: log})
 	services.Credentials = credentials
-	services.Webhooks = service.NewWebhookService(service.Deps{Store: store, Logger: log}, cookieCipher, webhooks)
+	services.Webhooks = service.NewWebhookService(service.Deps{Store: store, Logger: log, Bus: bus}, cookieCipher, webhooks)
 	if err := services.Settings.SyncLimits(ctx); err != nil {
 		bus.Close()
 		return fmt.Errorf("daemon: %w", err)
@@ -286,7 +286,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	srv, err := BuildServer(cfg, api.Deps{
 		Logger: log, Version: version, Token: token, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
-		Cookies:     service.NewCookieService(jar),
+		Cookies:     service.NewCookieService(jar).WithBus(bus),
 		Capture:     service.NewCaptureService(services.Tasks, jar, services.Refresh),
 		Refresh:     services.Refresh,
 		Categories:  services.Categories,

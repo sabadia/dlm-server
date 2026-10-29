@@ -907,6 +907,62 @@
         },
         "type": "object"
       },
+      "Delivery": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "durationMs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "event": {
+            "description": "The event type, or webhook.test for a test delivery.",
+            "type": "string"
+          },
+          "eventId": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "status": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "time": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "willRetry": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "time",
+          "event",
+          "eventId",
+          "attempt",
+          "ok",
+          "status",
+          "durationMs",
+          "willRetry"
+        ],
+        "type": "object"
+      },
       "DownloadCandidateBody": {
         "additionalProperties": false,
         "properties": {
@@ -3058,6 +3114,79 @@
         ],
         "type": "object"
       },
+      "ResourceChangedData": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "category",
+              "webhook",
+              "credential",
+              "cookie",
+              "plugin",
+              "config"
+            ],
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "created",
+              "updated",
+              "deleted"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "op"
+        ],
+        "type": "object"
+      },
+      "ResourceChangedEvent": {
+        "additionalProperties": false,
+        "description": "A category, webhook, credential, cookie, plugin or the boot configuration was created, changed or deleted, by this or another client; refetch it.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ResourceChangedData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "resource.changed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
       "RetrySettings": {
         "additionalProperties": false,
         "properties": {
@@ -3793,6 +3922,7 @@
             "queue.updated": "#/components/schemas/QueueUpdatedEvent",
             "quota.exhausted": "#/components/schemas/QuotaExhaustedEvent",
             "quota.reset": "#/components/schemas/QuotaResetEvent",
+            "resource.changed": "#/components/schemas/ResourceChangedEvent",
             "settings.updated": "#/components/schemas/SettingsUpdatedEvent",
             "system.speed": "#/components/schemas/SystemSpeedEvent",
             "task.created": "#/components/schemas/TaskCreatedEvent",
@@ -3849,6 +3979,9 @@
           },
           {
             "$ref": "#/components/schemas/SystemSpeedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResourceChangedEvent"
           },
           {
             "$ref": "#/components/schemas/LimitsChangedEvent"
@@ -5227,6 +5360,30 @@
           "hasSecret",
           "createdAt",
           "updatedAt"
+        ],
+        "type": "object"
+      },
+      "WebhookDeliveries": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/WebhookDeliveries.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "deliveries": {
+            "description": "The latest delivery attempts, newest first; each retry of a delivery is an attempt of its own.",
+            "items": {
+              "$ref": "#/components/schemas/Delivery"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "deliveries"
         ],
         "type": "object"
       },
@@ -8248,6 +8405,143 @@
         "summary": "Switch a plugin on or off",
         "tags": [
           "plugins"
+        ]
+      }
+    },
+    "/v1/plugins/{name}/logs": {
+      "get": {
+        "description": "The latest log records of a plugin (500 are kept): what its script wrote with dlm.log and what the daemon said about it (failed starts, failed hooks). Same filters and paging as get-logs.",
+        "operationId": "get-plugin-logs",
+        "parameters": [
+          {
+            "description": "Plugin name.",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Plugin name.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only records of at least this level.",
+            "explode": false,
+            "in": "query",
+            "name": "level",
+            "schema": {
+              "description": "Only records of at least this level.",
+              "enum": [
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only records whose message or attributes contain this text, ignoring case.",
+            "explode": false,
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "description": "Only records whose message or attributes contain this text, ignoring case.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only records older than this id: pass the first id of the previous answer to page backwards.",
+            "explode": false,
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "description": "Only records older than this id: pass the first id of the previous answer to page backwards.",
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "How many records, counted from the newest.",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 200,
+              "description": "How many records, counted from the newest.",
+              "format": "int64",
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read a plugin's log",
+        "tags": [
+          "plugins",
+          "logs"
         ]
       }
     },
@@ -12857,6 +13151,90 @@
           }
         },
         "summary": "Update a webhook",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/v1/webhooks/{id}/deliveries": {
+      "get": {
+        "description": "The last 100 attempts to send an event to the webhook since the daemon started, newest first: when, which event, the attempt number, the HTTP status the endpoint answered (0 when it did not), how long it took, the error, and whether a retry follows. Test deliveries are included.",
+        "operationId": "list-webhook-deliveries",
+        "parameters": [
+          {
+            "description": "Webhook ID.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Webhook ID.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveries"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List a webhook's recent deliveries",
         "tags": [
           "webhooks"
         ]

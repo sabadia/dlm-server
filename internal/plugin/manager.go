@@ -16,6 +16,7 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/events"
+	"github.com/sabadia/dlm-server/internal/logging"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/storage"
 )
@@ -53,8 +54,16 @@ type Manager struct {
 	mu      sync.RWMutex
 	entries map[string]*entry
 
+	// rings keep the latest log records of each plugin (its dlm.log calls and
+	// what the manager says about it) for the plugin logs API.
+	ringMu sync.Mutex
+	rings  map[string]*logging.Ring
+
 	ready chan struct{}
 }
+
+// pluginRingSize is how many log records are kept per plugin.
+const pluginRingSize = 500
 
 type entry struct {
 	rec  *storage.PluginRecord
@@ -75,7 +84,7 @@ func NewManager(o Options) *Manager {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Manager{opts: o, log: log.With("component", "plugins"), entries: make(map[string]*entry), ready: make(chan struct{})}
+	return &Manager{opts: o, log: log.With("component", "plugins"), entries: make(map[string]*entry), rings: make(map[string]*logging.Ring), ready: make(chan struct{})}
 }
 
 func (m *Manager) pluginDir(name string) string { return filepath.Join(m.opts.Dir, name) }
@@ -85,7 +94,37 @@ func (m *Manager) storageFile(name string) string {
 }
 
 func (m *Manager) env(name string) Env {
-	return Env{Logger: m.log, HTTP: m.opts.HTTP, StorageFile: m.storageFile(name)}
+	return Env{Logger: m.plog(name), HTTP: m.opts.HTTP, StorageFile: m.storageFile(name)}
+}
+
+// ring returns the log ring of a plugin, creating it on first use.
+func (m *Manager) ring(name string) *logging.Ring {
+	m.ringMu.Lock()
+	defer m.ringMu.Unlock()
+	r, ok := m.rings[name]
+	if !ok {
+		r = logging.NewRing(pluginRingSize)
+		m.rings[name] = r
+	}
+	return r
+}
+
+// plog is the logger for everything about one plugin: it goes to the daemon
+// log with a plugin attribute and is also kept in the plugin's own ring.
+func (m *Manager) plog(name string) *slog.Logger {
+	return slog.New(logging.NewCaptureHandler(m.log.Handler(), m.ring(name))).With("plugin", name)
+}
+
+// Logs returns the recent log records of an installed plugin. An unknown
+// plugin matches domain.ErrNotFound.
+func (m *Manager) Logs(_ context.Context, name string) (*logging.Ring, error) {
+	m.mu.RLock()
+	_, ok := m.entries[name]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, domain.NotFound("plugin", name)
+	}
+	return m.ring(name), nil
 }
 
 // Load starts the enabled installed plugins. A plugin that cannot start (its
@@ -114,7 +153,7 @@ func (m *Manager) start(ctx context.Context, e *entry) {
 	man, script, err := readPlugin(m.pluginDir(e.rec.Name))
 	if err != nil {
 		e.err = err.Error()
-		m.log.Warn("plugin cannot be read", "plugin", e.rec.Name, "error", err)
+		m.plog(e.rec.Name).Warn("plugin cannot be read", "error", err)
 		return
 	}
 	e.man = man
@@ -124,7 +163,7 @@ func (m *Manager) start(ctx context.Context, e *entry) {
 	inst, err := Load(ctx, man, script, m.env(e.rec.Name))
 	if err != nil {
 		e.err = err.Error()
-		m.log.Warn("plugin failed to start", "plugin", e.rec.Name, "error", err)
+		m.plog(e.rec.Name).Warn("plugin failed to start", "error", err)
 		return
 	}
 	e.inst = inst
@@ -305,6 +344,9 @@ func (m *Manager) Uninstall(ctx context.Context, name string) error {
 	if err := m.opts.Store.Plugins().Delete(ctx, name); err != nil {
 		return fmt.Errorf("plugin: uninstall: %w", err)
 	}
+	m.ringMu.Lock()
+	delete(m.rings, name)
+	m.ringMu.Unlock()
 	delete(m.entries, name)
 	if err := os.RemoveAll(m.pluginDir(name)); err != nil {
 		m.log.Warn("plugin files could not be removed", "plugin", name, "error", err)
@@ -430,18 +472,18 @@ func (m *Manager) Resolve(ctx context.Context, src domain.Source) (next domain.S
 		}
 		out, err := inst.Call(ctx, HookResolve, sourceArg(src))
 		if err != nil {
-			m.log.Warn("plugin resolve failed", "plugin", man.Name, "url", redactURL(src.CurrentURL), "error", err)
+			m.plog(man.Name).Warn("plugin resolve failed", "url", redactURL(src.CurrentURL), "error", err)
 			continue
 		}
 		res, err := parseResolution(out)
 		if err != nil {
-			m.log.Warn("plugin resolve returned something unusable", "plugin", man.Name, "error", err)
+			m.plog(man.Name).Warn("plugin resolve returned something unusable", "error", err)
 			continue
 		}
 		if res == nil {
 			continue
 		}
-		m.log.Info("plugin resolved a link", "plugin", man.Name, "url", redactURL(src.CurrentURL))
+		m.plog(man.Name).Info("plugin resolved a link", "url", redactURL(src.CurrentURL))
 		return res.apply(src), res.Name, true
 	}
 	return src, "", false
@@ -568,7 +610,7 @@ func (m *Manager) notify(ctx context.Context, ev events.Event) {
 			continue
 		}
 		if _, err := inst.Call(ctx, hook, map[string]any{"event": hook, "task": taskArg(t)}); err != nil {
-			m.log.Warn("plugin hook failed", "plugin", man.Name, "hook", hook, "task", t.ID, "error", err)
+			m.plog(man.Name).Warn("plugin hook failed", "hook", hook, "task", t.ID, "error", err)
 		}
 	}
 }

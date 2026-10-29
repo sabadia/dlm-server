@@ -224,6 +224,8 @@ type teeHandler struct {
 	ring   *Ring
 	attrs  []slog.Attr // attributes added with WithAttrs, already prefixed
 	prefix string      // group path with a trailing dot
+	// all keeps records of every level; inner still only gets those it accepts.
+	all bool
 }
 
 // NewTeeHandler returns a handler that writes to inner and also keeps every
@@ -232,7 +234,17 @@ func NewTeeHandler(inner slog.Handler, ring *Ring) slog.Handler {
 	return &teeHandler{inner: inner, ring: ring}
 }
 
-func (h *teeHandler) Enabled(ctx context.Context, l slog.Level) bool { return h.inner.Enabled(ctx, l) }
+// NewCaptureHandler is like NewTeeHandler but keeps records of every level in
+// ring, whatever level inner is set to (inner still only writes what it
+// accepts). The plugin logs use it: a plugin author wants to see debug output
+// without turning the whole daemon to debug.
+func NewCaptureHandler(inner slog.Handler, ring *Ring) slog.Handler {
+	return &teeHandler{inner: inner, ring: ring, all: true}
+}
+
+func (h *teeHandler) Enabled(ctx context.Context, l slog.Level) bool {
+	return h.all || h.inner.Enabled(ctx, l)
+}
 
 func (h *teeHandler) Handle(ctx context.Context, r slog.Record) error {
 	attrs := map[string]any{}
@@ -251,6 +263,9 @@ func (h *teeHandler) Handle(ctx context.Context, r slog.Record) error {
 		rec.Time = time.Now()
 	}
 	h.ring.Add(rec)
+	if h.all && !h.inner.Enabled(ctx, r.Level) {
+		return nil
+	}
 	return h.inner.Handle(ctx, r) //nolint:wrapcheck // the inner handler's error is the handler's
 }
 

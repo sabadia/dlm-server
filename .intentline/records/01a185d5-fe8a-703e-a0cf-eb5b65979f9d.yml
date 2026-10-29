@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a185d5-fe8a-703e-a0cf-eb5b65979f9d
+status: draft
+created_at: '2026-10-29T04:05:56Z'
+updated_at: '2026-10-29T04:05:56Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: P13.9 webhook delivery log and per-plugin logs; P13.10 resource.changed events for categories, webhooks, credentials, cookies, plugins and config
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/webhook/webhook.go
+  start_line: null
+  end_line: null
+- path: internal/plugin/manager.go
+  start_line: null
+  end_line: null
+- path: internal/service/resource_events.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

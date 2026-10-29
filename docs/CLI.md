@@ -54,6 +54,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm plugin get`](#dlm-plugin-get) | Show a plugin |
 | [`dlm plugin install`](#dlm-plugin-install) | Install a plugin from a directory or a git repository |
 | [`dlm plugin list`](#dlm-plugin-list) | List installed plugins |
+| [`dlm plugin logs`](#dlm-plugin-logs) | Show a plugin's log |
 | [`dlm plugin rm`](#dlm-plugin-rm) | Uninstall a plugin and delete its files and stored data |
 | [`dlm queue`](#dlm-queue) | Manage download queues |
 | [`dlm queue add`](#dlm-queue-add) | Create a queue |
@@ -114,6 +115,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm watch`](#dlm-watch) | Stream live events from the daemon |
 | [`dlm webhook`](#dlm-webhook) | Manage the webhooks that receive events |
 | [`dlm webhook add`](#dlm-webhook-add) | Create a webhook |
+| [`dlm webhook deliveries`](#dlm-webhook-deliveries) | Show a webhook's recent deliveries |
 | [`dlm webhook get`](#dlm-webhook-get) | Show a webhook |
 | [`dlm webhook list`](#dlm-webhook-list) | List webhooks |
 | [`dlm webhook rm`](#dlm-webhook-rm) | Delete a webhook |
@@ -2136,6 +2138,7 @@ dlm plugin [flags]
 * [dlm plugin get](#dlm-plugin-get)	 - Show a plugin
 * [dlm plugin install](#dlm-plugin-install)	 - Install a plugin from a directory or a git repository
 * [dlm plugin list](#dlm-plugin-list)	 - List installed plugins
+* [dlm plugin logs](#dlm-plugin-logs)	 - Show a plugin's log
 * [dlm plugin rm](#dlm-plugin-rm)	 - Uninstall a plugin and delete its files and stored data
 
 
@@ -2325,6 +2328,53 @@ dlm plugin list [flags]
 
 ```
   -h, --help   help for list
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm plugin](#dlm-plugin)	 - Manage JavaScript plugins
+
+
+## dlm plugin logs
+
+Show a plugin's log
+
+### Synopsis
+
+Show the latest log records of a plugin (500 are kept): what its script wrote with dlm.log and what the daemon said about it, such as failed starts and hooks.
+
+```
+dlm plugin logs NAME [flags]
+```
+
+### Options
+
+```
+  -h, --help           help for logs
+      --level string   only this level and above: debug, info, warn or error
+  -n, --lines int      how many of the newest records to show, 1-500 (default 100)
+      --q string       only records containing this text
 ```
 
 ### Options inherited from parent commands
@@ -5132,6 +5182,7 @@ dlm webhook [flags]
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
 * [dlm webhook add](#dlm-webhook-add)	 - Create a webhook
+* [dlm webhook deliveries](#dlm-webhook-deliveries)	 - Show a webhook's recent deliveries
 * [dlm webhook get](#dlm-webhook-get)	 - Show a webhook
 * [dlm webhook list](#dlm-webhook-list)	 - List webhooks
 * [dlm webhook rm](#dlm-webhook-rm)	 - Delete a webhook
@@ -5160,6 +5211,50 @@ dlm webhook add URL [flags]
       --event stringArray   event type to deliver (repeatable, required)
   -h, --help                help for add
       --secret string       secret that signs the deliveries
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm webhook](#dlm-webhook)	 - Manage the webhooks that receive events
+
+
+## dlm webhook deliveries
+
+Show a webhook's recent deliveries
+
+### Synopsis
+
+Show the last attempts to send an event to the webhook since the daemon started, newest first: the event, the attempt, the HTTP status the endpoint answered, how long it took and what went wrong.
+
+```
+dlm webhook deliveries ID [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for deliveries
 ```
 
 ### Options inherited from parent commands

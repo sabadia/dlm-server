@@ -129,3 +129,43 @@ func (c *Client) StreamLogs(ctx context.Context, o LogsOptions, lastEventID stri
 		}
 	}
 }
+
+// WebhookDelivery is one attempt to send an event to a webhook.
+type WebhookDelivery struct {
+	ID         uint64    `json:"id"`
+	Time       time.Time `json:"time"`
+	Event      string    `json:"event"`
+	EventID    uint64    `json:"eventId"`
+	Attempt    int       `json:"attempt"`
+	OK         bool      `json:"ok"`
+	Status     int       `json:"status"`
+	DurationMs int64     `json:"durationMs"`
+	Error      string    `json:"error,omitempty"`
+	WillRetry  bool      `json:"willRetry"`
+}
+
+// WebhookDeliveries calls list-webhook-deliveries
+// (GET /v1/webhooks/{id}/deliveries); the newest attempt comes first.
+func (c *Client) WebhookDeliveries(ctx context.Context, id string) ([]WebhookDelivery, error) {
+	var out struct {
+		Deliveries []WebhookDelivery `json:"deliveries"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/v1/webhooks/"+url.PathEscape(id)+"/deliveries", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Deliveries, nil
+}
+
+// PluginLogs calls get-plugin-logs (GET /v1/plugins/{name}/logs).
+func (c *Client) PluginLogs(ctx context.Context, name string, o LogsOptions) (*LogList, error) {
+	q := logsQuery(LogsOptions{Level: o.Level, Query: o.Query, Limit: o.Limit, Before: o.Before})
+	path := "/v1/plugins/" + url.PathEscape(name) + "/logs"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out LogList
+	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

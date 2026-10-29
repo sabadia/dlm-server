@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/events"
 )
 
 func newConfigServer(t *testing.T) (*Server, string) {
@@ -85,5 +86,36 @@ func TestConfigOperations(t *testing.T) {
 	// The file still only holds what was valid.
 	if data, _ := os.ReadFile(file); strings.Contains(string(data), "loud") || strings.Contains(string(data), "no.such") {
 		t.Errorf("a refused change reached the file:\n%s", data)
+	}
+}
+
+func TestConfigChangeIsAnnounced(t *testing.T) {
+	home := t.TempDir()
+	cfg, err := config.Load(config.LoadOptions{Environ: func() []string { return []string{"DLM_HOME=" + home} }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bus := events.New(events.Options{})
+	t.Cleanup(bus.Close)
+	s, err := New(cfg, Deps{Token: testToken, Version: testVersion, Bus: bus})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := bus.Subscribe(t.Context(), events.Filter{Types: []events.Type{events.TypeResourceChanged}})
+
+	callServer(t, s, http.MethodPatch, "/v1/config", `{"values":{"log.level":"debug"}}`, "", http.StatusOK, nil)
+	select {
+	case e := <-sub.C():
+		if d, ok := e.Data.(events.ResourceChangedData); !ok || d.Kind != events.ResourceConfig || d.Op != events.OpUpdated {
+			t.Errorf("event = %+v", e.Data)
+		}
+	default:
+		t.Fatal("a config change was not announced")
+	}
+	callServer(t, s, http.MethodPatch, "/v1/config", `{"values":{"no.such":1}}`, "", http.StatusUnprocessableEntity, nil)
+	select {
+	case e := <-sub.C():
+		t.Errorf("a refused change was announced: %+v", e)
+	default:
 	}
 }

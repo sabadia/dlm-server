@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sabadia/dlm-server/internal/events"
+
 	"github.com/sabadia/dlm-server/internal/domain"
+	"github.com/sabadia/dlm-server/internal/logging"
 )
 
 // PluginManager installs and runs plugins (plugin.Manager).
@@ -14,11 +17,20 @@ type PluginManager interface {
 	Install(ctx context.Context, in domain.PluginInstall) (*domain.Plugin, error)
 	SetEnabled(ctx context.Context, name string, enabled bool) (*domain.Plugin, error)
 	Uninstall(ctx context.Context, name string) error
+	Logs(ctx context.Context, name string) (*logging.Ring, error)
 }
 
 // PluginService manages the installed plugins.
 type PluginService struct {
-	m PluginManager
+	m   PluginManager
+	bus *events.Bus
+}
+
+// WithBus makes the service tell other clients (resource.changed) when a
+// plugin is installed, switched or removed. It returns s for chaining.
+func (s *PluginService) WithBus(bus *events.Bus) *PluginService {
+	s.bus = bus
+	return s
 }
 
 // NewPluginService creates a PluginService.
@@ -43,6 +55,7 @@ func (s *PluginService) Install(ctx context.Context, in domain.PluginInstall) (*
 	if err != nil {
 		return nil, fmt.Errorf("service: install plugin: %w", err)
 	}
+	publishResource(s.bus, events.ResourcePlugin, p.Name, events.OpCreated)
 	return p, nil
 }
 
@@ -52,6 +65,7 @@ func (s *PluginService) SetEnabled(ctx context.Context, name string, enabled boo
 	if err != nil {
 		return nil, fmt.Errorf("service: update plugin: %w", err)
 	}
+	publishResource(s.bus, events.ResourcePlugin, name, events.OpUpdated)
 	return p, nil
 }
 
@@ -60,5 +74,17 @@ func (s *PluginService) Delete(ctx context.Context, name string) error {
 	if err := s.m.Uninstall(ctx, name); err != nil {
 		return fmt.Errorf("service: delete plugin: %w", err)
 	}
+	publishResource(s.bus, events.ResourcePlugin, name, events.OpDeleted)
 	return nil
+}
+
+// Logs returns the recent log records of a plugin (what its script wrote with
+// dlm.log and what the daemon said about it). An unknown plugin matches
+// domain.ErrNotFound.
+func (s *PluginService) Logs(ctx context.Context, name string) (*logging.Ring, error) {
+	r, err := s.m.Logs(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("service: plugin logs: %w", err)
+	}
+	return r, nil
 }

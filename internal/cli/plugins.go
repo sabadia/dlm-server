@@ -41,7 +41,7 @@ func (a *app) newPluginCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(a.newPluginListCommand(), a.newPluginInstallCommand(), a.newPluginGetCommand(),
+	cmd.AddCommand(a.newPluginLogsCommand(), a.newPluginListCommand(), a.newPluginInstallCommand(), a.newPluginGetCommand(),
 		a.newPluginEnableCommand(true), a.newPluginEnableCommand(false), a.newPluginRemoveCommand())
 	return cmd
 }

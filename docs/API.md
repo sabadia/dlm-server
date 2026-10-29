@@ -185,6 +185,18 @@ or a `filter`) and answer one result per task. `update` sets the `priority`, add
   replays what is still kept (a `reset` event with reason `gap` first when some was dropped,
   `overflow` when the client reads too slowly).
 
+## Integrations and keeping clients in sync
+
+- `GET /v1/webhooks/{id}/deliveries` (`dlm webhook deliveries ID`): the last 100 attempts to send an
+  event to the webhook since the daemon started, newest first (event, attempt number, HTTP status,
+  duration, error, whether a retry follows). Test deliveries are included.
+- `GET /v1/plugins/{name}/logs` (`dlm plugin logs NAME`): the last 500 log records of a plugin, what its
+  script wrote with `dlm.log` (at every level) and what the daemon said about it. Same filters as `get-logs`.
+- `resource.changed` events (`{kind, id, op}`) announce that a `category`, `webhook`, `credential`,
+  `cookie`, `plugin` or the boot `config` was `created`, `updated` or `deleted`, by any client, so
+  several windows or devices stay current. An empty `id` means several changed (a cookie import) or
+  there is only one (`config`): refetch the list.
+
 ## Task details
 
 Three read/write operations describe a task beyond its progress:
@@ -215,7 +227,7 @@ Each event is `id: <bootID>-<seq>`, `event: <type>`, `data: <JSON>`. Types:
 `task.created`, `task.updated`, `task.status`, `task.progress` (coalesced, several
 per second at most), `task.deleted`, `task.refresh`, `queue.created`,
 `queue.updated`, `queue.deleted`, `queue.completed`, `queue.action_cancelled`,
-`settings.updated`, `quota.exhausted`, `quota.reset`, `system.speed` and `limits.changed`. Filter with `types`,
+`settings.updated`, `quota.exhausted`, `quota.reset`, `system.speed`, `limits.changed` and `resource.changed`. Filter with `types`,
 `taskId` and `queueId`. The OpenAPI document describes every event type with its
 own payload schema (`StreamEvent` is a `oneOf` discriminated by `type`).
 

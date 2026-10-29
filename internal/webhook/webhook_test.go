@@ -249,3 +249,73 @@ func TestSignKnownVector(t *testing.T) {
 		t.Errorf("Sign = %s, want %s", got, want)
 	}
 }
+
+func TestDeliveriesAreLoggedPerAttemptNewestFirst(t *testing.T) {
+	// The endpoint fails twice with 503, then accepts.
+	srv, ch, _ := recorder(t, func(n int) int {
+		if n < 3 {
+			return http.StatusServiceUnavailable
+		}
+		return http.StatusNoContent
+	})
+	src := &staticSource{}
+	src.set(Target{ID: "w1", URL: srv.URL, Events: []string{"task.status"}})
+	other := &staticSource{}
+	other.set()
+	d := New(nil, src, Options{Attempts: 4, Backoff: func(int) time.Duration { return time.Millisecond }})
+
+	e := events.Event{ID: 7, Type: events.TypeTaskStatus, TaskID: "t1", Time: time.Now()}
+	d.deliverWithRetry(t.Context(), job{target: Target{ID: "w1", URL: srv.URL}, event: e})
+	for range 3 {
+		next(t, ch)
+	}
+
+	got := d.Deliveries("w1")
+	if len(got) != 3 {
+		t.Fatalf("deliveries = %+v", got)
+	}
+	// Newest first: the success, then the two failures.
+	if !got[0].OK || got[0].Attempt != 3 || got[0].Status != http.StatusNoContent || got[0].WillRetry || got[0].Error != "" {
+		t.Errorf("last attempt = %+v", got[0])
+	}
+	for i, wantAttempt := range []int{2, 1} {
+		a := got[i+1]
+		if a.OK || a.Attempt != wantAttempt || a.Status != http.StatusServiceUnavailable || !a.WillRetry || a.Error == "" {
+			t.Errorf("failed attempt %d = %+v", wantAttempt, a)
+		}
+	}
+	if got[0].Event != "task.status" || got[0].EventID != 7 || got[0].ID <= got[2].ID || got[0].Time.IsZero() {
+		t.Errorf("fields = %+v", got[0])
+	}
+	if len(d.Deliveries("nobody")) != 0 {
+		t.Error("deliveries of an unknown webhook")
+	}
+}
+
+func TestDeliveryLogIsBoundedAndShowsTransportErrorsAndRefusals(t *testing.T) {
+	refuse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) }))
+	t.Cleanup(refuse.Close)
+	dead := httptest.NewServer(http.NotFoundHandler())
+	deadURL := dead.URL
+	dead.Close()
+	d := New(nil, &staticSource{}, Options{Attempts: 3, Backoff: func(int) time.Duration { return time.Millisecond }})
+	e := events.Event{ID: 1, Type: events.TypeTaskStatus, Time: time.Now()}
+
+	d.deliverWithRetry(t.Context(), job{target: Target{ID: "refused", URL: refuse.URL}, event: e})
+	got := d.Deliveries("refused")
+	if len(got) != 1 || got[0].OK || got[0].Status != http.StatusForbidden || got[0].WillRetry {
+		t.Errorf("a refusal is final, one attempt: %+v", got)
+	}
+	d.deliverWithRetry(t.Context(), job{target: Target{ID: "dead", URL: deadURL}, event: e})
+	got = d.Deliveries("dead")
+	if len(got) != 3 || got[0].Status != 0 || got[0].WillRetry || !got[1].WillRetry || got[0].Error == "" {
+		t.Errorf("transport failures: %+v", got)
+	}
+
+	for range DeliveryLogSize + 20 {
+		_ = d.Deliver(t.Context(), Target{ID: "many", URL: refuse.URL}, e)
+	}
+	if n := len(d.Deliveries("many")); n != DeliveryLogSize {
+		t.Errorf("kept %d deliveries, want %d", n, DeliveryLogSize)
+	}
+}

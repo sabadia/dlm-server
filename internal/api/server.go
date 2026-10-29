@@ -220,6 +220,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerLimitsAndTimeline()
 	s.registerConfig()
 	s.registerLogs()
+	s.registerIntegrationsObservability()
 	s.registerBrowser()
 	if deps.MCP != nil {
 		s.mux.Handle(MCPPath, deps.MCP)

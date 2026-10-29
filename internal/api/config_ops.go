@@ -9,6 +9,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/sabadia/dlm-server/internal/config"
+	"github.com/sabadia/dlm-server/internal/events"
 )
 
 const tagConfig = "config"
@@ -75,6 +76,9 @@ func (s *Server) updateConfig(ctx context.Context, in *struct{ Body UpdateConfig
 			return nil, p.withCode(pe.Code, params)
 		}
 		return nil, s.fail(ctx, "update-config", err, locBody)
+	}
+	if s.bus != nil {
+		s.bus.Publish(events.Event{Type: events.TypeResourceChanged, Data: events.ResourceChangedData{Kind: events.ResourceConfig, Op: events.OpUpdated}})
 	}
 	v, err := s.cfg.Describe()
 	if err != nil {
