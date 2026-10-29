@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestManagerBuckets(t *testing.T) {
@@ -128,5 +129,52 @@ func TestManagerConcurrent(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		t.Fatal(err)
+	}
+}
+
+func TestOverrideReplacesTheGlobalLimitUntilItExpires(t *testing.T) {
+	m := NewManager(1000)
+	now := time.Now()
+	if m.Global().Limit() != 1000 || m.GlobalBase() != 1000 {
+		t.Fatalf("limit %d base %d", m.Global().Limit(), m.GlobalBase())
+	}
+	if _, ok := m.CurrentOverride(now); ok {
+		t.Fatal("an override from nowhere")
+	}
+
+	m.SetOverride(0, now.Add(time.Hour)) // turbo: unlimited
+	if m.Global().Limit() != 0 || m.GlobalBase() != 1000 {
+		t.Errorf("during turbo: limit %d base %d", m.Global().Limit(), m.GlobalBase())
+	}
+	// A settings change meanwhile only changes the base.
+	m.SetGlobal(2000)
+	if m.Global().Limit() != 0 || m.GlobalBase() != 2000 {
+		t.Errorf("after SetGlobal: limit %d base %d", m.Global().Limit(), m.GlobalBase())
+	}
+	if o, ok := m.CurrentOverride(now); !ok || o.BytesPerSec != 0 {
+		t.Errorf("override = %+v, %v", o, ok)
+	}
+	if m.ExpireOverride(now) {
+		t.Error("expired too early")
+	}
+	if !m.ExpireOverride(now.Add(time.Hour)) {
+		t.Fatal("did not expire")
+	}
+	if m.Global().Limit() != 2000 {
+		t.Errorf("after expiry: limit %d, want the configured 2000", m.Global().Limit())
+	}
+	if m.ExpireOverride(now.Add(2 * time.Hour)) {
+		t.Error("expired twice")
+	}
+
+	m.SetOverride(500, now.Add(time.Hour))
+	if m.Global().Limit() != 500 {
+		t.Errorf("a limit override: %d", m.Global().Limit())
+	}
+	if !m.ClearOverride() || m.Global().Limit() != 2000 {
+		t.Errorf("cleared: limit %d", m.Global().Limit())
+	}
+	if m.ClearOverride() {
+		t.Error("cleared twice")
 	}
 }

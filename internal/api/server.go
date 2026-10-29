@@ -79,6 +79,8 @@ type Deps struct {
 	Refresh *service.RefreshService
 	// Browser is the service behind the /v1/browser operations; 503 while nil.
 	Browser *service.BrowserService
+	// Limits is the service behind the limits operations; 503 while nil.
+	Limits *service.LimitsService
 	// System describes the daemon for get-system-info; 503 while nil.
 	System SystemSource
 	// Lifecycle stops or restarts the daemon (shutdown-daemon,
@@ -112,6 +114,7 @@ type Server struct {
 	capture     *service.CaptureService
 	refresh     *service.RefreshService
 	browser     *service.BrowserService
+	limits      *service.LimitsService
 	system      SystemSource
 	lifecycle   Lifecycle
 
@@ -178,6 +181,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		capture:     deps.Capture,
 		refresh:     deps.Refresh,
 		browser:     deps.Browser,
+		limits:      deps.Limits,
 		system:      deps.System,
 		lifecycle:   deps.Lifecycle,
 	}
@@ -208,6 +212,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 	s.registerTaskDetail()
 	s.registerTaskBulk()
 	s.registerAddFlow()
+	s.registerLimitsAndTimeline()
 	s.registerBrowser()
 	if deps.MCP != nil {
 		s.mux.Handle(MCPPath, deps.MCP)

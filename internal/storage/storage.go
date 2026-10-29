@@ -352,6 +352,45 @@ type PluginRepository interface {
 	Delete(ctx context.Context, name string) error
 }
 
+// TransferRow is the bytes one queue and engine transferred in one hour.
+type TransferRow struct {
+	// Bucket is the start of the hour (UTC).
+	Bucket  time.Time
+	QueueID string
+	Engine  string
+	Down    int64
+	Up      int64
+}
+
+// TransferGroup says how Timeline groups its rows.
+type TransferGroup string
+
+// Timeline groupings.
+const (
+	TransferGroupNone   TransferGroup = ""
+	TransferGroupEngine TransferGroup = "engine"
+	TransferGroupQueue  TransferGroup = "queue"
+)
+
+// TransferPoint is the bytes transferred in one bucket (and group).
+type TransferPoint struct {
+	Bucket time.Time
+	// Group is the engine or queue ID when grouped, otherwise empty.
+	Group string
+	Down  int64
+	Up    int64
+}
+
+// TransferRepository persists how much was transferred per hour.
+type TransferRepository interface {
+	// Add adds the rows' bytes to what is stored for the same hour, queue and
+	// engine.
+	Add(ctx context.Context, rows []TransferRow) error
+	// Timeline sums the bytes of the hours in [from, to) into buckets of
+	// bucketSize (an hour or a day, aligned to UTC), oldest first.
+	Timeline(ctx context.Context, from, to time.Time, bucketSize time.Duration, group TransferGroup) ([]TransferPoint, error)
+}
+
 // CookieRecord represents the persisted cookie row with encrypted value.
 type CookieRecord struct {
 	ID           string
@@ -398,6 +437,8 @@ type Store interface {
 	Webhooks() WebhookRepository
 	Credentials() CredentialRepository
 	Plugins() PluginRepository
+	// Transfer returns the transfer history.
+	Transfer() TransferRepository
 	// WithTx runs fn in a transaction. The Store passed to fn is bound to the
 	// transaction; it is committed when fn returns nil and rolled back when
 	// fn returns an error or panics. Calling WithTx on the transaction-bound

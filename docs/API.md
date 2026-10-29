@@ -151,6 +151,21 @@ or a `filter`) and answer one result per task. `update` sets the `priority`, add
   the roots, also through a symbolic link, is 422 `fs.outside_roots`, and it does not say whether
   such a path exists. `get-system-info` lists the roots as `fsRoots`.
 
+## Speed, limits and traffic history
+
+- `system.speed` events carry the speed of the whole daemon (`down`, `up` in bytes per second,
+  `active` and `queued` task counts) once a second while anything is transferring, and once more
+  with zeros when it stops; an idle daemon sends none.
+- `GET /v1/stats/timeline` (`dlm stats timeline`): bytes downloaded and uploaded per `hour` or `day`
+  (UTC), optionally split with `groupBy=engine|queue`, from `from` to `to` (at most 1000 buckets).
+  The history is recorded from the daemon's first start with this version.
+- `GET /v1/limits` (`dlm limits`): the global speed limit in force, the configured one, the active
+  speed profile, the quota usage of the global scope, and the same per queue.
+- `POST /v1/limits/override` (`dlm limits override [SPEED] -m MINUTES`) replaces the global speed
+  limit by `speedLimit` (0: unlimited, "turbo") for 1 to 1440 minutes; `DELETE` ends it. Settings
+  changes made meanwhile apply when it ends. A `limits.changed` event announces every change,
+  including the end of an override.
+
 ## Task details
 
 Three read/write operations describe a task beyond its progress:
@@ -181,7 +196,7 @@ Each event is `id: <bootID>-<seq>`, `event: <type>`, `data: <JSON>`. Types:
 `task.created`, `task.updated`, `task.status`, `task.progress` (coalesced, several
 per second at most), `task.deleted`, `task.refresh`, `queue.created`,
 `queue.updated`, `queue.deleted`, `queue.completed`, `queue.action_cancelled`,
-`settings.updated`, `quota.exhausted` and `quota.reset`. Filter with `types`,
+`settings.updated`, `quota.exhausted`, `quota.reset`, `system.speed` and `limits.changed`. Filter with `types`,
 `taskId` and `queueId`. The OpenAPI document describes every event type with its
 own payload schema (`StreamEvent` is a `oneOf` discriminated by `type`).
 

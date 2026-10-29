@@ -38,6 +38,8 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm fs browse`](#dlm-fs-browse) | List the directories below a path |
 | [`dlm fs free`](#dlm-fs-free) | Show the free space of a directory |
 | [`dlm health`](#dlm-health) | Check that the daemon is running |
+| [`dlm limits`](#dlm-limits) | Show the speed limits and quotas in force |
+| [`dlm limits override`](#dlm-limits-override) | Replace the global speed limit for a while |
 | [`dlm native-host`](#dlm-native-host) | Native Messaging host for the browser extension |
 | [`dlm native-host install`](#dlm-native-host-install) | Register the Native Messaging host with the browsers |
 | [`dlm native-host uninstall`](#dlm-native-host-uninstall) | Remove the Native Messaging host registrations |
@@ -71,6 +73,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm settings set`](#dlm-settings-set) | Set global settings |
 | [`dlm settings unset`](#dlm-settings-unset) | Unset global settings (they inherit the defaults again) |
 | [`dlm stats`](#dlm-stats) | Show download statistics |
+| [`dlm stats timeline`](#dlm-stats-timeline) | Show the traffic per hour or day |
 | [`dlm system`](#dlm-system) | Inspect and control the running daemon |
 | [`dlm system info`](#dlm-system-info) | Describe the daemon: version, directories, engines, tools |
 | [`dlm system restart`](#dlm-system-restart) | Restart the daemon |
@@ -154,6 +157,7 @@ Run `dlm serve` to start the daemon; every other command talks to it over its RE
 * [dlm credential](#dlm-credential)	 - Manage stored site logins (HTTP Basic and Digest)
 * [dlm fs](#dlm-fs)	 - Browse the daemon's machine (limited to server.fs_roots)
 * [dlm health](#dlm-health)	 - Check that the daemon is running
+* [dlm limits](#dlm-limits)	 - Show the speed limits and quotas in force
 * [dlm native-host](#dlm-native-host)	 - Native Messaging host for the browser extension
 * [dlm openapi](#dlm-openapi)	 - Print the OpenAPI 3.1 document of the REST API
 * [dlm plugin](#dlm-plugin)	 - Manage JavaScript plugins
@@ -1575,6 +1579,105 @@ dlm health [flags]
 ### SEE ALSO
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+
+
+## dlm limits
+
+Show the speed limits and quotas in force
+
+### Synopsis
+
+Show the global and per-queue speed limits now in force, the active speed profile, the quota usage and a temporary override. 'dlm limits override' changes the global limit for a while.
+
+```
+dlm limits [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for limits
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm limits override](#dlm-limits-override)	 - Replace the global speed limit for a while
+
+
+## dlm limits override
+
+Replace the global speed limit for a while
+
+### Synopsis
+
+Replace the global speed limit by SPEED per second (500K, 2MB, ...; none or 0: unlimited, "turbo") for --minutes (1-1440, default 60). The configured limit and profiles apply again afterwards. --clear ends an override now.
+
+```
+dlm limits override [SPEED] [flags]
+```
+
+### Examples
+
+```
+  dlm limits override           # turbo for an hour
+  dlm limits override 1MB -m 30
+  dlm limits override --clear
+```
+
+### Options
+
+```
+      --clear         end the override now
+  -h, --help          help for override
+  -m, --minutes int   how long the override lasts, 1-1440 (default 60)
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm limits](#dlm-limits)	 - Show the speed limits and quotas in force
 
 
 ## dlm native-host
@@ -3063,6 +3166,62 @@ dlm stats [flags]
 ### SEE ALSO
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm stats timeline](#dlm-stats-timeline)	 - Show the traffic per hour or day
+
+
+## dlm stats timeline
+
+Show the traffic per hour or day
+
+### Synopsis
+
+Show the bytes downloaded and uploaded per hour or day (UTC), optionally split by engine or queue. Defaults to the last 24 hours (--bucket hour) or 30 days (--bucket day).
+
+```
+dlm stats timeline [flags]
+```
+
+### Examples
+
+```
+  dlm stats timeline
+  dlm stats timeline --bucket day --group-by engine
+```
+
+### Options
+
+```
+      --bucket string     hour (default) or day
+      --from string       start of the range, RFC 3339 (inclusive)
+      --group-by string   none (default), engine or queue
+  -h, --help              help for timeline
+      --to string         end of the range, RFC 3339 (exclusive)
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm stats](#dlm-stats)	 - Show download statistics
 
 
 ## dlm system

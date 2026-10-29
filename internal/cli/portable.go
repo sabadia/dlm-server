@@ -104,7 +104,7 @@ func (a *app) newTaskImportCommand() *cobra.Command {
 }
 
 func (a *app) newStatsCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:         "stats",
 		Short:       "Show download statistics",
 		Long:        "Shows the number of tasks per status and per engine (protocol), the bytes downloaded, and what completed in the last 24 hours, 7 days and 30 days.",
@@ -122,6 +122,8 @@ func (a *app) newStatsCommand() *cobra.Command {
 			return a.printer(cmd).Print(st, func() output.Table { return statsTable(st) })
 		},
 	}
+	cmd.AddCommand(a.newStatsTimelineCommand())
+	return cmd
 }
 
 func statsTable(st *client.Stats) output.Table {

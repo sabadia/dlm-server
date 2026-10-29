@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -22,6 +23,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/plugin"
+	"github.com/sabadia/dlm-server/internal/ratelimit"
 	"github.com/sabadia/dlm-server/internal/refresh"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
@@ -75,6 +77,8 @@ func newOpsFixture(t *testing.T) *opsFixture {
 	tasks := service.NewTaskService(d)
 	refreshSvc := service.NewRefreshService(d, refresh.OriginRedirect{Engines: reg})
 	fb := &fakeBrowser{}
+	limitsDeps := d
+	limitsDeps.Limits = ratelimit.NewManager(0)
 	cfg := config.Default()
 	cfg.Server.AllowedOrigins = []string{testOrigin}
 	s, err := New(&cfg, Deps{
@@ -84,6 +88,7 @@ func newOpsFixture(t *testing.T) *opsFixture {
 		Browser: service.NewBrowserService(fb, tasks), Categories: service.NewCategoryService(d),
 		Webhooks: service.NewWebhookService(d, cipher, webhook.New(nil, nil, webhook.Options{})), Credentials: service.NewCredentialService(d, cipher),
 		Plugins: service.NewPluginService(plugins),
+		Limits:  service.NewLimitsService(limitsDeps, nil),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -798,4 +803,55 @@ func TestListPowerAndBulkOperations(t *testing.T) {
 	if len(batch.Results) != 1 {
 		t.Errorf("refresh results = %+v", batch.Results)
 	}
+}
+
+func TestLimitsAndTimelineOperations(t *testing.T) {
+	f := newOpsFixture(t)
+
+	var l service.LimitsView
+	f.call(t, http.MethodGet, "/v1/limits", "", http.StatusOK, &l)
+	if l.Global.SpeedLimit != 0 || l.Override != nil || len(l.Queues) != 1 || l.Queues[0].QueueID != "main" {
+		t.Errorf("limits = %+v", l)
+	}
+	f.call(t, http.MethodPost, "/v1/limits/override", `{"speedLimit":0,"minutes":30}`, http.StatusOK, &l)
+	if l.Override == nil || l.Override.SpeedLimit != 0 || time.Until(l.Override.Until) < 29*time.Minute {
+		t.Errorf("override = %+v", l.Override)
+	}
+	f.call(t, http.MethodPost, "/v1/limits/override", `{"speedLimit":500000,"minutes":5}`, http.StatusOK, &l)
+	if l.Override == nil || l.Override.SpeedLimit != 500000 || l.Global.SpeedLimit != 500000 {
+		t.Errorf("a new override replaces the old one: %+v", l)
+	}
+	f.call(t, http.MethodPost, "/v1/limits/override", `{"speedLimit":1,"minutes":1441}`, http.StatusUnprocessableEntity, nil)
+	f.call(t, http.MethodPost, "/v1/limits/override", `{"speedLimit":-1,"minutes":5}`, http.StatusUnprocessableEntity, nil)
+	f.call(t, http.MethodDelete, "/v1/limits/override", "", http.StatusOK, &l)
+	if l.Override != nil || l.Global.SpeedLimit != 0 {
+		t.Errorf("after clearing: %+v", l)
+	}
+
+	day := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+	err := f.store.Transfer().Add(t.Context(), []storage.TransferRow{
+		{Bucket: day.Add(10 * time.Hour), QueueID: "main", Engine: "http", Down: 100, Up: 1},
+		{Bucket: day.Add(11 * time.Hour), QueueID: "main", Engine: "bt", Down: 50, Up: 9},
+		{Bucket: day.Add(30 * time.Hour), QueueID: "main", Engine: "http", Down: 7},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rfc := func(t time.Time) string { return url.QueryEscape(t.Format(time.RFC3339)) }
+	var tl Timeline
+	q := "from=" + rfc(day) + "&to=" + rfc(day.Add(48*time.Hour))
+	f.call(t, http.MethodGet, "/v1/stats/timeline?bucket=day&groupBy=engine&"+q, "", http.StatusOK, &tl)
+	if len(tl.Points) != 3 || tl.Points[0].Group != "bt" || tl.Points[0].Up != 9 || tl.Points[1].Group != "http" || tl.Points[1].Down != 100 || tl.Points[2].Down != 7 {
+		t.Errorf("daily timeline by engine = %+v", tl.Points)
+	}
+	f.call(t, http.MethodGet, "/v1/stats/timeline?"+q, "", http.StatusOK, &tl)
+	if len(tl.Points) != 3 || tl.Bucket != "hour" || tl.Points[0].Down != 100 {
+		t.Errorf("hourly timeline = %+v", tl)
+	}
+	f.call(t, http.MethodGet, "/v1/stats/timeline", "", http.StatusOK, &tl)
+	if len(tl.Points) != 0 || !tl.To.After(tl.From) {
+		t.Errorf("default range = %+v", tl)
+	}
+	f.call(t, http.MethodGet, "/v1/stats/timeline?from="+rfc(day.AddDate(-5, 0, 0))+"&to="+rfc(day), "", http.StatusUnprocessableEntity, nil)
+	f.call(t, http.MethodGet, "/v1/stats/timeline?from="+rfc(day)+"&to="+rfc(day), "", http.StatusUnprocessableEntity, nil)
 }

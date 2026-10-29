@@ -45,6 +45,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage/sqlite"
+	"github.com/sabadia/dlm-server/internal/transfer"
 	"github.com/sabadia/dlm-server/internal/webhook"
 	"github.com/sabadia/dlm-server/internal/ytdlp"
 )
@@ -195,6 +196,11 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	// The runner reports downloaded bytes to the scheduler's quota meter.
 	locks := service.NewTaskLocks()
 	quotas := scheduler.NewQuotaMeter(time.Now)
+	// The meter measures the speed of the whole daemon and keeps the traffic
+	// history; it is stopped after everything that reports to it.
+	meter := transfer.New(transfer.Options{Store: store, Bus: bus, Logger: log})
+	limitsDeps := service.Deps{Store: store, Limits: limits, Defaults: defaults, Bus: bus}
+	limitsCtl := service.NewLimitsController(limitsDeps)
 	var services *Services // assigned below, before the scheduler runs
 	runner := service.NewRunner(service.RunnerDeps{
 		Store:     store,
@@ -205,6 +211,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Logger:    log,
 		TaskLocks: locks,
 		Bytes:     quotas,
+		Transfer:  meter,
 		Post: postproc.Default(postproc.Options{Logger: log, Torrents: postproc.TorrentAdderFunc(func(ctx context.Context, in postproc.NewTorrent) error {
 			return services.Tasks.AddTorrentFile(ctx, in)
 		})}),
@@ -223,7 +230,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		Defaults: defaults,
 		Logger:   log,
 		Bus:      bus,
-		Limits:   service.NewLimitsController(service.Deps{Store: store, Limits: limits, Defaults: defaults}),
+		Limits:   limitsCtl,
 		Quotas:   quotas,
 		Actions:  scheduler.SystemActions{},
 		StopQueue: func(ctx context.Context, queueID string) error {
@@ -290,6 +297,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 			Tasks: services.Tasks, Queues: services.Queues, Settings: services.Settings, Bus: bus, Version: version, Logger: log,
 		})),
 		Browser:   services.Browser,
+		Limits:    service.NewLimitsService(limitsDeps, quotaSource{quotas}),
 		System:    system,
 		Lifecycle: life,
 	})
@@ -326,6 +334,11 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		"recovered_tasks", recovered,
 		"engines", engines.Names(),
 	)
+
+	meterCtx, stopMeter := context.WithCancel(context.WithoutCancel(ctx))
+	meterDone := make(chan struct{})
+	go func() { meter.Run(meterCtx); close(meterDone) }()
+	defer func() { stopMeter(); <-meterDone }()
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return bus.Run(gctx) })
@@ -424,4 +437,15 @@ func BuildServer(cfg *config.Config, deps api.Deps) (*api.Server, error) {
 		return nil, fmt.Errorf("daemon: build api server: %w", err)
 	}
 	return srv, nil
+}
+
+// quotaSource adapts the scheduler's quota meter to service.QuotaSource.
+type quotaSource struct{ m *scheduler.QuotaMeter }
+
+func (q quotaSource) Usage(queueID string) (service.QuotaUsage, bool) {
+	u, ok := q.m.Usage(queueID)
+	if !ok {
+		return service.QuotaUsage{}, false
+	}
+	return service.QuotaUsage{Quota: u.Quota, Used: u.Used, WindowStart: u.WindowStart, Exhausted: u.Exhausted}, true
 }

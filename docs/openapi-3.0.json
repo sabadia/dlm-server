@@ -1615,6 +1615,93 @@
         ],
         "type": "object"
       },
+      "LimitsChangedData": {
+        "additionalProperties": false,
+        "properties": {
+          "override": {
+            "$ref": "#/components/schemas/SpeedOverride"
+          },
+          "speedLimit": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "speedLimit"
+        ],
+        "type": "object"
+      },
+      "LimitsChangedEvent": {
+        "additionalProperties": false,
+        "description": "The temporary global speed override was set, cleared or ran out; data is the limit now in force.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LimitsChangedData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "limits.changed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "LimitsView": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/LimitsView.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "global": {
+            "$ref": "#/components/schemas/ScopeLimits"
+          },
+          "override": {
+            "$ref": "#/components/schemas/SpeedOverride"
+          },
+          "queues": {
+            "items": {
+              "$ref": "#/components/schemas/ScopeLimits"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "global",
+          "queues"
+        ],
+        "type": "object"
+      },
       "MediaCandidateBody": {
         "additionalProperties": false,
         "properties": {
@@ -1704,6 +1791,36 @@
         },
         "required": [
           "queueId"
+        ],
+        "type": "object"
+      },
+      "OverrideLimitsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/OverrideLimitsBody.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "minutes": {
+            "description": "How long the override lasts, in minutes (1 to 1440); the configured limit applies again afterwards.",
+            "format": "int64",
+            "maximum": 1440,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "speedLimit": {
+            "description": "Global speed limit in bytes per second while the override lasts; 0 is unlimited (turbo).",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "speedLimit",
+          "minutes"
         ],
         "type": "object"
       },
@@ -1946,6 +2063,24 @@
         },
         "required": [
           "code"
+        ],
+        "type": "object"
+      },
+      "ProfileView": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "speedLimit": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index",
+          "speedLimit"
         ],
         "type": "object"
       },
@@ -2452,6 +2587,40 @@
         ],
         "type": "object"
       },
+      "QuotaView": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "exhausted": {
+            "type": "boolean"
+          },
+          "period": {
+            "type": "string"
+          },
+          "resetsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "used": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "windowStart": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "period",
+          "used",
+          "exhausted"
+        ],
+        "type": "object"
+      },
       "RefreshAttempt": {
         "additionalProperties": false,
         "properties": {
@@ -2835,6 +3004,36 @@
         },
         "required": [
           "fields"
+        ],
+        "type": "object"
+      },
+      "ScopeLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "activeProfile": {
+            "$ref": "#/components/schemas/ProfileView"
+          },
+          "configuredSpeedLimit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "queueId": {
+            "type": "string"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/QuotaView"
+          },
+          "speedLimit": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "speedLimit",
+          "configuredSpeedLimit"
         ],
         "type": "object"
       },
@@ -3293,6 +3492,52 @@
         ],
         "type": "object"
       },
+      "SpeedData": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "down": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "queued": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "up": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "down",
+          "up",
+          "active",
+          "queued"
+        ],
+        "type": "object"
+      },
+      "SpeedOverride": {
+        "additionalProperties": false,
+        "properties": {
+          "speedLimit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "until": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speedLimit",
+          "until"
+        ],
+        "type": "object"
+      },
       "SpeedProfile": {
         "additionalProperties": false,
         "properties": {
@@ -3425,6 +3670,7 @@
         "description": "An event of the stream: one of the typed events, told apart by type.",
         "discriminator": {
           "mapping": {
+            "limits.changed": "#/components/schemas/LimitsChangedEvent",
             "queue.action_cancelled": "#/components/schemas/QueueActionCancelledEvent",
             "queue.completed": "#/components/schemas/QueueCompletedEvent",
             "queue.created": "#/components/schemas/QueueCreatedEvent",
@@ -3433,6 +3679,7 @@
             "quota.exhausted": "#/components/schemas/QuotaExhaustedEvent",
             "quota.reset": "#/components/schemas/QuotaResetEvent",
             "settings.updated": "#/components/schemas/SettingsUpdatedEvent",
+            "system.speed": "#/components/schemas/SystemSpeedEvent",
             "task.created": "#/components/schemas/TaskCreatedEvent",
             "task.deleted": "#/components/schemas/TaskDeletedEvent",
             "task.progress": "#/components/schemas/TaskProgressEvent",
@@ -3484,6 +3731,12 @@
           },
           {
             "$ref": "#/components/schemas/QuotaResetEvent"
+          },
+          {
+            "$ref": "#/components/schemas/SystemSpeedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/LimitsChangedEvent"
           }
         ]
       },
@@ -3643,6 +3896,47 @@
           "log",
           "database",
           "downloads"
+        ],
+        "type": "object"
+      },
+      "SystemSpeedEvent": {
+        "additionalProperties": false,
+        "description": "The transfer speed of the whole daemon: once a second while anything moves, and once more (zeros) when it stops.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SpeedData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "system.speed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
         ],
         "type": "object"
       },
@@ -4118,6 +4412,78 @@
           "days",
           "start",
           "end"
+        ],
+        "type": "object"
+      },
+      "Timeline": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/Timeline.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "from": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "groupBy": {
+            "type": "string"
+          },
+          "points": {
+            "description": "Oldest first; buckets without traffic are absent.",
+            "items": {
+              "$ref": "#/components/schemas/TimelinePoint"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "to": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bucket",
+          "groupBy",
+          "from",
+          "to",
+          "points"
+        ],
+        "type": "object"
+      },
+      "TimelinePoint": {
+        "additionalProperties": false,
+        "properties": {
+          "down": {
+            "description": "Bytes downloaded.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "group": {
+            "description": "The engine or queue ID when groupBy is set.",
+            "type": "string"
+          },
+          "time": {
+            "description": "Start of the bucket (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "up": {
+            "description": "Bytes uploaded (torrents).",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "time",
+          "down",
+          "up"
         ],
         "type": "object"
       },
@@ -6770,6 +7136,180 @@
         ]
       }
     },
+    "/v1/limits": {
+      "get": {
+        "description": "The global speed limit now in force (and the configured one when a temporary override replaces it), the active speed profile, the quota usage of the global scope, and the same per queue.",
+        "operationId": "get-limits",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Speed limits and quotas in force",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/v1/limits/override": {
+      "delete": {
+        "description": "Ends a temporary global speed override now; without one it does nothing. Answers like get-limits.",
+        "operationId": "clear-limits-override",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "End the temporary speed limit",
+        "tags": [
+          "settings"
+        ]
+      },
+      "post": {
+        "description": "Replaces the global speed limit by speedLimit (0: unlimited, \"turbo\") for 1 to 1440 minutes; the configured limit and profiles apply again afterwards. A new override replaces the previous one. Clients are told with a limits.changed event, also when the override ends.",
+        "operationId": "set-limits-override",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideLimitsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Temporarily replace the global speed limit",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/v1/plugins": {
       "get": {
         "description": "Plugins are JavaScript extensions that resolve links, refresh expired links and react to downloads starting, failing and completing.",
@@ -8588,6 +9128,123 @@
           }
         },
         "summary": "Download statistics",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/stats/timeline": {
+      "get": {
+        "description": "Bytes downloaded and uploaded per hour or day (UTC), optionally split by engine or queue, for charts. Recorded from when the daemon first measured it; at most 1000 buckets per request (422 otherwise).",
+        "operationId": "get-stats-timeline",
+        "parameters": [
+          {
+            "description": "Size of a bucket (UTC).",
+            "explode": false,
+            "in": "query",
+            "name": "bucket",
+            "schema": {
+              "default": "hour",
+              "description": "Size of a bucket (UTC).",
+              "enum": [
+                "hour",
+                "day"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Split every bucket by engine or by queue.",
+            "explode": false,
+            "in": "query",
+            "name": "groupBy",
+            "schema": {
+              "default": "none",
+              "description": "Split every bucket by engine or by queue.",
+              "enum": [
+                "none",
+                "engine",
+                "queue"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Start of the range, inclusive (RFC 3339). Default: 24 hours (bucket=hour) or 30 days (bucket=day) before the end.",
+            "explode": false,
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "description": "Start of the range, inclusive (RFC 3339). Default: 24 hours (bucket=hour) or 30 days (bucket=day) before the end.",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "End of the range, exclusive (RFC 3339). Default: the end of the current bucket.",
+            "explode": false,
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "description": "End of the range, exclusive (RFC 3339). Default: the end of the current bucket.",
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeline"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Traffic over time",
         "tags": [
           "tasks"
         ]

@@ -48,6 +48,14 @@ type ByteCounter interface {
 	AddBytes(taskID, queueID string, n int64)
 }
 
+// TransferRecorder receives, for every run, the bytes it downloaded and
+// uploaded since its previous report, with the queue and engine they belong
+// to (statistics and the speed of the whole daemon). It is called from the
+// run's own goroutines and must not block.
+type TransferRecorder interface {
+	Record(taskID, queueID, engine string, down, up int64)
+}
+
 // RunnerDeps are the dependencies of a Runner.
 type RunnerDeps struct {
 	Store   storage.Store
@@ -62,6 +70,9 @@ type RunnerDeps struct {
 	// Bytes, when set, receives the bytes every run downloads, sampled
 	// every ProgressInterval and once more when the download ends.
 	Bytes ByteCounter
+	// Transfer, when set, receives the bytes every run downloads and uploads
+	// on the same schedule as Bytes.
+	Transfer TransferRecorder
 	// TaskLocks serialises read-modify-write cycles of each task with the
 	// services; it must be the instance in their Deps.TaskLocks. Nil creates
 	// a private instance.
@@ -694,18 +705,23 @@ func (r *Runner) publishStatus(task *domain.Task, from domain.TaskStatus) {
 // which also reports the bytes downloaded since the last sample. Speed is
 // an exponentially smoothed byte rate.
 func (r *Runner) publishProgress(task *domain.Task, dl engine.Download) (stop func()) {
-	if r.d.Bus == nil && r.d.Bytes == nil {
+	if r.d.Bus == nil && r.d.Bytes == nil && r.d.Transfer == nil {
 		return func() {}
 	}
 	// The baseline is the progress restored from checkpoints, so resumed
 	// bytes are not counted again.
 	counter := byteDelta{last: dl.Progress().Downloaded}
+	uploads := byteDelta{last: dl.Progress().Uploaded}
 	count := func(p engine.Progress) {
-		if r.d.Bytes == nil {
+		if r.d.Bytes == nil && r.d.Transfer == nil {
 			return
 		}
-		if n := counter.observe(p.Downloaded); n > 0 {
+		n, up := counter.observe(p.Downloaded), uploads.observe(p.Uploaded)
+		if n > 0 && r.d.Bytes != nil {
 			r.d.Bytes.AddBytes(task.ID, task.QueueID, n)
+		}
+		if (n > 0 || up > 0) && r.d.Transfer != nil {
+			r.d.Transfer.Record(task.ID, task.QueueID, task.Engine, n, up)
 		}
 	}
 	done := make(chan struct{})

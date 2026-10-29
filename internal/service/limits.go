@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/sabadia/dlm-server/internal/domain"
+	"github.com/sabadia/dlm-server/internal/events"
+	"github.com/sabadia/dlm-server/internal/ratelimit"
 	"github.com/sabadia/dlm-server/internal/settings"
 )
 
@@ -50,10 +52,14 @@ func (c *LimitsController) Sync(ctx context.Context) error {
 }
 
 // Apply sets the global bucket and every queue's bucket to their effective
-// limits at now.
+// limits at now. A temporary speed override whose time is up ends here, and
+// clients are told.
 func (c *LimitsController) Apply(global settings.Settings, queues []*domain.Queue, now time.Time) {
 	if c.d.Limits == nil {
 		return
+	}
+	if c.d.Limits.ExpireOverride(now) {
+		publishLimits(c.d.Bus, c.d.Limits, now)
 	}
 	c.applyGlobal(global, now)
 	for _, q := range queues {
@@ -77,4 +83,16 @@ func (c *LimitsController) applyQueue(q *domain.Queue, now time.Time) {
 		return
 	}
 	c.d.Limits.SetQueue(q.ID, settings.EffectiveSpeedLimit(q.Settings.SpeedLimit.Value(), q.Settings.SpeedProfiles.Value(), now))
+}
+
+// publishLimits tells clients which global limit is now in force.
+func publishLimits(bus *events.Bus, limits *ratelimit.Manager, now time.Time) {
+	if bus == nil || limits == nil {
+		return
+	}
+	data := events.LimitsChangedData{SpeedLimit: limits.Global().Limit()}
+	if o, ok := limits.CurrentOverride(now); ok {
+		data.Override = &events.SpeedOverride{SpeedLimit: o.BytesPerSec, Until: o.Until}
+	}
+	bus.Publish(events.Event{Type: events.TypeLimitsChanged, Data: data})
 }

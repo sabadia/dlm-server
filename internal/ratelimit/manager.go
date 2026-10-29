@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"sync"
+	"time"
 
 	"github.com/sabadia/dlm-server/internal/engine"
 )
@@ -17,6 +18,18 @@ type Manager struct {
 	mu     sync.Mutex
 	queues map[string]*Bucket
 	tasks  map[string]*Bucket
+	// base is the configured global limit; override, when set and not yet
+	// expired, replaces it on the global bucket.
+	base     int64
+	override *Override
+}
+
+// Override is a temporary replacement of the global limit.
+type Override struct {
+	// BytesPerSec is the limit while the override lasts (0 = unlimited).
+	BytesPerSec int64
+	// Until is when the override ends.
+	Until time.Time
 }
 
 // NewManager returns a manager whose global bucket is limited to
@@ -28,6 +41,7 @@ func NewManager(globalBytesPerSec int64) *Manager {
 func newManager(globalBytesPerSec int64, clk clock) *Manager {
 	return &Manager{
 		clk:    clk,
+		base:   max(globalBytesPerSec, 0),
 		global: newBucket(globalBytesPerSec, clk),
 		queues: make(map[string]*Bucket),
 		tasks:  make(map[string]*Bucket),
@@ -43,8 +57,74 @@ func (m *Manager) Queue(id string) *Bucket { return m.bucket(m.queues, id) }
 // Task returns the bucket of task id, creating an unlimited one if needed.
 func (m *Manager) Task(id string) *Bucket { return m.bucket(m.tasks, id) }
 
-// SetGlobal changes the global limit (bytes per second, 0 = unlimited).
-func (m *Manager) SetGlobal(bytesPerSec int64) { m.global.SetLimit(bytesPerSec) }
+// SetGlobal changes the configured global limit (bytes per second, 0 =
+// unlimited). While an override is active the bucket keeps the override's
+// limit; the new value applies when the override ends.
+func (m *Manager) SetGlobal(bytesPerSec int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.base = max(bytesPerSec, 0)
+	m.applyGlobalLocked()
+}
+
+// GlobalBase returns the configured global limit, whatever an override says.
+func (m *Manager) GlobalBase() int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.base
+}
+
+// SetOverride replaces the global limit by bytesPerSec (0 = unlimited) until
+// the given time, whatever SetGlobal is told meanwhile.
+func (m *Manager) SetOverride(bytesPerSec int64, until time.Time) Override {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	o := Override{BytesPerSec: max(bytesPerSec, 0), Until: until}
+	m.override = &o
+	m.applyGlobalLocked()
+	return o
+}
+
+// ClearOverride ends an override now; it reports whether there was one.
+func (m *Manager) ClearOverride() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	had := m.override != nil
+	m.override = nil
+	m.applyGlobalLocked()
+	return had
+}
+
+// CurrentOverride returns the override that is active at now.
+func (m *Manager) CurrentOverride(now time.Time) (Override, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.override == nil || !now.Before(m.override.Until) {
+		return Override{}, false
+	}
+	return *m.override, true
+}
+
+// ExpireOverride ends an override whose time is up and reports whether it
+// did, so the caller can tell clients.
+func (m *Manager) ExpireOverride(now time.Time) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.override == nil || now.Before(m.override.Until) {
+		return false
+	}
+	m.override = nil
+	m.applyGlobalLocked()
+	return true
+}
+
+func (m *Manager) applyGlobalLocked() {
+	limit := m.base
+	if m.override != nil {
+		limit = m.override.BytesPerSec
+	}
+	m.global.SetLimit(limit)
+}
 
 // SetQueue changes the limit of queue id, creating its bucket if needed.
 func (m *Manager) SetQueue(id string, bytesPerSec int64) { m.Queue(id).SetLimit(bytesPerSec) }
