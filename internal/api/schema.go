@@ -47,6 +47,11 @@ func registerSettingsSchemas(r huma.Registry) {
 	aliasOptional[settings.BrowserUsage](r)
 	aliasOptional[[]settings.PostAction](r)
 	aliasOptional[settings.Schedule](r)
+	aliasOptional[[]settings.SpeedProfile](r)
+	aliasOptional[settings.Quota](r)
+	aliasOptional[settings.QueueCompleteAction](r)
+	aliasOptional[float64](r)
+	aliasOptional[[]string](r)
 }
 
 // SettingsPatch is an RFC 7396 JSON merge patch of one settings layer, kept

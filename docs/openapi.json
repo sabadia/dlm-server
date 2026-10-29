@@ -1598,26 +1598,6 @@
         ],
         "type": "object"
       },
-      "OptionalFloat64": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "OptionalListSpeedProfile": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "OptionalListString": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "OptionalQueueCompleteAction": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "OptionalQuota": {
-        "additionalProperties": false,
-        "type": "object"
-      },
       "PageResult": {
         "additionalProperties": false,
         "properties": {
@@ -2821,7 +2801,34 @@
             ]
           },
           "onQueueComplete": {
-            "$ref": "#/components/schemas/OptionalQueueCompleteAction"
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "args": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "command": {
+                "type": "string"
+              },
+              "delay": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "postActions": {
             "items": {
@@ -2860,7 +2867,24 @@
             ]
           },
           "quota": {
-            "$ref": "#/components/schemas/OptionalQuota"
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "period": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "bytes",
+              "period"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "refresh": {
             "$ref": "#/components/schemas/RefreshSettings"
@@ -2900,7 +2924,13 @@
             ]
           },
           "speedProfiles": {
-            "$ref": "#/components/schemas/OptionalListSpeedProfile"
+            "items": {
+              "$ref": "#/components/schemas/SpeedProfile"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "tlsVerify": {
             "type": [
@@ -3107,6 +3137,32 @@
         },
         "required": [
           "currentUrl"
+        ],
+        "type": "object"
+      },
+      "SpeedProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "speedLimit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/TimeWindow"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "windows",
+          "speedLimit"
         ],
         "type": "object"
       },
@@ -3990,7 +4046,11 @@
             ]
           },
           "seedRatio": {
-            "$ref": "#/components/schemas/OptionalFloat64"
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "seedTime": {
             "type": [
@@ -3999,7 +4059,13 @@
             ]
           },
           "trackers": {
-            "$ref": "#/components/schemas/OptionalListString"
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "type": "object"
