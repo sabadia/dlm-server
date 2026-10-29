@@ -201,13 +201,18 @@ func TestSettingsSchemaComplete(t *testing.T) {
 func TestQueueSettingsAcceptQuotaProfilesAndAction(t *testing.T) {
 	f := newOpsFixture(t)
 	q := f.createQueue(t, "night")
+	// The daemon wants an absolute path, which looks different per platform.
+	program, err := json.Marshal(filepath.Join(t.TempDir(), "notify"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := `{
 		"speedLimit": 2000000,
 		"torrent": {"seedRatio": 1.5, "trackers": ["udp://tracker.example:80"]},
 		"schedule": {"windows": [{"days": ["mon"], "start": "22:00", "end": "00:00"}]},
 		"speedProfiles": [{"windows": [{"days": ["mon"], "start": "10:00", "end": "12:00"}], "speedLimit": 5}],
 		"quota": {"bytes": 1000, "period": "24h0m0s"},
-		"onQueueComplete": {"action": "command", "command": "/usr/bin/true", "args": ["a"], "delay": "2m0s"}
+		"onQueueComplete": {"action": "command", "command": ` + string(program) + `, "args": ["a"], "delay": "2m0s"}
 	}`
 	var got domain.Queue
 	f.call(t, http.MethodPut, "/v1/queues/"+q.ID+"/settings", body, http.StatusOK, &got)
