@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -103,7 +104,7 @@ func TestPatchWritesTheFileAndDescribeShowsWhatIsPending(t *testing.T) {
 	if strings.Contains(text, "chrome-extension") {
 		t.Errorf("a removed key is still in the file:\n%s", text)
 	}
-	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
+	if fi, _ := os.Stat(path); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v", fi.Mode())
 	}
 

@@ -46,8 +46,12 @@ func TestConfigOperations(t *testing.T) {
 		t.Errorf("view = file %q pending %v", v.File, v.RestartPending)
 	}
 
+	root, err := json.Marshal(os.TempDir()) // Windows paths hold backslashes
+	if err != nil {
+		t.Fatal(err)
+	}
 	callServer(t, s, http.MethodPatch, "/v1/config",
-		`{"values":{"log.level":"debug","server.fs_roots":["`+os.TempDir()+`"],"torrent.dht":false,"server.shutdown_timeout":"20s"}}`, "", http.StatusOK, &v)
+		`{"values":{"log.level":"debug","server.fs_roots":[`+string(root)+`],"torrent.dht":false,"server.shutdown_timeout":"20s"}}`, "", http.StatusOK, &v)
 	if e := configEntry(&v, "log.level"); e.Value != "info" || e.Pending != "debug" {
 		t.Errorf("log.level after the patch = %+v: the running value stays, the new one is pending", e)
 	}
