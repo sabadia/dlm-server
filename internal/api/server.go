@@ -118,6 +118,7 @@ type Server struct {
 	tokenFile string
 	tokens    *auth.Registry
 	pairings  *auth.Pairings
+	limiter   *rateLimiter
 	mux       *http.ServeMux
 	api       huma.API
 	handler   http.Handler
@@ -190,6 +191,7 @@ func New(cfg *config.Config, deps Deps) (*Server, error) {
 		tokenFile: deps.TokenFile,
 		tokens:    deps.Tokens,
 		pairings:  deps.Pairings,
+		limiter:   newRateLimiter(),
 		mux:       http.NewServeMux(),
 		public:    make(map[string]struct{}),
 

@@ -1,0 +1,29 @@
+schema_version: 1
+id: 01a189b0-58c0-7255-bbe5-ebd9e642275a
+status: draft
+created_at: '2026-10-29T22:03:18Z'
+updated_at: '2026-10-29T22:03:18Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: P14.8 Per-token rate limits and capture size caps for extension tokens; plan ticks for Phase 14
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/api/extension_limits.go
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

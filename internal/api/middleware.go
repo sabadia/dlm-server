@@ -174,6 +174,9 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			writeCodedProblem(w, http.StatusForbidden, "auth.extension_scope", "a browser extension token may not do this")
 			return
 		}
+		if authed && p.Scope == auth.ScopeExtension && !s.limitExtension(w, r, p) {
+			return
+		}
 		ctx := context.WithValue(r.Context(), authKey{}, authed)
 		if authed {
 			ctx = context.WithValue(ctx, principalKey{}, p)

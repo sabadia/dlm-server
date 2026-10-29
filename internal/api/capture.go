@@ -146,6 +146,11 @@ func (s *Server) captureDownload(ctx context.Context, in *struct{ Body CaptureBo
 		return nil, errServicesUnavailable()
 	}
 	p, _ := PrincipalOf(ctx)
+	if p.Scope == auth.ScopeExtension {
+		if err := checkExtensionCapture(&in.Body); err != nil {
+			return nil, err
+		}
+	}
 	res, err := s.capture.Capture(ctx, in.Body.toInput(p.Scope == auth.ScopeExtension))
 	if err != nil {
 		return nil, s.fail(ctx, "capture-download", err, locBodySettings)

@@ -336,6 +336,13 @@ file above 512 KiB) takes the `.torrent` file itself as the request body
 works but is limited to the 1 MiB of an ordinary request. An extension token may use it (a
 `.torrent` file that needs the browser's cookies is fetched by the extension and sent here).
 
+**Limits of an extension token.** So a leaked token cannot flood the daemon, requests with it are
+rate limited per token: writes (anything but GET and HEAD) at 10 per second with a burst of 30,
+reads at 50 per second with a burst of 100; over the limit the answer is 429 `rate_limited` with
+`Retry-After` (seconds). A capture from it may carry at most 200 cookies (8 KiB per name and value,
+256 KiB together), 64 headers (32 KiB together) and 100 media candidates, and a batch at most 100
+tasks; more is 422 `capture.too_large`. Other tokens are not limited.
+
 **What the token may do.** Hand downloads over and follow them: `POST /v1/capture`,
 `POST /v1/tasks`, `/v1/tasks/batch`, `/v1/tasks/expand` and `/v1/tasks/torrent`, `POST /v1/resolve` and
 `/v1/resolve/batch`, `POST /v1/browser/resolve` (and downloading a candidate),

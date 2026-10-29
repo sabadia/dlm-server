@@ -7,8 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/config"
@@ -229,5 +232,80 @@ func TestPathMatches(t *testing.T) {
 		if got := pathMatches(tc.pattern, tc.path); got != tc.want {
 			t.Errorf("pathMatches(%q, %q) = %v, want %v", tc.pattern, tc.path, got, tc.want)
 		}
+	}
+}
+
+func TestExtensionTokenIsRateLimited(t *testing.T) {
+	f := newPairingFixture(t)
+	secret, info, err := f.s.tokens.CreateExtension(t.Context(), "Chrome extension", auth.ExtensionInfo{Browser: "chrome"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	f.s.limiter.now = func() time.Time { return clock }
+
+	// A burst of writes is let through, then refused with the time to wait.
+	for i := range int(ExtensionWriteBurst) {
+		w := do(t, f.s, request{method: http.MethodPost, path: "/v1/cookies/import", body: "{}", headers: bearer(secret)})
+		if w.Code == http.StatusTooManyRequests {
+			t.Fatalf("request %d of the burst was limited", i+1)
+		}
+	}
+	w := do(t, f.s, request{method: http.MethodPost, path: "/v1/cookies/import", body: "{}", headers: bearer(secret)})
+	assertProblem(t, w, http.StatusTooManyRequests)
+	if w.Header().Get("Retry-After") != "1" || !strings.Contains(w.Body.String(), `"code":"rate_limited"`) {
+		t.Errorf("Retry-After %q body %s", w.Header().Get("Retry-After"), w.Body)
+	}
+	// Reading has a bucket of its own, and the primary token has none.
+	if w := do(t, f.s, request{method: http.MethodGet, path: "/v1/auth/whoami", headers: bearer(secret)}); w.Code != http.StatusOK {
+		t.Errorf("a read was refused with the write bucket empty: %d", w.Code)
+	}
+	if w := do(t, f.s, request{method: http.MethodPost, path: "/v1/cookies/import", body: "{}", headers: bearer(testToken)}); w.Code == http.StatusTooManyRequests {
+		t.Error("the primary token was rate limited")
+	}
+
+	// Time refills it.
+	clock = clock.Add(time.Second)
+	if w := do(t, f.s, request{method: http.MethodPost, path: "/v1/cookies/import", body: "{}", headers: bearer(secret)}); w.Code == http.StatusTooManyRequests {
+		t.Error("still limited a second later")
+	}
+
+	// Revoking the token forgets its buckets.
+	f.s.limiter.forget(info.ID)
+	if len(f.s.limiter.buckets) != 0 {
+		t.Errorf("buckets left: %v", f.s.limiter.buckets)
+	}
+}
+
+func TestExtensionCaptureCaps(t *testing.T) {
+	cookies := func(n int) []CaptureCookie {
+		out := make([]CaptureCookie, n)
+		for i := range out {
+			out[i] = CaptureCookie{Domain: "example.com", Name: "c", Value: "v"}
+		}
+		return out
+	}
+	headers := func(n int) map[string]string {
+		out := map[string]string{}
+		for i := range n {
+			out["X-"+strconv.Itoa(i)] = "v"
+		}
+		return out
+	}
+	for name, b := range map[string]CaptureBody{
+		"too many cookies": {URL: "https://a/", Cookies: cookies(MaxExtensionCookies + 1)},
+		"a huge cookie":    {URL: "https://a/", Cookies: []CaptureCookie{{Domain: "a", Name: "c", Value: strings.Repeat("x", MaxExtensionCookieBytes)}}},
+		"cookies together": {URL: "https://a/", Cookies: slices.Repeat([]CaptureCookie{{Domain: "a", Name: "c", Value: strings.Repeat("x", MaxExtensionCookieBytes-10)}}, 40)},
+		"too many headers": {URL: "https://a/", Headers: headers(MaxExtensionHeaders + 1)},
+		"huge headers":     {URL: "https://a/", Headers: map[string]string{"X": strings.Repeat("x", MaxExtensionHeadersTotal)}},
+		"many candidates":  {URL: "https://a/", MediaCandidates: slices.Repeat([]MediaCandidateBody{{URL: "https://a/x.mp4"}}, MaxExtensionMediaCandidates+1)},
+	} {
+		if err := checkExtensionCapture(&b); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	ok := CaptureBody{URL: "https://a/", Cookies: cookies(MaxExtensionCookies), Headers: headers(MaxExtensionHeaders), MediaCandidates: slices.Repeat([]MediaCandidateBody{{URL: "https://a/x.mp4"}}, MaxExtensionMediaCandidates)}
+	if err := checkExtensionCapture(&ok); err != nil {
+		t.Errorf("a capture at the limits was refused: %v", err)
 	}
 }

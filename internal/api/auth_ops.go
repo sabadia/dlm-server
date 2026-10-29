@@ -174,6 +174,7 @@ func (s *Server) deleteToken(ctx context.Context, in *struct {
 	if err := s.tokens.Delete(ctx, in.ID); err != nil {
 		return nil, s.fail(ctx, "delete-token", err, locBody)
 	}
+	s.limiter.forget(in.ID)
 	s.log.InfoContext(ctx, "a named API token was revoked", "id", in.ID)
 	return &struct{}{}, nil
 }

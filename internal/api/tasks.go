@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
@@ -346,6 +347,9 @@ type CreateTasksBody struct {
 func (s *Server) createTasks(ctx context.Context, in *struct{ Body CreateTasksBody }) (*BatchOutput, error) {
 	if s.tasks == nil {
 		return nil, errServicesUnavailable()
+	}
+	if p, _ := PrincipalOf(ctx); p.Scope == auth.ScopeExtension && len(in.Body.Items) > MaxExtensionBatchItems {
+		return nil, captureTooBig("tasks in one batch", MaxExtensionBatchItems)
 	}
 	out := &BatchOutput{}
 	// slots has one entry per result; inputs are the ones that go to the
