@@ -63,6 +63,10 @@ var fieldMetas = map[string]fieldMeta{
 	"downloadDir":      {group: "general", desc: "Directory files are saved to"},
 	"filenameTemplate": {group: "general", desc: "Template for generated file names"},
 	"autoCategorize":   {group: "general", desc: "Sort finished downloads into category folders"},
+	"retentionDays": {
+		group: "general", desc: "Remove completed downloads from the list after this many days; 0 keeps them (files are never deleted)",
+		unit: "days", min: bound(0), max: bound(MaxRetentionDays),
+	},
 	"fileExistsPolicy": {
 		group: "general", desc: "What to do when the target file exists",
 		enum: []string{string(FileExistsRename), string(FileExistsOverwrite), string(FileExistsSkip), string(FileExistsResume), string(FileExistsAsk)},

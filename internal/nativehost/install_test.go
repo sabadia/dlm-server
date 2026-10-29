@@ -221,3 +221,47 @@ func TestLauncherScript(t *testing.T) {
 		t.Error("double quote in a Windows path accepted")
 	}
 }
+
+func TestStatusFollowsInstallAndUninstall(t *testing.T) {
+	in, _ := newInstaller(t, "linux")
+	byBrowser := func(rs []Result) map[platform.Browser]string {
+		m := map[platform.Browser]string{}
+		for _, r := range rs {
+			m[r.Browser] = r.Status
+		}
+		return m
+	}
+	before, err := in.Status(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for b, st := range byBrowser(before) {
+		if st != StatusAbsent {
+			t.Errorf("%s = %s before installing", b, st)
+		}
+	}
+	if len(before) != len(platform.Browsers()) {
+		t.Errorf("status lists %d browsers, want %d", len(before), len(platform.Browsers()))
+	}
+	if _, err := in.Install(Target{Browsers: []platform.Browser{platform.BrowserChrome}, ChromiumOrigins: []string{extOrigin}}); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := in.Status(nil)
+	got := byBrowser(after)
+	if got[platform.BrowserChrome] != StatusInstalled || got[platform.BrowserEdge] != StatusAbsent {
+		t.Errorf("after installing Chrome: %v", got)
+	}
+	one, _ := in.Status([]platform.Browser{platform.BrowserChrome})
+	if len(one) != 1 || one[0].Manifest == "" {
+		t.Errorf("one browser = %+v", one)
+	}
+	if _, err := in.Status([]platform.Browser{"netscape"}); err == nil {
+		t.Error("an unknown browser was accepted")
+	}
+	if _, err := in.Uninstall(nil); err != nil {
+		t.Fatal(err)
+	}
+	if end, _ := in.Status(nil); byBrowser(end)[platform.BrowserChrome] != StatusAbsent {
+		t.Error("still installed after uninstalling")
+	}
+}

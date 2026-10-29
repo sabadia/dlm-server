@@ -104,3 +104,7 @@ func writeFileAtomic(path string, data []byte) (err error) {
 	}
 	return nil
 }
+
+// RotateToken replaces the token stored at path by a new random one and
+// returns it. The write is atomic: readers see the old token or the new one.
+func RotateToken(path string) (string, error) { return createToken(path) }

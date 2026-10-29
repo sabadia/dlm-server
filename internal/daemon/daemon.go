@@ -283,8 +283,13 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 		cfg: cfg, version: version, startedAt: startedAt, downloadDir: downloadDir, engines: engines.Names(),
 		ffmpeg: ffmpegLocator, ytdlp: ytdlpLocator, browsers: browsers,
 	}
+	tokens := auth.NewRegistry(store.Tokens())
+	if err := tokens.Load(ctx); err != nil {
+		bus.Close()
+		return fmt.Errorf("daemon: %w", err)
+	}
 	srv, err := BuildServer(cfg, api.Deps{
-		Logger: log, Version: version, Token: token, Bus: bus,
+		Logger: log, Version: version, Token: token, TokenFile: cfg.TokenFile(), Tokens: tokens, Bus: bus,
 		Settings: services.Settings, Queues: services.Queues, Tasks: services.Tasks,
 		Cookies:     service.NewCookieService(jar).WithBus(bus),
 		Capture:     service.NewCaptureService(services.Tasks, jar, services.Refresh),
@@ -348,6 +353,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	g.Go(func() error { return resolves.Run(sweepCtx, time.Minute) })
 	g.Go(func() error { return jar.Run(sweepCtx, time.Hour) })
 	g.Go(func() error { return services.Refresh.Run(sweepCtx) })
+	g.Go(func() error { return service.NewHousekeeper(limitsDeps, services.Tasks).Run(sweepCtx) })
 	g.Go(func() error { return resolver.Run(sweepCtx) })
 	g.Go(func() error { return webhooks.Run(sweepCtx) })
 	g.Go(func() error { return plugins.Run(sweepCtx) })

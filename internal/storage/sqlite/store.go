@@ -238,6 +238,9 @@ func (s *Store) Credentials() storage.CredentialRepository { return credentialRe
 // Plugins returns the plugin repository.
 func (s *Store) Plugins() storage.PluginRepository { return pluginRepo{s} }
 
+// Tokens returns the named API token repository.
+func (s *Store) Tokens() storage.TokenRepository { return tokenRepo{s} }
+
 // Transfer returns the transfer history repository.
 func (s *Store) Transfer() storage.TransferRepository { return transferRepo{s} }
 

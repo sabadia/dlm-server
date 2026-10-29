@@ -1,0 +1,35 @@
+schema_version: 1
+id: 01a185e3-fa66-7bf2-82f2-212fb29c22b0
+status: draft
+created_at: '2026-10-29T04:21:12Z'
+updated_at: '2026-10-29T04:21:12Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: P13.12 auth (named scoped tokens stored as hashes, read-only scope, whoami, primary token rotation, dlm tls init); P13.13 local integrations (native-host API, dlm service autostart per OS); P13.14 housekeeping (cleanup endpoint, retentionDays setting and hourly housekeeper)
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/auth/registry.go
+  start_line: null
+  end_line: null
+- path: internal/api/middleware.go
+  start_line: null
+  end_line: null
+- path: internal/platform/autostart.go
+  start_line: null
+  end_line: null
+- path: internal/service/housekeeping.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

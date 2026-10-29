@@ -209,6 +209,30 @@ func (in *Installer) Uninstall(browsers []platform.Browser) ([]Result, error) {
 	return results, nil
 }
 
+// Status reports, for the selected browsers (default all), whether the host is
+// registered: "installed" when its manifest file exists, otherwise "absent".
+func (in *Installer) Status(browsers []platform.Browser) ([]Result, error) {
+	if len(browsers) == 0 {
+		browsers = platform.Browsers()
+	}
+	var results []Result
+	for _, b := range browsers {
+		if !b.Valid() {
+			return nil, fmt.Errorf("nativehost: unknown browser %q", b)
+		}
+		reg, err := in.registration(b)
+		if err != nil {
+			return results, err
+		}
+		res := Result{Browser: b, Manifest: reg.ManifestPath, Registry: reg.RegistryKey, Status: StatusAbsent}
+		if _, err := os.Stat(reg.ManifestPath); err == nil {
+			res.Status = StatusInstalled
+		}
+		results = append(results, res)
+	}
+	return results, nil
+}
+
 func (in *Installer) writeLauncher(path string) error {
 	script, err := LauncherScript(in.goos(), in.Executable, in.ConfigDir, in.ServerURL)
 	if err != nil {
