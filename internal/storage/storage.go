@@ -361,6 +361,13 @@ type TokenRecord struct {
 	Hash       string
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
+	// Kind, Browser, ClientID and ClientVersion say what the token was issued
+	// to; they are empty for a token created by hand. A paired browser
+	// extension has Kind "extension".
+	Kind          string
+	Browser       string
+	ClientID      string
+	ClientVersion string
 }
 
 // TokenRepository persists named API tokens.

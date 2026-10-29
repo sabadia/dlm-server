@@ -86,6 +86,29 @@ type SpeedOverride struct {
 	Until time.Time `json:"until"`
 }
 
+// PairingRequestedData is the payload of pairing.requested events.
+type PairingRequestedData struct {
+	ID string `json:"id"`
+	// Name is what the client calls itself, Browser the browser it runs in.
+	Name    string `json:"name"`
+	Browser string `json:"browser"`
+	// ClientID and ClientVersion are the extension's id and version.
+	ClientID      string `json:"clientId,omitempty"`
+	ClientVersion string `json:"clientVersion,omitempty"`
+	// Code is six digits the client shows; the user compares them before allowing.
+	Code string `json:"code"`
+	// ExpiresAt is when the request is dropped if nobody answers.
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// PairingResolvedData is the payload of pairing.resolved events.
+type PairingResolvedData struct {
+	ID     string `json:"id"`
+	Status string `json:"status" enum:"approved,denied,expired"`
+	// TokenID is the issued token's id when the pairing was approved.
+	TokenID string `json:"tokenId,omitempty"`
+}
+
 // Kinds of resources named by resource.changed events.
 const (
 	ResourceCategory   = "category"
@@ -148,5 +171,7 @@ func Catalogue() []Kind {
 		{TypeSystemSpeed, SpeedData{}, "The transfer speed of the whole daemon: once a second while anything moves, and once more (zeros) when it stops."},
 		{TypeResourceChanged, ResourceChangedData{}, "A category, webhook, credential, cookie, plugin or the boot configuration was created, changed or deleted, by this or another client; refetch it."},
 		{TypeLimitsChanged, LimitsChangedData{}, "The temporary global speed override was set, cleared or ran out; data is the limit now in force."},
+		{TypePairingRequested, PairingRequestedData{}, "A browser extension asked to be paired and waits for the user to allow or deny it; compare the code with the one the extension shows."},
+		{TypePairingResolved, PairingResolvedData{}, "A pairing was allowed, denied or ran out of time; close the prompt."},
 	}
 }

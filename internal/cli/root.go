@@ -149,6 +149,7 @@ func newApp(version string, opts ...Option) *app {
 		a.newConfigCommand(),
 		a.newTLSCommand(),
 		a.newAuthCommand(),
+		a.newPairingCommand(),
 		a.newServiceCommand(),
 		a.newLogsCommand(),
 		a.newResolveManyCommand(),

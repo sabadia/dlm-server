@@ -18,7 +18,7 @@ var tokenMu sync.Mutex
 // WhoAmI is the response of whoami.
 type WhoAmI struct {
 	Name  string     `json:"name" doc:"The token's name; primary for the token in the daemon's token file."`
-	Scope auth.Scope `json:"scope" enum:"admin,read" doc:"admin may do everything; read may only read (GET), and not cookie exports, the token list or MCP."`
+	Scope auth.Scope `json:"scope" enum:"admin,read,extension" doc:"admin may do everything; read may only read (GET), and not cookie exports, the token list or MCP; extension (a paired browser extension) may hand downloads to the daemon and follow them, and nothing else."`
 	// Primary is true for the token in the token file.
 	Primary bool `json:"primary"`
 	Local   bool `json:"local" doc:"Whether the request came from the machine the daemon runs on."`

@@ -90,6 +90,71 @@ func readOnlyDenied(path string) bool {
 		path == "/v1/auth/tokens" || strings.HasPrefix(path, "/v1/auth/tokens/")
 }
 
+// extensionRoutes are the only operations a token with auth.ScopeExtension may
+// call: handing downloads to the daemon and following them. Nothing that
+// changes settings, manages access, exports secrets, installs the native host
+// or deletes data is on the list. {x} matches one path segment.
+var extensionRoutes = []struct{ method, pattern string }{
+	{http.MethodGet, "/v1/auth/whoami"},
+	{http.MethodGet, "/v1/system/info"},
+	{http.MethodGet, "/v1/events"},
+	{http.MethodGet, "/v1/limits"},
+	{http.MethodPost, "/v1/limits/override"},
+	{http.MethodGet, "/v1/queues"},
+	{http.MethodGet, "/v1/queues/{id}"},
+	{http.MethodGet, "/v1/categories"},
+	{http.MethodGet, "/v1/categories/match"},
+	{http.MethodGet, "/v1/tasks"},
+	{http.MethodGet, "/v1/tasks/{id}"},
+	{http.MethodGet, "/v1/tasks/{id}/segments"},
+	{http.MethodGet, "/v1/tasks/{id}/refresh/history"},
+	{http.MethodPost, "/v1/tasks"},
+	{http.MethodPost, "/v1/tasks/batch"},
+	{http.MethodPost, "/v1/tasks/expand"},
+	{http.MethodPost, "/v1/tasks/pause"},
+	{http.MethodPost, "/v1/tasks/resume"},
+	{http.MethodPost, "/v1/tasks/{id}/refresh"},
+	{http.MethodPost, "/v1/tasks/{id}/refresh/await"},
+	{http.MethodPost, "/v1/capture"},
+	{http.MethodPost, "/v1/resolve"},
+	{http.MethodPost, "/v1/resolve/batch"},
+	{http.MethodPost, "/v1/browser/resolve"},
+	{http.MethodPost, "/v1/browser/results/{id}/candidates/{index}/download"},
+	{http.MethodPost, "/v1/cookies/import"},
+}
+
+// extensionAllowed reports whether a request with an extension-scoped token
+// may go through.
+func extensionAllowed(method, path string) bool {
+	for _, r := range extensionRoutes {
+		if r.method == method && pathMatches(r.pattern, path) {
+			return true
+		}
+	}
+	return false
+}
+
+// pathMatches compares a path with a pattern whose {x} segments match any one
+// non-empty segment.
+func pathMatches(pattern, path string) bool {
+	ps, xs := strings.Split(pattern, "/"), strings.Split(path, "/")
+	if len(ps) != len(xs) {
+		return false
+	}
+	for i, p := range ps {
+		if strings.HasPrefix(p, "{") && strings.HasSuffix(p, "}") {
+			if xs[i] == "" {
+				return false
+			}
+			continue
+		}
+		if p != xs[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, authed := s.authenticate(r.Context(), r.Header.Get("Authorization"))
@@ -103,6 +168,10 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 				writeCodedProblem(w, http.StatusForbidden, "auth.read_only", "this token is read-only")
 				return
 			}
+		}
+		if authed && p.Scope == auth.ScopeExtension && !extensionAllowed(r.Method, r.URL.Path) {
+			writeCodedProblem(w, http.StatusForbidden, "auth.extension_scope", "a browser extension token may not do this")
+			return
 		}
 		ctx := context.WithValue(r.Context(), authKey{}, authed)
 		if authed {

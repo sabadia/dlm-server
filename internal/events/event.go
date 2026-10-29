@@ -44,6 +44,11 @@ const (
 	// TypeLimitsChanged: the temporary global speed override was set,
 	// cleared or ran out.
 	TypeLimitsChanged Type = "limits.changed"
+	// TypePairingRequested: a browser extension (or another client) asked to
+	// be paired and waits for the user to allow or deny it.
+	TypePairingRequested Type = "pairing.requested"
+	// TypePairingResolved: a pairing was allowed, denied or ran out of time.
+	TypePairingResolved Type = "pairing.resolved"
 )
 
 // Event is a single notification published on the Bus.

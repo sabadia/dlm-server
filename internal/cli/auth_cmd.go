@@ -90,13 +90,17 @@ func (a *app) tokenAPICommands() []*cobra.Command {
 					list = []client.APIToken{}
 				}
 				return a.printer(cmd).Print(list, func() output.Table { //nolint:wrapcheck // stdout write errors need no context
-					t := output.Table{Columns: []string{"id", "name", "scope", "created", "last used"}}
+					t := output.Table{Columns: []string{"id", "name", "scope", "client", "created", "last used"}}
 					for _, k := range list {
 						used := "never"
 						if k.LastUsedAt != nil {
 							used = k.LastUsedAt.Local().Format(time.DateTime)
 						}
-						t.Rows = append(t.Rows, []string{k.ID, k.Name, k.Scope, k.CreatedAt.Local().Format(time.DateTime), used})
+						who := k.Browser
+						if k.ClientVersion != "" {
+							who += " " + k.ClientVersion
+						}
+						t.Rows = append(t.Rows, []string{k.ID, k.Name, k.Scope, who, k.CreatedAt.Local().Format(time.DateTime), used})
 					}
 					return t
 				})

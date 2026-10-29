@@ -51,6 +51,12 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm native-host status`](#dlm-native-host-status) | Show where the Native Messaging host is registered |
 | [`dlm native-host uninstall`](#dlm-native-host-uninstall) | Remove the Native Messaging host registrations |
 | [`dlm openapi`](#dlm-openapi) | Print the OpenAPI 3.1 document of the REST API |
+| [`dlm pairing`](#dlm-pairing) | Allow or refuse browser extensions that ask to connect |
+| [`dlm pairing approve`](#dlm-pairing-approve) | Allow a pairing |
+| [`dlm pairing deny`](#dlm-pairing-deny) | Refuse a pairing |
+| [`dlm pairing list`](#dlm-pairing-list) | List the pairings waiting for an answer |
+| [`dlm pairing show`](#dlm-pairing-show) | Show a pairing (an approved one also prints its token, once) |
+| [`dlm pairing start`](#dlm-pairing-start) | Ask to pair (what the extension's native host does) |
 | [`dlm plugin`](#dlm-plugin) | Manage JavaScript plugins |
 | [`dlm plugin disable`](#dlm-plugin-disable) | Switch a plugin off |
 | [`dlm plugin enable`](#dlm-plugin-enable) | Switch a plugin on |
@@ -183,6 +189,7 @@ Run `dlm serve` to start the daemon; every other command talks to it over its RE
 * [dlm logs](#dlm-logs)	 - Show the daemon's log
 * [dlm native-host](#dlm-native-host)	 - Native Messaging host for the browser extension
 * [dlm openapi](#dlm-openapi)	 - Print the OpenAPI 3.1 document of the REST API
+* [dlm pairing](#dlm-pairing)	 - Allow or refuse browser extensions that ask to connect
 * [dlm plugin](#dlm-plugin)	 - Manage JavaScript plugins
 * [dlm queue](#dlm-queue)	 - Manage download queues
 * [dlm resolve](#dlm-resolve)	 - Probe a URL without downloading it
@@ -2228,6 +2235,255 @@ dlm openapi [flags]
 ### SEE ALSO
 
 * [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+
+
+## dlm pairing
+
+Allow or refuse browser extensions that ask to connect
+
+### Synopsis
+
+A browser extension asks to be paired and waits for you to allow it. The request shows a six-digit code that the extension shows too; allow it only when they match. Allowing issues the extension a token of its own (scope extension), which `dlm auth token list` shows and `dlm auth token rm` revokes.
+
+### Options
+
+```
+  -h, --help   help for pairing
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm](#dlm)	 - dlm download manager: daemon and command-line client
+* [dlm pairing approve](#dlm-pairing-approve)	 - Allow a pairing
+* [dlm pairing deny](#dlm-pairing-deny)	 - Refuse a pairing
+* [dlm pairing list](#dlm-pairing-list)	 - List the pairings waiting for an answer
+* [dlm pairing show](#dlm-pairing-show)	 - Show a pairing (an approved one also prints its token, once)
+* [dlm pairing start](#dlm-pairing-start)	 - Ask to pair (what the extension's native host does)
+
+
+## dlm pairing approve
+
+Allow a pairing
+
+```
+dlm pairing approve ID [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for approve
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm pairing](#dlm-pairing)	 - Allow or refuse browser extensions that ask to connect
+
+
+## dlm pairing deny
+
+Refuse a pairing
+
+```
+dlm pairing deny ID [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for deny
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm pairing](#dlm-pairing)	 - Allow or refuse browser extensions that ask to connect
+
+
+## dlm pairing list
+
+List the pairings waiting for an answer
+
+```
+dlm pairing list [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for list
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm pairing](#dlm-pairing)	 - Allow or refuse browser extensions that ask to connect
+
+
+## dlm pairing show
+
+Show a pairing (an approved one also prints its token, once)
+
+```
+dlm pairing show ID [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for show
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm pairing](#dlm-pairing)	 - Allow or refuse browser extensions that ask to connect
+
+
+## dlm pairing start
+
+Ask to pair (what the extension's native host does)
+
+```
+dlm pairing start [flags]
+```
+
+### Options
+
+```
+      --browser string          chrome, chromium, edge, brave, opera, vivaldi, firefox or other
+      --client-id string        the extension's id
+      --client-version string   the extension's version
+  -h, --help                    help for start
+      --name string             what the client calls itself
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm pairing](#dlm-pairing)	 - Allow or refuse browser extensions that ask to connect
 
 
 ## dlm plugin

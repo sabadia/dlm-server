@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a1899d-e6c2-74b0-9d16-238ef0910f3d
+status: draft
+created_at: '2026-10-29T21:43:09Z'
+updated_at: '2026-10-29T21:43:09Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: claude-code
+goal: 'P14.1 Pairing API and extension-scoped tokens: the extension never holds an admin token; scoped, revocable token issued after the user approves in the app'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/auth/pairing.go
+  start_line: null
+  end_line: null
+- path: internal/api/pairing.go
+  start_line: null
+  end_line: null
+- path: internal/api/middleware.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

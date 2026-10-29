@@ -201,7 +201,7 @@ or a `filter`) and answer one result per task. `update` sets the `priority`, add
 
 - **Tokens.** The primary token lives in the daemon's token file. `GET /v1/auth/whoami` (`dlm auth
   whoami`) says which token a client uses (`name`, `scope`, `primary`, `local`, `tls`).
-  `POST /v1/auth/tokens` (`dlm token add NAME --scope admin|read`) creates a named token for a
+  `POST /v1/auth/tokens` (`dlm token add NAME --scope admin|read`; extension tokens are made by pairing, see below) creates a named token for a
   dashboard, script or device and shows its secret once (only a hash is kept); `GET /v1/auth/tokens`
   lists them, `DELETE /v1/auth/tokens/{id}` (`dlm token rm`) revokes one at once. A **read** token
   may only `GET` (403 `auth.read_only` otherwise), and not read cookie exports, the token list or MCP.
@@ -287,10 +287,40 @@ not followed. Secrets are stored encrypted and never returned.
 
 ## Browser extension
 
-`POST /v1/capture` creates a task from a download the extension caught, with the
-page, referrer, cookies and headers that make it work; `POST /v1/cookies/import`
-loads cookies. `dlm native-host install` registers the Native Messaging host that
-tells the extension the daemon's port and token.
+A browser extension (Chrome, Chromium-based browsers and Firefox) hands downloads to the
+daemon. It never holds the primary token: it is **paired**, and the daemon issues it a token
+of its own with the scope `extension`.
+
+**Pairing.** The extension asks its Native Messaging host (`dlm native-host`) to pair. The
+host calls `POST /v1/pairing` (`dlm pairing start`) with the primary token, from the machine
+the daemon runs on, and gets back a six-digit `code` that the extension shows. The daemon
+publishes the event `pairing.requested`; the DLM app asks the user to allow or deny it
+(`POST /v1/pairing/{id}/approve` or `/deny`, `dlm pairing approve|deny`) and the user
+compares the code. On approval the daemon issues the token. The first `GET /v1/pairing/{id}`
+after that returns it, once (`token`); if nobody reads it within five minutes it is revoked.
+A pairing waits two minutes for an answer and at most five wait at once (409
+`pairing.too_many`). `GET /v1/pairing` lists the ones waiting, for an app that started late;
+`pairing.resolved` tells clients to close the prompt.
+
+**What the token may do.** Hand downloads over and follow them: `POST /v1/capture`,
+`POST /v1/tasks`, `/v1/tasks/batch` and `/v1/tasks/expand`, `POST /v1/resolve` and
+`/v1/resolve/batch`, `POST /v1/browser/resolve` (and downloading a candidate),
+`POST /v1/cookies/import`, pausing and resuming, the link-refresh calls, and reading tasks,
+queues, categories, limits (and the turbo override), system info and the event stream. It may
+**not** change settings, read or export cookies, manage tokens or pairings, install the native
+host, delete anything, or use MCP: those answer 403 `auth.extension_scope`.
+
+The extension appears in `GET /v1/auth/tokens` (`dlm auth token list`) with its browser, the
+extension's id and version (`kind: extension`); revoking that token (`dlm auth token rm`) ends its
+access at once and does not touch any other client.
+
+**Calling the API from an extension.** An extension that has host access calls the daemon with
+`fetch` from its background: no preflight is sent and the daemon's cross-origin protection lets
+the request through (checked with Chrome and Firefox), so no `allowed_origins` entry is needed.
+The token is the only gate.
+
+`dlm native-host install` registers the Native Messaging host; the published extension's ids are
+built in.
 
 ## MCP
 

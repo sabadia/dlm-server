@@ -2220,6 +2220,325 @@
         ],
         "type": "object"
       },
+      "Pairing": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/Pairing.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "browser": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientVersion": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tokenId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "name",
+          "browser",
+          "code",
+          "createdAt",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
+      "PairingBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/PairingBody.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "browser": {
+            "description": "The browser the extension runs in.",
+            "enum": [
+              "chrome",
+              "chromium",
+              "edge",
+              "brave",
+              "opera",
+              "vivaldi",
+              "firefox",
+              "other"
+            ],
+            "type": "string"
+          },
+          "clientId": {
+            "description": "The extension's id (Chrome) or add-on id (Firefox).",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "name": {
+            "description": "What the client calls itself, shown to the user and used to name the token. Default: the browser's name and \"extension\".",
+            "maxLength": 64,
+            "type": "string"
+          },
+          "version": {
+            "description": "The extension's version.",
+            "maxLength": 32,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PairingList": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/PairingList.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "pairings": {
+            "description": "The pairings waiting for an answer, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/Pairing"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "required": [
+          "pairings"
+        ],
+        "type": "object"
+      },
+      "PairingRequestedData": {
+        "additionalProperties": false,
+        "properties": {
+          "browser": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientVersion": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "browser",
+          "code",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
+      "PairingRequestedEvent": {
+        "additionalProperties": false,
+        "description": "A browser extension asked to be paired and waits for the user to allow or deny it; compare the code with the one the extension shows.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PairingRequestedData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "pairing.requested"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "PairingResolvedData": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "approved",
+              "denied",
+              "expired"
+            ],
+            "type": "string"
+          },
+          "tokenId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "type": "object"
+      },
+      "PairingResolvedEvent": {
+        "additionalProperties": false,
+        "description": "A pairing was allowed, denied or ran out of time; close the prompt.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PairingResolvedData"
+          },
+          "id": {
+            "description": "Bus sequence number; the SSE id is \u003cbootID\u003e-\u003cid\u003e.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "queueId": {
+            "description": "The queue the event is about, if any.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the event is about, if any.",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the event was emitted (UTC).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "description": "The event type; also the SSE event name.",
+            "enum": [
+              "pairing.resolved"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "time",
+          "data"
+        ],
+        "type": "object"
+      },
+      "PairingState": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "example": "https://example.com/schemas/PairingState.json",
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "browser": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientVersion": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "token": {
+            "description": "The token of an approved pairing. Present once: the first time the pairing is read after it was allowed.",
+            "type": "string"
+          },
+          "tokenId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "name",
+          "browser",
+          "code",
+          "createdAt",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
       "Plugin": {
         "additionalProperties": false,
         "properties": {
@@ -4159,6 +4478,8 @@
         "discriminator": {
           "mapping": {
             "limits.changed": "#/components/schemas/LimitsChangedEvent",
+            "pairing.requested": "#/components/schemas/PairingRequestedEvent",
+            "pairing.resolved": "#/components/schemas/PairingResolvedEvent",
             "queue.action_cancelled": "#/components/schemas/QueueActionCancelledEvent",
             "queue.completed": "#/components/schemas/QueueCompletedEvent",
             "queue.created": "#/components/schemas/QueueCreatedEvent",
@@ -4229,6 +4550,12 @@
           },
           {
             "$ref": "#/components/schemas/LimitsChangedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PairingRequestedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PairingResolvedEvent"
           }
         ]
       },
@@ -4982,11 +5309,23 @@
       "Token": {
         "additionalProperties": false,
         "properties": {
+          "browser": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientVersion": {
+            "type": "string"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
           },
           "id": {
+            "type": "string"
+          },
+          "kind": {
             "type": "string"
           },
           "lastUsedAt": {
@@ -5730,10 +6069,11 @@
             "type": "boolean"
           },
           "scope": {
-            "description": "admin may do everything; read may only read (GET), and not cookie exports, the token list or MCP.",
+            "description": "admin may do everything; read may only read (GET), and not cookie exports, the token list or MCP; extension (a paired browser extension) may hand downloads to the daemon and follow them, and nothing else.",
             "enum": [
               "admin",
-              "read"
+              "read",
+              "extension"
             ],
             "type": "string"
           },
@@ -8833,6 +9173,460 @@
         "summary": "Register or remove the browser extension host",
         "tags": [
           "native-host"
+        ]
+      }
+    },
+    "/v1/pairing": {
+      "get": {
+        "description": "The pairings the user has not answered yet, for an app that started after the request was made. Needs an admin token, from the machine the daemon runs on.",
+        "operationId": "list-pairings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List pairings waiting for an answer",
+        "tags": [
+          "pairing"
+        ]
+      },
+      "post": {
+        "description": "A browser extension asks to be given a token of its own. The request waits for the user to allow or deny it in the DLM app (event pairing.requested); it carries a six-digit code the extension shows and the user compares. Called by the native host with the primary token, so the extension never sees an admin token. Only from the machine the daemon runs on. At most 5 pairings wait at once (409 pairing.too_many).",
+        "operationId": "start-pairing",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pairing"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Ask to pair a browser extension",
+        "tags": [
+          "pairing"
+        ]
+      }
+    },
+    "/v1/pairing/{id}": {
+      "get": {
+        "description": "Where a pairing is: pending, approved, denied or expired. After the user allowed it, the first read also returns the token, once. A pairing is kept for a few minutes after it ends.",
+        "operationId": "get-pairing",
+        "parameters": [
+          {
+            "description": "Pairing ID.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Pairing ID.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingState"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read a pairing",
+        "tags": [
+          "pairing"
+        ]
+      }
+    },
+    "/v1/pairing/{id}/approve": {
+      "post": {
+        "description": "The user allows the pairing: a token with the extension scope is issued and handed to the extension the next time it reads the pairing. If it is not read within five minutes the token is revoked. Needs an admin token, from the machine the daemon runs on.",
+        "operationId": "approve-pairing",
+        "parameters": [
+          {
+            "description": "Pairing ID.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Pairing ID.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pairing"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Allow a pairing",
+        "tags": [
+          "pairing"
+        ]
+      }
+    },
+    "/v1/pairing/{id}/deny": {
+      "post": {
+        "description": "The user refuses the pairing. Needs an admin token, from the machine the daemon runs on.",
+        "operationId": "deny-pairing",
+        "parameters": [
+          {
+            "description": "Pairing ID.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Pairing ID.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pairing"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Refuse a pairing",
+        "tags": [
+          "pairing"
         ]
       }
     },

@@ -15,8 +15,8 @@ type tokenRepo struct{ s *Store }
 // Create implements storage.TokenRepository.
 func (r tokenRepo) Create(ctx context.Context, t *storage.TokenRecord) error {
 	_, err := r.s.writeConn().ExecContext(ctx,
-		`INSERT INTO api_tokens (id, name, scope, hash, created_at) VALUES (?, ?, ?, ?, ?)`,
-		t.ID, t.Name, t.Scope, t.Hash, toMillis(t.CreatedAt))
+		`INSERT INTO api_tokens (id, name, scope, hash, created_at, kind, browser, client_id, client_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.Name, t.Scope, t.Hash, toMillis(t.CreatedAt), t.Kind, t.Browser, t.ClientID, t.ClientVersion)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return fmt.Errorf("storage: token %q: %w", t.Name, domain.AlreadyExists("token", t.Name))
@@ -28,7 +28,7 @@ func (r tokenRepo) Create(ctx context.Context, t *storage.TokenRecord) error {
 
 // List implements storage.TokenRepository.
 func (r tokenRepo) List(ctx context.Context) ([]*storage.TokenRecord, error) {
-	rows, err := r.s.readConn().QueryContext(ctx, `SELECT id, name, scope, hash, created_at, last_used_at FROM api_tokens ORDER BY created_at, id`)
+	rows, err := r.s.readConn().QueryContext(ctx, `SELECT id, name, scope, hash, created_at, last_used_at, kind, browser, client_id, client_version FROM api_tokens ORDER BY created_at, id`)
 	if err != nil {
 		return nil, fmt.Errorf("storage: list tokens: %w", err)
 	}
@@ -40,7 +40,7 @@ func (r tokenRepo) List(ctx context.Context) ([]*storage.TokenRecord, error) {
 			created  int64
 			lastUsed sql.NullInt64
 		)
-		if err := rows.Scan(&t.ID, &t.Name, &t.Scope, &t.Hash, &created, &lastUsed); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Scope, &t.Hash, &created, &lastUsed, &t.Kind, &t.Browser, &t.ClientID, &t.ClientVersion); err != nil {
 			return nil, fmt.Errorf("storage: list tokens: %w", err)
 		}
 		t.CreatedAt = fromMillis(created)
