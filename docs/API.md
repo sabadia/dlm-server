@@ -302,6 +302,16 @@ A pairing waits two minutes for an answer and at most five wait at once (409
 `pairing.too_many`). `GET /v1/pairing` lists the ones waiting, for an app that started late;
 `pairing.resolved` tells clients to close the prompt.
 
+**What a capture can carry.** Besides the page, referrer, user agent, headers, cookies and media
+candidates, `POST /v1/capture` takes `name`, `resolverKind` (`direct`, `ytdlp` for a page yt-dlp can
+extract, `browser` for a page that needs the headless browser), `checksum` (`algorithm`, `expected`),
+`mirrors`, `method` and `body` (base64, at most 256 KiB, for a form that answers with a file) and a
+cookie's `partitionKey`. `cookieScope` says where the cookies go: `task` keeps them for this
+download only: they are not in the cookie store or its exports, never replace the user's own cookie
+of the same name, are sent with the download's requests, and are removed when the task completes or
+is deleted (or after 7 days); `store` adds them to the cookie store. The default is `task` for an
+extension token and `store` for any other token.
+
 **What the token may do.** Hand downloads over and follow them: `POST /v1/capture`,
 `POST /v1/tasks`, `/v1/tasks/batch` and `/v1/tasks/expand`, `POST /v1/resolve` and
 `/v1/resolve/batch`, `POST /v1/browser/resolve` (and downloading a candidate),

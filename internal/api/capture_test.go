@@ -113,3 +113,34 @@ func TestCaptureChecksTheExtensionOrigin(t *testing.T) {
 		})
 	}
 }
+
+func TestCaptureBodyMapsTheExtensionFields(t *testing.T) {
+	b := CaptureBody{
+		URL: "https://example.com/a", Name: "a.bin", ResolverKind: "ytdlp", Mirrors: []string{"https://m.example.net/a"},
+		Method: "POST", Body: []byte("x=1"),
+		Checksum: &CaptureChecksum{Algorithm: "sha256", Expected: "abc"},
+		Cookies:  []CaptureCookie{{Domain: "example.com", Name: "s", Value: "v", PartitionKey: "https://example.com"}},
+	}
+	in := b.toInput(false)
+	if in.Name != "a.bin" || in.ResolverKind != "ytdlp" || len(in.Mirrors) != 1 || in.Method != http.MethodPost || string(in.Body) != "x=1" ||
+		in.Checksum == nil || in.Checksum.Expected != "abc" || in.Cookies[0].PartitionKey != "https://example.com" {
+		t.Errorf("input = %+v", in)
+	}
+
+	// The default follows who is asking; the request can choose.
+	for _, tc := range []struct {
+		scope     string
+		extension bool
+		want      bool
+	}{
+		{"", false, false},
+		{"", true, true},
+		{"task", false, true},
+		{"store", true, false},
+	} {
+		b.CookieScope = tc.scope
+		if got := b.toInput(tc.extension).TaskCookies; got != tc.want {
+			t.Errorf("scope %q extension=%v: TaskCookies = %v, want %v", tc.scope, tc.extension, got, tc.want)
+		}
+	}
+}

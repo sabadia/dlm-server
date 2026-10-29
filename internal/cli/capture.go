@@ -26,6 +26,11 @@ type captureFlags struct {
 	priority  string
 	paused    bool
 	allowDup  bool
+	name      string
+	resolver  string
+	checksum  string
+	mirrors   []string
+	cookies   string
 }
 
 // request builds the capture request: the --request file first, then the
@@ -61,6 +66,9 @@ func (f *captureFlags) build(cmd *cobra.Command, args []string) (client.CaptureR
 		{"queue", &req.QueueID, f.queue},
 		{"dir", &req.Dir, f.dir},
 		{"priority", &req.Priority, f.priority},
+		{"name", &req.Name, f.name},
+		{"resolver", &req.ResolverKind, f.resolver},
+		{"cookie-scope", &req.CookieScope, f.cookies},
 	} {
 		if fl.Changed(o.flag) {
 			*o.dst = o.val
@@ -72,6 +80,14 @@ func (f *captureFlags) build(cmd *cobra.Command, args []string) (client.CaptureR
 	if fl.Changed("allow-duplicate") {
 		req.AllowDuplicate = f.allowDup
 	}
+	if f.checksum != "" {
+		cs, err := parseChecksum(f.checksum)
+		if err != nil {
+			return req, &usageError{err: err}
+		}
+		req.Checksum = &client.CaptureChecksum{Algorithm: string(cs.Algorithm), Expected: cs.Expected}
+	}
+	req.Mirrors = append(req.Mirrors, f.mirrors...)
 	if fl.Changed("size") {
 		n, err := parseSize(f.size)
 		if err != nil {
@@ -103,7 +119,8 @@ func (a *app) newCaptureCommand() *cobra.Command {
 			"cookies and media candidates the download was found with, which later let the link be refreshed.\n\n" +
 			"Give the URL as an argument and describe the context with flags, or pass the extension's full JSON " +
 			"request with --request FILE ('-' reads stdin; cookies and media candidates can only be set this way). " +
-			"Flags override the file. The request's cookies are stored in the cookie store first.",
+			"Flags override the file. The request's cookies are stored in the cookie store first, or kept for this " +
+			"download only with --cookie-scope task.",
 		Example: "  dlm capture https://cdn.example.com/f.zip --page-url https://example.com/get --referrer https://example.com/\n" +
 			"  dlm capture -r capture.json --paused",
 		Args:        cobra.MaximumNArgs(1),
@@ -135,6 +152,11 @@ func (a *app) newCaptureCommand() *cobra.Command {
 	}
 	fl := cmd.Flags()
 	fl.StringVarP(&f.request, "request", "r", "", "JSON capture request file ('-' for stdin)")
+	fl.StringVar(&f.name, "name", "", "file name for the task (wins over --filename)")
+	fl.StringVar(&f.resolver, "resolver", "", "how to turn the link into a download: direct (default), ytdlp or browser")
+	fl.StringVar(&f.checksum, "checksum", "", "expected checksum ALGORITHM:HEX (md5, sha1, sha256 or blake3)")
+	fl.StringArrayVar(&f.mirrors, "mirror", nil, "another link to the same file (repeatable)")
+	fl.StringVar(&f.cookies, "cookie-scope", "", "task (cookies kept for this download only) or store (the cookie store); default store")
 	fl.StringVar(&f.finalURL, "final-url", "", "URL after redirects; this is what is downloaded")
 	fl.StringVar(&f.pageURL, "page-url", "", "web page the link was found on")
 	fl.StringVar(&f.referrer, "referrer", "", "Referer to send (default: the page URL)")

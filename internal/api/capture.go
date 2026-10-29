@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/sabadia/dlm-server/internal/auth"
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/service"
 	"github.com/sabadia/dlm-server/internal/settings"
@@ -25,12 +26,14 @@ type CaptureCookie struct {
 	SameSite  string     `json:"sameSite,omitempty" enum:"lax,strict,none"`
 	HostOnly  bool       `json:"hostOnly,omitempty" doc:"True when only the exact host receives the cookie (no Domain attribute)."`
 	ExpiresAt *time.Time `json:"expiresAt,omitempty" doc:"Absent for session cookies."`
+	// PartitionKey is the browser's partition key of a partitioned (CHIPS) cookie.
+	PartitionKey string `json:"partitionKey,omitempty" doc:"Partition key of a partitioned cookie (CHIPS), as the browser reports it. Kept as it is in the cookie store; dropped for a task's own cookies (cookieScope task), which are sent like ordinary ones."`
 }
 
 func (c CaptureCookie) toDomain() *domain.Cookie {
 	return &domain.Cookie{
 		Domain: c.Domain, Name: c.Name, Value: c.Value, Path: c.Path, Secure: c.Secure, HTTPOnly: c.HTTPOnly,
-		SameSite: c.SameSite, HostOnly: c.HostOnly, ExpiresAt: c.ExpiresAt,
+		SameSite: c.SameSite, HostOnly: c.HostOnly, ExpiresAt: c.ExpiresAt, PartitionKey: c.PartitionKey,
 	}
 }
 
@@ -41,6 +44,12 @@ type MediaCandidateBody struct {
 	MIME    string `json:"mime,omitempty"`
 	Size    int64  `json:"size,omitempty" doc:"Bytes, when known."`
 	Variant string `json:"variant,omitempty" doc:"Stream variant such as 1080p; becomes the task's mediaHint."`
+}
+
+// CaptureChecksum is the hash the file is expected to have.
+type CaptureChecksum struct {
+	Algorithm settings.ChecksumAlgorithm `json:"algorithm" enum:"md5,sha1,sha256,blake3"`
+	Expected  string                     `json:"expected" minLength:"1" doc:"The hash, hex encoded."`
 }
 
 // CaptureBody is the request of capture-download: a download the browser
@@ -68,6 +77,14 @@ type CaptureBody struct {
 	Paused   bool              `json:"paused,omitempty" doc:"Create the task paused instead of queued."`
 	// AllowDuplicate lets the capture add a task that repeats another one.
 	AllowDuplicate bool `json:"allowDuplicate,omitempty" doc:"Add the task even when another task has the same link; otherwise it is refused with 409."`
+
+	Name         string              `json:"name,omitempty" doc:"File name for the task; wins over filename."`
+	ResolverKind domain.ResolverKind `json:"resolverKind,omitempty" enum:"direct,ytdlp,browser" doc:"How the link is turned into a download: direct (a file, the default), ytdlp (a video or audio page yt-dlp can extract) or browser (a page that needs the headless browser)."`
+	Checksum     *CaptureChecksum    `json:"checksum,omitempty" doc:"The hash the file should have; the task fails and re-downloads on a mismatch (task setting checksum)."`
+	Mirrors      []string            `json:"mirrors,omitempty" maxItems:"16" doc:"Other http(s) links to the same file."`
+	Method       string              `json:"method,omitempty" doc:"HTTP method; default GET. For a form that answers with a file."`
+	Body         []byte              `json:"body,omitempty" doc:"Request body for a non-GET method, base64; at most 256 KiB."`
+	CookieScope  string              `json:"cookieScope,omitempty" enum:"task,store" doc:"task keeps the cookies for this download only (they are not in the cookie store and are removed when the task completes or is deleted, or after 7 days); store adds them to the cookie store like cookies/import. Default: task for a browser-extension token, store for any other."`
 }
 
 // CaptureOutput is the response of capture-download.
@@ -80,11 +97,22 @@ type CaptureOutput struct {
 	Cookies ImportCookiesResult `json:"cookies" doc:"Result of storing the request's cookies."`
 }
 
-func (b *CaptureBody) toInput() service.CaptureInput {
+func (b *CaptureBody) toInput(extension bool) service.CaptureInput {
+	taskCookies := extension
+	switch b.CookieScope {
+	case "task":
+		taskCookies = true
+	case "store":
+		taskCookies = false
+	}
 	in := service.CaptureInput{
+		Name: b.Name, ResolverKind: b.ResolverKind, Mirrors: b.Mirrors, Method: b.Method, Body: b.Body, TaskCookies: taskCookies,
 		URL: b.URL, FinalURL: b.FinalURL, PageURL: b.PageURL, Referrer: b.Referrer,
 		Filename: b.Filename, MIME: b.MIME, Size: b.Size, UserAgent: b.UserAgent, Headers: b.Headers,
 		QueueID: b.QueueID, Dir: b.Dir, Settings: b.Settings, Priority: b.Priority, Labels: b.Labels, Paused: b.Paused, AllowDuplicate: b.AllowDuplicate,
+	}
+	if b.Checksum != nil {
+		in.Checksum = &settings.Checksum{Algorithm: b.Checksum.Algorithm, Expected: b.Checksum.Expected}
 	}
 	for _, c := range b.Cookies {
 		in.Cookies = append(in.Cookies, c.toDomain())
@@ -106,7 +134,7 @@ func (s *Server) registerCapture() {
 		Description: "Creates a task from a download the browser extension intercepted, keeping the context needed to refresh the link " +
 			"later (original and final URL, page, referrer, headers, user agent, cookie domains, media hint). " +
 			"The request's cookies are stored before the task is queued, so the first request already carries them. " +
-			"The extension's origin must be listed in the server's allowed origins.",
+			"The cookies of a browser-extension token are kept for this download only (cookieScope).",
 		Tags:          []string{tagCapture},
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusNotFound, http.StatusUnprocessableEntity, http.StatusServiceUnavailable},
@@ -117,7 +145,8 @@ func (s *Server) captureDownload(ctx context.Context, in *struct{ Body CaptureBo
 	if s.capture == nil {
 		return nil, errServicesUnavailable()
 	}
-	res, err := s.capture.Capture(ctx, in.Body.toInput())
+	p, _ := PrincipalOf(ctx)
+	res, err := s.capture.Capture(ctx, in.Body.toInput(p.Scope == auth.ScopeExtension))
 	if err != nil {
 		return nil, s.fail(ctx, "capture-download", err, locBodySettings)
 	}

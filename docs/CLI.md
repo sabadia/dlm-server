@@ -607,7 +607,7 @@ Create a task from a captured browser download
 
 Create a task the way the browser extension does: with the page, referrer, headers, user agent, cookies and media candidates the download was found with, which later let the link be refreshed.
 
-Give the URL as an argument and describe the context with flags, or pass the extension's full JSON request with --request FILE ('-' reads stdin; cookies and media candidates can only be set this way). Flags override the file. The request's cookies are stored in the cookie store first.
+Give the URL as an argument and describe the context with flags, or pass the extension's full JSON request with --request FILE ('-' reads stdin; cookies and media candidates can only be set this way). Flags override the file. The request's cookies are stored in the cookie store first, or kept for this download only with --cookie-scope task.
 
 ```
 dlm capture [URL] [flags]
@@ -623,21 +623,26 @@ dlm capture [URL] [flags]
 ### Options
 
 ```
-      --allow-duplicate      add the task even when another task has the same link
-      --dir string           absolute download directory
-      --filename string      file name chosen by the browser
-      --final-url string     URL after redirects; this is what is downloaded
-      --header stringArray   request header Name=Value to repeat (repeatable; Cookie and Host are ignored)
-  -h, --help                 help for capture
-      --mime string          content type the browser saw
-      --page-url string      web page the link was found on
-      --paused               create the task paused
-      --priority string      priority: low, normal or high
-      --queue string         queue ID or name (default: Main)
-      --referrer string      Referer to send (default: the page URL)
-  -r, --request string       JSON capture request file ('-' for stdin)
-      --size string          size the browser saw: bytes, or a number with a unit: K/M/G (×1024), KB/MB/GB (×1000), KiB/MiB/GiB (×1024); 0 = unlimited
-      --user-agent string    user agent the browser used
+      --allow-duplicate       add the task even when another task has the same link
+      --checksum string       expected checksum ALGORITHM:HEX (md5, sha1, sha256 or blake3)
+      --cookie-scope string   task (cookies kept for this download only) or store (the cookie store); default store
+      --dir string            absolute download directory
+      --filename string       file name chosen by the browser
+      --final-url string      URL after redirects; this is what is downloaded
+      --header stringArray    request header Name=Value to repeat (repeatable; Cookie and Host are ignored)
+  -h, --help                  help for capture
+      --mime string           content type the browser saw
+      --mirror stringArray    another link to the same file (repeatable)
+      --name string           file name for the task (wins over --filename)
+      --page-url string       web page the link was found on
+      --paused                create the task paused
+      --priority string       priority: low, normal or high
+      --queue string          queue ID or name (default: Main)
+      --referrer string       Referer to send (default: the page URL)
+  -r, --request string        JSON capture request file ('-' for stdin)
+      --resolver string       how to turn the link into a download: direct (default), ytdlp or browser
+      --size string           size the browser saw: bytes, or a number with a unit: K/M/G (×1024), KB/MB/GB (×1000), KiB/MiB/GiB (×1024); 0 = unlimited
+      --user-agent string     user agent the browser used
 ```
 
 ### Options inherited from parent commands

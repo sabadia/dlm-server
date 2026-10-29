@@ -3,7 +3,10 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
+	"net/http"
 	"net/url"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,6 +14,7 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/domain"
+	"github.com/sabadia/dlm-server/internal/settings"
 	"github.com/sabadia/dlm-server/internal/storage"
 )
 
@@ -220,4 +224,104 @@ func mustParse(t *testing.T, s string) *url.URL {
 		t.Fatal(err)
 	}
 	return u
+}
+
+func TestCaptureOptionsReachTheTask(t *testing.T) {
+	svc, _, f := newCaptureFixture(t)
+	res, err := svc.Capture(t.Context(), CaptureInput{
+		URL:          "https://example.com/watch?v=1",
+		ResolverKind: domain.ResolverYtdlp,
+		Name:         "talk.mp4",
+		Filename:     "ignored.bin",
+		Mirrors:      []string{"https://mirror.example.net/talk.mp4"},
+		Checksum:     &settings.Checksum{Algorithm: settings.ChecksumSHA256, Expected: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},
+		Paused:       true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := f.get(t, res.Task.ID)
+	if task.Source.ResolverKind != domain.ResolverYtdlp || task.Name != "talk.mp4" || len(task.Source.Mirrors) != 1 {
+		t.Errorf("task = %+v", task)
+	}
+	if cs, ok := task.Settings.Checksum.Get(); !ok || cs.Algorithm != settings.ChecksumSHA256 {
+		t.Errorf("checksum = %+v, %v", cs, ok)
+	}
+
+	post, err := svc.Capture(t.Context(), CaptureInput{
+		URL: "https://example.com/download", Method: http.MethodPost, Body: []byte("a=1&b=2"), Paused: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if src := f.get(t, post.Task.ID).Source; src.Method != http.MethodPost || string(src.Body) != "a=1&b=2" {
+		t.Errorf("source = %+v", src)
+	}
+
+	for name, in := range map[string]CaptureInput{
+		"plugin resolver": {URL: "https://example.com/a", ResolverKind: domain.ResolverPlugin},
+		"unknown":         {URL: "https://example.com/a", ResolverKind: "magic"},
+		"huge body":       {URL: "https://example.com/a", Method: http.MethodPost, Body: make([]byte, MaxCaptureBody+1)},
+		"bad method":      {URL: "https://example.com/a", Method: "GE T"},
+		"17 mirrors":      {URL: "https://example.com/a", Mirrors: slices.Repeat([]string{"https://m.example.net/a"}, 17)},
+	} {
+		if _, err := svc.Capture(t.Context(), in); !errors.Is(err, domain.ErrInvalidArgument) {
+			t.Errorf("%s: %v, want invalid argument", name, err)
+		}
+	}
+}
+
+func TestCaptureTaskCookiesLiveAndDieWithTheTask(t *testing.T) {
+	svc, jar, f := newCaptureFixture(t)
+	// A cookie of the user's own, with the same name as the captured one.
+	if err := jar.Put(t.Context(), &domain.Cookie{Domain: "example.com", Name: "sid", Value: "mine", Path: "/"}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.Capture(t.Context(), CaptureInput{
+		URL: "https://example.com/f.zip", Paused: true, TaskCookies: true,
+		Cookies: []*domain.Cookie{{Domain: "example.com", Name: "sid", Value: "captured", Path: "/", PartitionKey: "https://example.com"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Cookies.Imported != 1 {
+		t.Fatalf("import = %+v", res.Cookies)
+	}
+
+	// The download carries the captured value; the user's cookie is untouched and the
+	// cookie list does not show the task's.
+	got, _ := jar.ForURL(t.Context(), mustParse(t, "https://example.com/x"))
+	if len(got) != 1 || got[0].Value != "captured" {
+		t.Fatalf("cookies for the request = %+v", got)
+	}
+	listed, _ := jar.List(t.Context(), storage.CookieFilter{})
+	if len(listed) != 1 || listed[0].Value != "mine" {
+		t.Errorf("the cookie list = %+v, want only the user's cookie", listed)
+	}
+	if n, _ := jar.DeleteTask(t.Context(), "no-such-task"); n != 0 {
+		t.Errorf("deleted %d cookies of another task", n)
+	}
+
+	// When the task goes, so do its cookies, and the user's value is back.
+	if n, err := jar.DeleteTask(t.Context(), res.Task.ID); err != nil || n != 1 {
+		t.Fatalf("DeleteTask = %d, %v", n, err)
+	}
+	got, _ = jar.ForURL(t.Context(), mustParse(t, "https://example.com/x"))
+	if len(got) != 1 || got[0].Value != "mine" {
+		t.Errorf("after the task: %+v", got)
+	}
+	_ = f
+}
+
+func TestCaptureTaskCookiesAreDroppedWhenTheTaskCannotBeCreated(t *testing.T) {
+	svc, jar, _ := newCaptureFixture(t)
+	if _, err := svc.Capture(t.Context(), CaptureInput{
+		URL: "https://example.com/f.zip", TaskCookies: true, QueueID: "no-such-queue",
+		Cookies: []*domain.Cookie{{Domain: "example.com", Name: "sid", Value: "v", Path: "/"}},
+	}); err == nil {
+		t.Fatal("a missing queue was accepted")
+	}
+	if got, _ := jar.ForURL(t.Context(), mustParse(t, "https://example.com/x")); len(got) != 0 {
+		t.Errorf("cookies of a task that was never created are still there: %+v", got)
+	}
 }

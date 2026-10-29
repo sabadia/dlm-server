@@ -161,6 +161,23 @@
             "description": "Add the task even when another task has the same link; otherwise it is refused with 409.",
             "type": "boolean"
           },
+          "body": {
+            "description": "Request body for a non-GET method, base64; at most 256 KiB.",
+            "format": "base64",
+            "type": "string"
+          },
+          "checksum": {
+            "$ref": "#/components/schemas/CaptureChecksum",
+            "description": "The hash the file should have; the task fails and re-downloads on a mismatch (task setting checksum)."
+          },
+          "cookieScope": {
+            "description": "task keeps the cookies for this download only (they are not in the cookie store and are removed when the task completes or is deleted, or after 7 days); store adds them to the cookie store like cookies/import. Default: task for a browser-extension token, store for any other.",
+            "enum": [
+              "task",
+              "store"
+            ],
+            "type": "string"
+          },
           "cookies": {
             "description": "Cookies for the download; stored in the cookie store before the task is queued.",
             "items": {
@@ -202,8 +219,25 @@
             "nullable": true,
             "type": "array"
           },
+          "method": {
+            "description": "HTTP method; default GET. For a form that answers with a file.",
+            "type": "string"
+          },
           "mime": {
             "description": "Content type the browser saw.",
+            "type": "string"
+          },
+          "mirrors": {
+            "description": "Other http(s) links to the same file.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "nullable": true,
+            "type": "array"
+          },
+          "name": {
+            "description": "File name for the task; wins over filename.",
             "type": "string"
           },
           "pageUrl": {
@@ -230,6 +264,15 @@
             "description": "Referer the browser sent (default pageUrl).",
             "type": "string"
           },
+          "resolverKind": {
+            "description": "How the link is turned into a download: direct (a file, the default), ytdlp (a video or audio page yt-dlp can extract) or browser (a page that needs the headless browser).",
+            "enum": [
+              "direct",
+              "ytdlp",
+              "browser"
+            ],
+            "type": "string"
+          },
           "settings": {
             "$ref": "#/components/schemas/Settings",
             "description": "Task-level settings overrides."
@@ -248,6 +291,30 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "CaptureChecksum": {
+        "additionalProperties": false,
+        "properties": {
+          "algorithm": {
+            "enum": [
+              "md5",
+              "sha1",
+              "sha256",
+              "blake3"
+            ],
+            "type": "string"
+          },
+          "expected": {
+            "description": "The hash, hex encoded.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "algorithm",
+          "expected"
+        ],
         "type": "object"
       },
       "CaptureCookie": {
@@ -272,6 +339,10 @@
           },
           "name": {
             "minLength": 1,
+            "type": "string"
+          },
+          "partitionKey": {
+            "description": "Partition key of a partitioned cookie (CHIPS), as the browser reports it. Kept as it is in the cookie store; dropped for a task's own cookies (cookieScope task), which are sent like ordinary ones.",
             "type": "string"
           },
           "path": {
@@ -6832,7 +6903,7 @@
     },
     "/v1/capture": {
       "post": {
-        "description": "Creates a task from a download the browser extension intercepted, keeping the context needed to refresh the link later (original and final URL, page, referrer, headers, user agent, cookie domains, media hint). The request's cookies are stored before the task is queued, so the first request already carries them. The extension's origin must be listed in the server's allowed origins.",
+        "description": "Creates a task from a download the browser extension intercepted, keeping the context needed to refresh the link later (original and final URL, page, referrer, headers, user agent, cookie domains, media hint). The request's cookies are stored before the task is queued, so the first request already carries them. The cookies of a browser-extension token are kept for this download only (cookieScope).",
         "operationId": "capture-download",
         "requestBody": {
           "content": {

@@ -353,6 +353,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	defer stopSweep()
 	g.Go(func() error { return resolves.Run(sweepCtx, time.Minute) })
 	g.Go(func() error { return jar.Run(sweepCtx, time.Hour) })
+	g.Go(func() error { return jar.RunTaskCleanup(sweepCtx, bus) })
 	g.Go(func() error { return services.Refresh.Run(sweepCtx) })
 	g.Go(func() error { return service.NewHousekeeper(limitsDeps, services.Tasks).Run(sweepCtx) })
 	g.Go(func() error { return resolver.Run(sweepCtx) })

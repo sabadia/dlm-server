@@ -18,6 +18,14 @@ type CaptureCookie struct {
 	SameSite  string     `json:"sameSite,omitempty"` // lax, strict, none
 	HostOnly  bool       `json:"hostOnly,omitempty"`
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	// PartitionKey is the partition key of a partitioned (CHIPS) cookie.
+	PartitionKey string `json:"partitionKey,omitempty"`
+}
+
+// CaptureChecksum is the hash a captured file is expected to have.
+type CaptureChecksum struct {
+	Algorithm string `json:"algorithm"` // md5, sha1, sha256 or blake3
+	Expected  string `json:"expected"`
 }
 
 // MediaCandidate is a media resource found on the captured page.
@@ -52,6 +60,14 @@ type CaptureRequest struct {
 	Paused   bool              `json:"paused,omitempty"`
 	// AllowDuplicate adds the task even when it repeats another one.
 	AllowDuplicate bool `json:"allowDuplicate,omitempty"`
+
+	Name         string           `json:"name,omitempty"`
+	ResolverKind string           `json:"resolverKind,omitempty"` // direct, ytdlp or browser
+	Checksum     *CaptureChecksum `json:"checksum,omitempty"`
+	Mirrors      []string         `json:"mirrors,omitempty"`
+	Method       string           `json:"method,omitempty"`
+	Body         []byte           `json:"body,omitempty"`        // base64 in JSON
+	CookieScope  string           `json:"cookieScope,omitempty"` // task or store
 }
 
 // CaptureResult is the response of capture-download.
