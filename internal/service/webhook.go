@@ -144,6 +144,7 @@ func (s *WebhookService) Create(ctx context.Context, in CreateWebhookInput) (*do
 		return nil, fmt.Errorf("service: create webhook: %w", err)
 	}
 	s.version.Add(1)
+	publishResource(s.d.Bus, events.ResourceWebhook, rec.ID, events.OpCreated)
 	return webhookEntity(rec), nil
 }
 
@@ -181,6 +182,7 @@ func (s *WebhookService) Update(ctx context.Context, id string, in UpdateWebhook
 		return nil, fmt.Errorf("service: update webhook: %w", err)
 	}
 	s.version.Add(1)
+	publishResource(s.d.Bus, events.ResourceWebhook, id, events.OpUpdated)
 	return webhookEntity(rec), nil
 }
 
@@ -190,6 +192,7 @@ func (s *WebhookService) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("service: delete webhook: %w", err)
 	}
 	s.version.Add(1)
+	publishResource(s.d.Bus, events.ResourceWebhook, id, events.OpDeleted)
 	return nil
 }
 
@@ -253,3 +256,19 @@ func (s *WebhookService) Targets(ctx context.Context) ([]webhook.Target, error) 
 
 // Version changes whenever a webhook is created, updated or deleted.
 func (s *WebhookService) Version() uint64 { return s.version.Load() }
+
+// Deliveries returns the recent delivery attempts to a webhook, newest first
+// (the dispatcher keeps the last webhook.DeliveryLogSize per webhook in memory).
+// An unknown webhook matches domain.ErrNotFound.
+func (s *WebhookService) Deliveries(ctx context.Context, id string) ([]webhook.Delivery, error) {
+	if _, err := s.Get(ctx, id); err != nil {
+		return nil, err
+	}
+	log, ok := s.tester.(interface {
+		Deliveries(webhookID string) []webhook.Delivery
+	})
+	if !ok {
+		return []webhook.Delivery{}, nil
+	}
+	return log.Deliveries(id), nil
+}

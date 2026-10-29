@@ -37,6 +37,10 @@ const (
 	// TypeSystemSpeed: the transfer speed of the whole daemon, once a second
 	// while anything moves (and once more when it stops).
 	TypeSystemSpeed Type = "system.speed"
+	// TypeResourceChanged: something other clients may show changed: a
+	// category, webhook, credential, cookie, plugin or the boot configuration.
+	// Clients refetch the resource (or the whole list when the id is empty).
+	TypeResourceChanged Type = "resource.changed"
 	// TypeLimitsChanged: the temporary global speed override was set,
 	// cleared or ran out.
 	TypeLimitsChanged Type = "limits.changed"

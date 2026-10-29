@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sabadia/dlm-server/internal/logging"
+
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/service"
@@ -474,5 +476,41 @@ func TestRedactURL(t *testing.T) {
 		if got := redactURL(in); got != want {
 			t.Errorf("redactURL(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestPluginLogsKeepWhatThePluginAndTheManagerSay(t *testing.T) {
+	f := newFixture(t, nil)
+	if _, err := f.m.Logs(t.Context(), "nope"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("unknown plugin: %v", err)
+	}
+	src := source(t, manifest("chatty", `"resolve":{"match":["https://*.example.com/*"]}`),
+		`dlm.log.info("loaded", 42); dlm.on("resolve", function (ctx) { dlm.log.warn("resolving", ctx.url); return null; });`, nil)
+	if _, err := f.m.Install(t.Context(), domain.PluginInstall{Source: src}); err != nil {
+		t.Fatal(err)
+	}
+	other := source(t, manifest("quiet", `"resolve":{"match":["https://*.example.com/*"]}`), `dlm.on("resolve", function () { return null; });`, nil)
+	if _, err := f.m.Install(t.Context(), domain.PluginInstall{Source: other}); err != nil {
+		t.Fatal(err)
+	}
+
+	ring, err := f.m.Logs(t.Context(), "chatty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recs, _ := ring.Query(logging.Filter{}, 0, 10)
+	if len(recs) == 0 || recs[0].Message != "loaded 42" || recs[0].Attrs["plugin"] != "chatty" {
+		t.Fatalf("records = %+v", recs)
+	}
+	quiet, _ := f.m.Logs(t.Context(), "quiet")
+	if recs, _ := quiet.Query(logging.Filter{}, 0, 10); len(recs) != 0 {
+		t.Errorf("another plugin's log has %+v", recs)
+	}
+
+	if err := f.m.Uninstall(t.Context(), "chatty"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.m.Logs(t.Context(), "chatty"); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("after uninstalling: %v", err)
 	}
 }

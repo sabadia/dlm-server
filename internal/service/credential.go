@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/sabadia/dlm-server/internal/events"
+
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/netclient"
 	"github.com/sabadia/dlm-server/internal/storage"
@@ -108,6 +110,7 @@ func (s *CredentialService) Create(ctx context.Context, in CreateCredentialInput
 		return nil, fmt.Errorf("service: create credential: %w", err)
 	}
 	s.version.Add(1)
+	publishResource(s.d.Bus, events.ResourceCredential, rec.ID, events.OpCreated)
 	return credentialEntity(rec), nil
 }
 
@@ -146,6 +149,7 @@ func (s *CredentialService) Update(ctx context.Context, id string, in UpdateCred
 		return nil, fmt.Errorf("service: update credential: %w", err)
 	}
 	s.version.Add(1)
+	publishResource(s.d.Bus, events.ResourceCredential, id, events.OpUpdated)
 	return credentialEntity(rec), nil
 }
 
@@ -155,6 +159,7 @@ func (s *CredentialService) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("service: delete credential: %w", err)
 	}
 	s.version.Add(1)
+	publishResource(s.d.Bus, events.ResourceCredential, id, events.OpDeleted)
 	return nil
 }
 

@@ -86,6 +86,35 @@ type SpeedOverride struct {
 	Until time.Time `json:"until"`
 }
 
+// Kinds of resources named by resource.changed events.
+const (
+	ResourceCategory   = "category"
+	ResourceWebhook    = "webhook"
+	ResourceCredential = "credential"
+	ResourceCookie     = "cookie"
+	ResourcePlugin     = "plugin"
+	ResourceConfig     = "config"
+)
+
+// Operations of resource.changed events.
+const (
+	OpCreated = "created"
+	OpUpdated = "updated"
+	OpDeleted = "deleted"
+)
+
+// ResourceChangedData is the payload of resource.changed events.
+type ResourceChangedData struct {
+	// Kind is one of the Resource* constants.
+	Kind string `json:"kind" enum:"category,webhook,credential,cookie,plugin,config"`
+	// ID names the resource (the plugin's name, the config's file); empty when
+	// the change touched several (a cookie import) or there is only one
+	// (the config): refetch the whole list.
+	ID string `json:"id,omitempty"`
+	// Op is created, updated or deleted.
+	Op string `json:"op" enum:"created,updated,deleted"`
+}
+
 // Kind describes one event type: what it means and the type of its data.
 type Kind struct {
 	// Type is the event type, as in Event.Type and the SSE event name.
@@ -117,6 +146,7 @@ func Catalogue() []Kind {
 		{TypeQuotaExhausted, QuotaData{}, "A global or queue byte quota was used up."},
 		{TypeQuotaReset, QuotaData{}, "An exhausted quota is available again."},
 		{TypeSystemSpeed, SpeedData{}, "The transfer speed of the whole daemon: once a second while anything moves, and once more (zeros) when it stops."},
+		{TypeResourceChanged, ResourceChangedData{}, "A category, webhook, credential, cookie, plugin or the boot configuration was created, changed or deleted, by this or another client; refetch it."},
 		{TypeLimitsChanged, LimitsChangedData{}, "The temporary global speed override was set, cleared or ran out; data is the limit now in force."},
 	}
 }

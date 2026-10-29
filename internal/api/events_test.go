@@ -70,7 +70,13 @@ type stream struct {
 // subscribed to the bus (headers are flushed after subscribing).
 func openStream(ctx context.Context, t *testing.T, base, query string, header map[string]string) *stream {
 	t.Helper()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/events"+query, http.NoBody)
+	return openStreamAt(ctx, t, base, "/v1/events", query, header)
+}
+
+// openStreamAt connects to the SSE endpoint at path.
+func openStreamAt(ctx context.Context, t *testing.T, base, path, query string, header map[string]string) *stream {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path+query, http.NoBody)
 	if err != nil {
 		t.Fatal(err)
 	}

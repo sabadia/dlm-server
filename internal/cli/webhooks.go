@@ -32,7 +32,7 @@ func (a *app) newWebhookCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(a.newWebhookListCommand(), a.newWebhookAddCommand(), a.newWebhookGetCommand(),
+	cmd.AddCommand(a.newWebhookDeliveriesCommand(), a.newWebhookListCommand(), a.newWebhookAddCommand(), a.newWebhookGetCommand(),
 		a.newWebhookSetCommand(), a.newWebhookRemoveCommand(), a.newWebhookTestCommand())
 	return cmd
 }

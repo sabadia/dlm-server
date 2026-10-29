@@ -77,6 +77,30 @@ type Options struct {
 	Backoff func(retry int) time.Duration
 }
 
+// DeliveryLogSize is how many recent delivery attempts are kept per webhook.
+const DeliveryLogSize = 100
+
+// Delivery is one attempt to send an event to a webhook.
+type Delivery struct {
+	// ID counts attempts since the daemon started.
+	ID    uint64    `json:"id"`
+	Time  time.Time `json:"time"`
+	Event string    `json:"event" doc:"The event type, or webhook.test for a test delivery."`
+	// EventID is the bus id of the event (0 for a test).
+	EventID uint64 `json:"eventId"`
+	// Attempt is 1 for the first try, up to the daemon's attempt limit for the
+	// retries of the same delivery.
+	Attempt int `json:"attempt"`
+	// OK is true for a 2xx answer.
+	OK bool `json:"ok"`
+	// Status is the HTTP status the endpoint answered; 0 when it did not.
+	Status     int    `json:"status"`
+	DurationMs int64  `json:"durationMs"`
+	Error      string `json:"error,omitempty"`
+	// WillRetry is set when the attempt failed and another follows.
+	WillRetry bool `json:"willRetry"`
+}
+
 // Dispatcher sends bus events to webhooks.
 type Dispatcher struct {
 	bus  *events.Bus
@@ -88,6 +112,10 @@ type Dispatcher struct {
 	version uint64
 	loaded  bool
 	targets []Target
+
+	logMu   sync.Mutex
+	logs    map[string][]Delivery // newest last, at most DeliveryLogSize per webhook
+	nextLog uint64
 
 	ready chan struct{}
 }
@@ -125,7 +153,7 @@ func New(bus *events.Bus, src Source, opts Options) *Dispatcher {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Dispatcher{bus: bus, src: src, opts: opts, log: log.With("component", "webhook"), ready: make(chan struct{})}
+	return &Dispatcher{bus: bus, src: src, opts: opts, log: log.With("component", "webhook"), logs: make(map[string][]Delivery), ready: make(chan struct{})}
 }
 
 type job struct {
@@ -210,7 +238,7 @@ func (d *Dispatcher) matching(ctx context.Context, e events.Event) []Target {
 func (d *Dispatcher) deliverWithRetry(ctx context.Context, j job) {
 	var err error
 	for attempt := 1; attempt <= d.opts.Attempts; attempt++ {
-		if err = d.Deliver(ctx, j.target, j.event); err == nil || errors.Is(err, ErrPermanent) || ctx.Err() != nil {
+		if err = d.deliver(ctx, j.target, j.event, attempt); err == nil || errors.Is(err, ErrPermanent) || ctx.Err() != nil {
 			break
 		}
 		if attempt == d.opts.Attempts {
@@ -231,13 +259,54 @@ func (d *Dispatcher) deliverWithRetry(ctx context.Context, j job) {
 // attempt: nil for a 2xx answer, an error wrapping ErrPermanent for a refusal,
 // another error for failures worth retrying.
 func (d *Dispatcher) Deliver(ctx context.Context, t Target, e events.Event) error {
+	return d.deliver(ctx, t, e, 1)
+}
+
+// Deliveries returns the recent delivery attempts to a webhook, newest first.
+func (d *Dispatcher) Deliveries(webhookID string) []Delivery {
+	d.logMu.Lock()
+	defer d.logMu.Unlock()
+	src := d.logs[webhookID]
+	out := make([]Delivery, len(src))
+	for i, dl := range src {
+		out[len(src)-1-i] = dl
+	}
+	return out
+}
+
+// deliver makes attempt number attempt and records its outcome.
+func (d *Dispatcher) deliver(ctx context.Context, t Target, e events.Event, attempt int) error {
+	start := time.Now()
+	status, err := d.send(ctx, t, e)
+	rec := Delivery{
+		Time: start.UTC(), Event: string(e.Type), EventID: e.ID, Attempt: attempt, OK: err == nil, Status: status,
+		DurationMs: time.Since(start).Milliseconds(),
+		WillRetry:  err != nil && !errors.Is(err, ErrPermanent) && attempt < d.opts.Attempts && ctx.Err() == nil,
+	}
+	if err != nil {
+		rec.Error = err.Error()
+	}
+	d.logMu.Lock()
+	d.nextLog++
+	rec.ID = d.nextLog
+	d.logs[t.ID] = append(d.logs[t.ID], rec)
+	if l := d.logs[t.ID]; len(l) > DeliveryLogSize {
+		d.logs[t.ID] = l[len(l)-DeliveryLogSize:]
+	}
+	d.logMu.Unlock()
+	return err
+}
+
+// send makes one request and returns the HTTP status (0 when none came) and
+// the outcome as Deliver reports it.
+func (d *Dispatcher) send(ctx context.Context, t Target, e events.Event) (status int, err error) {
 	body, err := json.Marshal(Payload{ID: e.ID, Type: e.Type, Time: e.Time, TaskID: e.TaskID, QueueID: e.QueueID, Data: e.Data})
 	if err != nil {
-		return fmt.Errorf("%w: encode payload: %w", ErrPermanent, err)
+		return 0, fmt.Errorf("%w: encode payload: %w", ErrPermanent, err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.URL, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrPermanent, err)
+		return 0, fmt.Errorf("%w: %w", ErrPermanent, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "dlm-webhook")
@@ -248,17 +317,17 @@ func (d *Dispatcher) Deliver(ctx context.Context, t Target, e events.Event) erro
 	}
 	resp, err := d.opts.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("webhook: send: %w", err)
+		return 0, fmt.Errorf("webhook: send: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	switch {
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		return nil
+		return resp.StatusCode, nil
 	case resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
-		return fmt.Errorf("webhook: endpoint answered %d", resp.StatusCode)
+		return resp.StatusCode, fmt.Errorf("webhook: endpoint answered %d", resp.StatusCode)
 	default:
-		return fmt.Errorf("%w: status %d", ErrPermanent, resp.StatusCode)
+		return resp.StatusCode, fmt.Errorf("%w: status %d", ErrPermanent, resp.StatusCode)
 	}
 }
 

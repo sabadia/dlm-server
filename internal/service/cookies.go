@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 
+	"github.com/sabadia/dlm-server/internal/events"
+
 	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/storage"
@@ -12,6 +14,14 @@ import (
 // deleting, and importing and exporting cookie files.
 type CookieService struct {
 	store *cookies.Store
+	bus   *events.Bus
+}
+
+// WithBus makes the service tell other clients (resource.changed) when
+// cookies are imported or deleted. It returns s for chaining.
+func (s *CookieService) WithBus(bus *events.Bus) *CookieService {
+	s.bus = bus
+	return s
 }
 
 // NewCookieService creates a CookieService over store.
@@ -43,13 +53,24 @@ func (s *CookieService) List(ctx context.Context, f CookieFilter) ([]*domain.Coo
 
 // Delete removes the cookie with the given ID (domain.ErrNotFound if none).
 func (s *CookieService) Delete(ctx context.Context, id string) error {
-	return s.store.Delete(ctx, id) //nolint:wrapcheck // the store already adds context
+	if err := s.store.Delete(ctx, id); err != nil {
+		return err //nolint:wrapcheck // the store already adds context
+	}
+	publishResource(s.bus, events.ResourceCookie, id, events.OpDeleted)
+	return nil
 }
 
 // DeleteDomain removes every cookie of exactly this domain and returns how
 // many were removed. An empty domain is domain.ErrInvalidArgument.
 func (s *CookieService) DeleteDomain(ctx context.Context, domainName string) (int, error) {
-	return s.store.DeleteDomain(ctx, domainName) //nolint:wrapcheck // the store already adds context
+	n, err := s.store.DeleteDomain(ctx, domainName)
+	if err != nil {
+		return n, err //nolint:wrapcheck // the store already adds context
+	}
+	if n > 0 {
+		publishResource(s.bus, events.ResourceCookie, "", events.OpDeleted)
+	}
+	return n, nil
 }
 
 // Import stores the cookies in data. format is "json", "netscape" or ""
@@ -60,7 +81,12 @@ func (s *CookieService) Import(ctx context.Context, format, data string) (cookie
 	if err != nil {
 		return cookies.ImportResult{}, err
 	}
-	return s.store.Import(ctx, f, []byte(data)) //nolint:wrapcheck // the store already adds context
+	res, err := s.store.Import(ctx, f, []byte(data))
+	if err != nil {
+		return res, err //nolint:wrapcheck // the store already adds context
+	}
+	publishResource(s.bus, events.ResourceCookie, "", events.OpCreated)
+	return res, nil
 }
 
 // Export returns the unexpired cookies matching f as a file in format
