@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sabadia/dlm-server/internal/auth"
+
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/sabadia/dlm-server/internal/config"
@@ -82,7 +84,7 @@ func newOpsFixture(t *testing.T) *opsFixture {
 	cfg := config.Default()
 	cfg.Server.AllowedOrigins = []string{testOrigin}
 	s, err := New(&cfg, Deps{
-		Token: testToken, Version: testVersion,
+		Token: testToken, Version: testVersion, Tokens: auth.NewRegistry(store.Tokens()),
 		Settings: service.NewSettingsService(d), Queues: service.NewQueueService(d), Tasks: tasks,
 		Cookies: service.NewCookieService(jar), Capture: service.NewCaptureService(tasks, jar, refreshSvc), Refresh: refreshSvc,
 		Browser: service.NewBrowserService(fb, tasks), Categories: service.NewCategoryService(d),

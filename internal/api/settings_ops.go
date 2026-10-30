@@ -120,7 +120,7 @@ func (s *Server) getSettings(ctx context.Context, _ *struct{}) (*settingsOutput,
 	if err != nil {
 		return nil, s.fail(ctx, "get-settings", err, locBody)
 	}
-	return newSettingsOutput(g), nil
+	return newSettingsOutput(redactSettings(ctx, g)), nil
 }
 
 func (s *Server) replaceSettings(ctx context.Context, in *struct {

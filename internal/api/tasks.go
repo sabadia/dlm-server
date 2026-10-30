@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -315,6 +316,9 @@ func (s *Server) resolveTask(ctx context.Context, in *struct{ Body ResolveTaskBo
 	if err != nil {
 		return nil, err
 	}
+	if err := s.guardExtension(ctx, in.Body.Settings, "", src); err != nil {
+		return nil, err
+	}
 	res, err := s.tasks.Resolve(ctx, service.ResolveInput{Source: src, QueueID: in.Body.QueueID, Settings: in.Body.Settings})
 	if err != nil {
 		return nil, s.fail(ctx, "resolve-task", err, locBodySettings)
@@ -330,11 +334,14 @@ func (s *Server) createTask(ctx context.Context, in *struct{ Body CreateTaskBody
 	if err != nil {
 		return nil, err
 	}
+	if err := s.guardExtension(ctx, ci.Settings, ci.Dir, ci.Source); err != nil {
+		return nil, err
+	}
 	t, err := s.tasks.Create(ctx, ci)
 	if err != nil {
 		return nil, s.fail(ctx, "create-task", err, locBodySettings)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 // CreateTasksBody is the request of create-tasks.
@@ -352,6 +359,10 @@ func (s *Server) createTasks(ctx context.Context, in *struct{ Body CreateTasksBo
 		return nil, captureTooBig("tasks in one batch", MaxExtensionBatchItems)
 	}
 	out := &BatchOutput{}
+	limit := MaxBatchTasks
+	if isExtension(ctx) {
+		limit = MaxExtensionBatchTasks
+	}
 	// slots has one entry per result; inputs are the ones that go to the
 	// service, valid their indexes in slots.
 	var slots []BatchItem
@@ -359,6 +370,11 @@ func (s *Server) createTasks(ctx context.Context, in *struct{ Body CreateTasksBo
 	var valid []int
 	for i := range in.Body.Items {
 		ci, err := in.Body.Items[i].toInput()
+		if err == nil {
+			if gerr := s.guardExtension(ctx, ci.Settings, ci.Dir, ci.Source); gerr != nil {
+				return nil, gerr
+			}
+		}
 		items := []service.CreateTaskInput{ci}
 		if err == nil && in.Body.ExpandPatterns {
 			items, err = service.ExpandPatternInput(ci)
@@ -366,6 +382,10 @@ func (s *Server) createTasks(ctx context.Context, in *struct{ Body CreateTasksBo
 		if err != nil {
 			slots = append(slots, BatchItem{Error: s.asProblem(ctx, "create-tasks", err, locBodySettings)})
 			continue
+		}
+		if len(inputs)+len(items) > limit {
+			return nil, newProblem(http.StatusUnprocessableEntity, "a batch creates at most "+strconv.Itoa(limit)+" tasks after patterns are expanded").
+				withCode("batch.too_large", map[string]string{"limit": strconv.Itoa(limit)})
 		}
 		for _, it := range items {
 			valid = append(valid, len(slots))
@@ -435,7 +455,7 @@ func (s *Server) listTasks(ctx context.Context, in *ListTasksInput) (*struct{ Bo
 	if err != nil {
 		return nil, s.fail(ctx, "list-tasks", err, locBody)
 	}
-	out := &struct{ Body TaskList }{Body: TaskList{Tasks: page.Tasks, NextCursor: page.NextCursor}}
+	out := &struct{ Body TaskList }{Body: TaskList{Tasks: redactTasksFor(ctx, page.Tasks), NextCursor: page.NextCursor}}
 	if in.Total {
 		out.Body.Total = &page.Total
 	}
@@ -453,7 +473,7 @@ func (s *Server) getTask(ctx context.Context, in *taskPathInput) (*taskOutput, e
 	if err != nil {
 		return nil, s.fail(ctx, "get-task", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 // UpdateTaskBody is the request of update-task. Absent fields are unchanged.
@@ -480,7 +500,7 @@ func (s *Server) updateTask(ctx context.Context, in *struct {
 	if err != nil {
 		return nil, s.fail(ctx, "update-task", err, locBodySettings)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 // MoveTaskBody is the request of move-task.
@@ -500,7 +520,7 @@ func (s *Server) moveTask(ctx context.Context, in *struct {
 	if err != nil {
 		return nil, s.fail(ctx, "move-task", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 func (s *Server) reorderTask(ctx context.Context, in *struct {
@@ -515,7 +535,7 @@ func (s *Server) reorderTask(ctx context.Context, in *struct {
 	if err != nil {
 		return nil, s.fail(ctx, "reorder-task", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 func (s *Server) pauseTasks(ctx context.Context, in *struct{ Body TaskSelector }) (*BatchOutput, error) {
@@ -585,7 +605,7 @@ func (s *Server) selectTasks(ctx context.Context, op string, sel TaskSelector) (
 
 // batchItem converts a service batch result.
 func (s *Server) batchItem(ctx context.Context, op string, r service.BatchResult) BatchItem {
-	item := BatchItem{ID: r.ID, Task: r.Task, OK: r.Err == nil, URL: r.URL}
+	item := BatchItem{ID: r.ID, Task: redactTaskFor(ctx, r.Task), OK: r.Err == nil, URL: r.URL}
 	if item.ID == "" && r.Task != nil {
 		item.ID = r.Task.ID
 	}
@@ -613,7 +633,7 @@ func (s *Server) restartTask(ctx context.Context, in *taskPathInput) (*taskOutpu
 	if err != nil {
 		return nil, s.fail(ctx, "restart-task", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 func (s *Server) deleteTask(ctx context.Context, in *struct {
@@ -639,5 +659,6 @@ func (s *Server) taskEffectiveSettings(ctx context.Context, in *taskPathInput) (
 	if err != nil {
 		return nil, s.fail(ctx, "get-task-effective-settings", err, locBody)
 	}
+	eff.Settings = redactSettings(ctx, eff.Settings)
 	return &effectiveOutput{Body: eff}, nil
 }

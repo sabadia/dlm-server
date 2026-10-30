@@ -1,0 +1,80 @@
+schema_version: 1
+id: 01a18f11-41d0-7d76-b937-15dc9f7bff36
+status: draft
+created_at: '2026-10-30T23:07:15Z'
+updated_at: '2026-10-30T23:07:15Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: Stop a browser-extension token from running programs, writing outside the download directory or reaching the daemon's own machine, and hide captured secrets from read and extension tokens (deep review S-C1, S-H1, S-M5, S-M6, S-M7, S-L2, S-L3)
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: docs/API.md
+  start_line: null
+  end_line: null
+- path: docs/PLAN.md
+  start_line: null
+  end_line: null
+- path: internal/api/add_flow.go
+  start_line: null
+  end_line: null
+- path: internal/api/browser.go
+  start_line: null
+  end_line: null
+- path: internal/api/capture.go
+  start_line: null
+  end_line: null
+- path: internal/api/events.go
+  start_line: null
+  end_line: null
+- path: internal/api/extension_limits.go
+  start_line: null
+  end_line: null
+- path: internal/api/extension_scope.go
+  start_line: null
+  end_line: null
+- path: internal/api/extension_scope_test.go
+  start_line: null
+  end_line: null
+- path: internal/api/ops_test.go
+  start_line: null
+  end_line: null
+- path: internal/api/redact.go
+  start_line: null
+  end_line: null
+- path: internal/api/refresh.go
+  start_line: null
+  end_line: null
+- path: internal/api/settings_ops.go
+  start_line: null
+  end_line: null
+- path: internal/api/task_detail.go
+  start_line: null
+  end_line: null
+- path: internal/api/tasks.go
+  start_line: null
+  end_line: null
+- path: internal/api/torrent_upload.go
+  start_line: null
+  end_line: null
+- path: internal/cli/native_host.go
+  start_line: null
+  end_line: null
+- path: internal/nativehost/host.go
+  start_line: null
+  end_line: null
+- path: internal/nativehost/host_test.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

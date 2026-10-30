@@ -267,6 +267,12 @@ func (s *Server) runStream(ctx context.Context, st *sseStream, filter events.Fil
 }
 
 func (s *Server) writeEvent(ctx context.Context, st *sseStream, e events.Event) error {
+	if !seesSecrets(ctx) {
+		if e.Type == events.TypePairingRequested {
+			return nil // the pairing code is for the app that approves it
+		}
+		e.Data = redactEventData(e.Data)
+	}
 	data, err := json.Marshal(e)
 	if err != nil {
 		// A publisher put unencodable data on the bus; skip the event rather

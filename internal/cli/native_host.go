@@ -86,8 +86,8 @@ func (a *app) hostDaemonInfo(ctx context.Context, cfg *config.Config, baseURL st
 		return nativehost.DaemonInfo{BaseURL: info.URL, Running: true, Version: info.Version, APIVersion: info.APIVersion, TLSFingerprint: info.TLSFingerprint}
 	}
 	out := nativehost.DaemonInfo{BaseURL: baseURL}
-	if v, err := a.daemonVersion(ctx, baseURL); err == nil {
-		out.Running, out.Version = true, v
+	if v, api, err := a.daemonVersion(ctx, baseURL); err == nil {
+		out.Running, out.Version, out.APIVersion = true, v, api
 	}
 	return out
 }
@@ -115,7 +115,7 @@ type hostPairing struct {
 }
 
 func pairingInfo(p client.Pairing, token string) nativehost.PairingInfo {
-	return nativehost.PairingInfo{ID: p.ID, Status: p.Status, Code: p.Code, ExpiresAt: p.ExpiresAt, Token: token}
+	return nativehost.PairingInfo{ID: p.ID, Status: p.Status, Code: p.Code, ExpiresAt: p.ExpiresAt, ClientID: p.ClientID, Token: token}
 }
 
 func (h hostPairing) Start(ctx context.Context, req nativehost.PairingRequest) (nativehost.PairingInfo, error) {
@@ -143,16 +143,16 @@ func (h hostPairing) Status(ctx context.Context, id string) (nativehost.PairingI
 }
 
 // daemonVersion asks the daemon's public health endpoint for its version.
-func (a *app) daemonVersion(ctx context.Context, baseURL string) (string, error) {
+func (a *app) daemonVersion(ctx context.Context, baseURL string) (version string, apiVersion int, err error) {
 	c, err := client.New(baseURL, "", client.WithUserAgent("dlm-native-host/"+a.version), client.WithTimeout(2*time.Second))
 	if err != nil {
-		return "", fmt.Errorf("cli: %w", err)
+		return "", 0, fmt.Errorf("cli: %w", err)
 	}
 	h, err := c.Health(ctx)
 	if err != nil {
-		return "", err //nolint:wrapcheck // only used to tell whether the daemon runs
+		return "", 0, err //nolint:wrapcheck // only used to tell whether the daemon runs
 	}
-	return h.Version, nil
+	return h.Version, h.APIVersion, nil
 }
 
 type nativeHostFlags struct {

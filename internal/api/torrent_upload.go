@@ -49,6 +49,11 @@ func (s *Server) addTorrentFile(ctx context.Context, in *AddTorrentInput) (*task
 	if s.tasks == nil {
 		return nil, errServicesUnavailable()
 	}
+	if isExtension(ctx) {
+		if err := s.checkExtensionDir(ctx, in.Dir); err != nil {
+			return nil, err
+		}
+	}
 	t, err := s.tasks.Create(ctx, service.CreateTaskInput{
 		Source:  domain.Source{CurrentURL: "data:application/x-bittorrent;base64," + base64.StdEncoding.EncodeToString(data)},
 		QueueID: in.QueueID, Name: in.Name, Dir: in.Dir, Priority: in.Priority, Paused: in.Paused, AllowDuplicate: in.AllowDuplicate,
@@ -56,5 +61,5 @@ func (s *Server) addTorrentFile(ctx context.Context, in *AddTorrentInput) (*task
 	if err != nil {
 		return nil, s.fail(ctx, "add-torrent-file", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }

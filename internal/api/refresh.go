@@ -82,7 +82,7 @@ func (s *Server) refreshTask(ctx context.Context, in *taskPathInput) (*taskOutpu
 	if err != nil {
 		return nil, s.fail(ctx, "refresh-task", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 func (s *Server) awaitTaskLink(ctx context.Context, in *taskPathInput) (*taskOutput, error) {
@@ -93,7 +93,7 @@ func (s *Server) awaitTaskLink(ctx context.Context, in *taskPathInput) (*taskOut
 	if err != nil {
 		return nil, s.fail(ctx, "await-task-link", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 func (s *Server) updateTaskSource(ctx context.Context, in *struct {
@@ -110,7 +110,7 @@ func (s *Server) updateTaskSource(ctx context.Context, in *struct {
 	if err != nil {
 		return nil, s.fail(ctx, "update-task-source", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 func (s *Server) listTaskRefreshes(ctx context.Context, in *taskPathInput) (*struct{ Body RefreshHistory }, error) {

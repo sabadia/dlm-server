@@ -144,6 +144,10 @@ func (s *Server) resolveTasks(ctx context.Context, in *struct{ Body ResolveTasks
 			out.Body.Results[i] = ResolveItem{Error: s.asProblem(ctx, "resolve-tasks", err, locBodySettings)}
 			continue
 		}
+		if err := s.guardExtension(ctx, it.Settings, "", src); err != nil {
+			out.Body.Results[i] = ResolveItem{Error: s.asProblem(ctx, "resolve-tasks", err, locBodySettings)}
+			continue
+		}
 		inputs[i] = service.ResolveInput{Source: src, QueueID: it.QueueID, Settings: it.Settings}
 		valid = append(valid, i)
 		sub = append(sub, inputs[i])
