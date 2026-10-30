@@ -60,8 +60,11 @@ func checkExtensionSettings(in settings.Settings) error {
 // checkExtensionDir refuses a download directory outside the download
 // directory and server.fs_roots.
 func (s *Server) checkExtensionDir(ctx context.Context, dir string) error {
-	if dir == "" || !filepath.IsAbs(dir) {
-		return nil // nothing to check, or the service refuses it
+	if dir == "" {
+		return nil
+	}
+	if !filepath.IsAbs(dir) {
+		return extensionForbidden("choose a download directory that is not an absolute path")
 	}
 	clean := resolveExisting(filepath.Clean(dir))
 	roots := append([]string(nil), s.cfg.Server.FSRoots...)
