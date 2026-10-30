@@ -200,6 +200,8 @@ func TestExtensionScope(t *testing.T) {
 		{http.MethodGet, "/v1/tasks"},
 		{http.MethodGet, "/v1/tasks/abc"},
 		{http.MethodPost, "/v1/tasks/pause"},
+		{http.MethodPost, "/v1/tasks/move"},
+		{http.MethodDelete, "/v1/limits/override"},
 		{http.MethodPost, "/v1/tasks/abc/refresh/await"},
 		{http.MethodPost, "/v1/resolve"},
 		{http.MethodPost, "/v1/browser/resolve"},

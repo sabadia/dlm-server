@@ -1,0 +1,29 @@
+schema_version: 1
+id: 01a18a59-1ed0-71f4-8542-1c6ebee4d28c
+status: draft
+created_at: '2026-10-30T01:07:38Z'
+updated_at: '2026-10-30T01:07:38Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: agent
+  name: null
+  tool: grok
+goal: Let a paired browser extension move a download to another queue and turn turbo off.
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/api/middleware.go
+  start_line: null
+  end_line: null
+- path: internal/api/pairing_test.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
