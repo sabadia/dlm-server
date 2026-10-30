@@ -150,13 +150,26 @@ func (s *Server) captureDownload(ctx context.Context, in *struct{ Body CaptureBo
 		if err := checkExtensionCapture(&in.Body); err != nil {
 			return nil, err
 		}
+		if err := checkExtensionSettings(in.Body.Settings); err != nil {
+			return nil, err
+		}
+		if err := s.checkExtensionDir(ctx, in.Body.Dir); err != nil {
+			return nil, err
+		}
+		urls := append([]string{in.Body.URL, in.Body.FinalURL}, in.Body.Mirrors...)
+		for _, c := range in.Body.MediaCandidates {
+			urls = append(urls, c.URL)
+		}
+		if err := checkExtensionURLs(ctx, urls...); err != nil {
+			return nil, err
+		}
 	}
 	res, err := s.capture.Capture(ctx, in.Body.toInput(p.Scope == auth.ScopeExtension))
 	if err != nil {
 		return nil, s.fail(ctx, "capture-download", err, locBodySettings)
 	}
 	return &struct{ Body CaptureOutput }{Body: CaptureOutput{
-		Task: res.Task, Refreshed: res.Refreshed,
+		Task: redactTaskFor(ctx, res.Task), Refreshed: res.Refreshed,
 		Cookies: ImportCookiesResult{
 			Imported: res.Cookies.Imported, Skipped: res.Cookies.Skipped, Errors: res.Cookies.Errors,
 		},

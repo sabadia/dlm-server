@@ -56,6 +56,8 @@ type PairingInfo struct {
 	Status    string // pending, approved, denied or expired
 	Code      string
 	ExpiresAt time.Time
+	// ClientID is the extension that started the pairing.
+	ClientID string
 	// Token is the issued token of an approved pairing, present once.
 	Token string
 }
@@ -240,6 +242,11 @@ func (h *Host) pairStatus(ctx context.Context, req request) response {
 	p, err := h.Pairing.Status(pctx, req.PairingID)
 	if err != nil {
 		return pairingFailure(err)
+	}
+	// A pairing belongs to the extension that started it: another one must
+	// not collect its token.
+	if id := h.callerID(); id != "" && p.ClientID != "" && p.ClientID != id {
+		return response{Error: CodePairingFailed, Message: "this pairing was started by another extension"}
 	}
 	return pairingResponse(p)
 }

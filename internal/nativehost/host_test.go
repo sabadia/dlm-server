@@ -245,3 +245,20 @@ func TestHostServeStopsWhenContextIsDone(t *testing.T) {
 		t.Errorf("Serve = %v with %d bytes written, want nil and none", err, out.Len())
 	}
 }
+
+func TestHostPairStatusIsBoundToTheStartingExtension(t *testing.T) {
+	pairing := &fakePairing{statuses: map[string]PairingInfo{
+		"p1": {ID: "p1", Status: "approved", ClientID: "someotherextensionidxxxxxxxxxxxx", Token: "dlmt_secret"},
+		"p2": {ID: "p2", Status: "approved", ClientID: BuiltinChromiumID, Token: "dlmt_mine"},
+	}}
+	h := testHost()
+	h.Pairing = pairing
+	h.Origin = BuiltinChromiumOrigin
+	got := exchange(t, h, `{"type":"pair.status","pairingId":"p1"}`, `{"type":"pair.status","pairingId":"p2"}`)
+	if r := got[0]; r["ok"] != false || r["token"] != nil || r["error"] != CodePairingFailed {
+		t.Errorf("another extension's pairing = %v", r)
+	}
+	if r := got[1]; r["ok"] != true || r["token"] != "dlmt_mine" {
+		t.Errorf("own pairing = %v", r)
+	}
+}

@@ -82,7 +82,7 @@ func (s *Server) updateTaskFiles(ctx context.Context, in *struct {
 	if err != nil {
 		return nil, s.fail(ctx, "update-task-files", err, locBody)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 func (s *Server) getTaskTorrent(ctx context.Context, in *taskPathInput) (*struct{ Body *domain.TorrentInfo }, error) {

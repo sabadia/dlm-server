@@ -113,6 +113,9 @@ func (s *Server) downloadCandidate(ctx context.Context, in *struct {
 	if s.browser == nil {
 		return nil, errServicesUnavailable()
 	}
+	if err := s.guardExtension(ctx, in.Body.Settings, in.Body.Dir, domain.Source{}); err != nil {
+		return nil, err
+	}
 	t, err := s.browser.Download(ctx, service.BrowserDownloadInput{
 		ResultID: in.ID, Index: in.Index, QueueID: in.Body.QueueID, Name: in.Body.Name, Dir: in.Body.Dir,
 		Settings: in.Body.Settings, Priority: in.Body.Priority, Labels: in.Body.Labels, Paused: in.Body.Paused,
@@ -120,7 +123,7 @@ func (s *Server) downloadCandidate(ctx context.Context, in *struct {
 	if err != nil {
 		return nil, s.fail(ctx, "download-candidate", err, locBodySettings)
 	}
-	return &taskOutput{Body: t}, nil
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }
 
 func (s *Server) getBrowserStatus(_ context.Context, _ *struct{}) (*struct{ Body browser.Status }, error) {

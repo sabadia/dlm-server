@@ -303,6 +303,18 @@ A pairing waits two minutes for an answer and at most five wait at once (409
 `pairing.too_many`). `GET /v1/pairing` lists the ones waiting, for an app that started late;
 `pairing.resolved` tells clients to close the prompt.
 
+**What an extension token may not do.** It creates tasks, nothing more. A request from it is
+refused with 403 `auth.extension_scope` when it carries task `settings` beyond limits
+(`speedLimit`, `maxConnections`), `retry`, `checksum`, `refresh`, `autoCategorize` and the
+seeding rules (so no post-action that runs a program, no proxy, no `downloadDir`); when `dir`
+(or the `dir` query of `POST /v1/tasks/torrent`) is outside the download directory and
+`server.fs_roots`; or when a link, mirror or media candidate points at the daemon's own machine
+(`localhost`, loopback and link-local addresses such as 169.254.169.254, by address or by name;
+addresses of the local network are allowed). A batch is capped at 200 tasks after patterns are
+expanded (10000 for other tokens, 422 `batch.too_large`). Read and extension tokens get tasks
+without the captured request headers and body, `/v1/settings` and effective settings with proxy
+credentials masked and the global `headers` left out, and no `pairing.requested` events.
+
 **What a capture can carry.** Besides the page, referrer, user agent, headers, cookies and media
 candidates, `POST /v1/capture` takes `name`, `resolverKind` (`direct`, `ytdlp` for a page yt-dlp can
 extract, `browser` for a page that needs the headless browser), `checksum` (`algorithm`, `expected`),

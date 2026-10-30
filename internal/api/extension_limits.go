@@ -31,6 +31,10 @@ const (
 	MaxExtensionHeadersTotal    = 32 << 10
 	MaxExtensionMediaCandidates = 100
 	MaxExtensionBatchItems      = 100
+	// MaxExtensionBatchTasks caps the tasks of one batch after patterns are
+	// expanded; MaxBatchTasks is the same for every other token.
+	MaxExtensionBatchTasks = 200
+	MaxBatchTasks          = 10000
 )
 
 // bucket is one token bucket.
