@@ -76,6 +76,7 @@ dlm plugin install ./my-plugin
 | [docs/RELEASING.md](docs/RELEASING.md) | How releases are made |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | Engineering rules for contributors |
 | [docs/PLAN.md](docs/PLAN.md) | The implementation plan this project follows |
+| [skills/dlm](skills/dlm/SKILL.md) | Skills that teach an AI agent to operate dlm ([Agent Skills](https://agentskills.io) format) |
 
 ## License
 

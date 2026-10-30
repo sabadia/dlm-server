@@ -1,0 +1,42 @@
+{
+  "skill_name": "dlm",
+  "evals": [
+    {
+      "id": 1,
+      "name": "mixed-batch",
+      "prompt": "Download four links (one with sha256, one 404, one PDF URL answering with an HTML login page, one plain) and say when they are really done and which can be trusted.",
+      "expected_output": "Verified file reported as trusted, unhashed file flagged as unverified, dead and HTML links reported as not downloaded, nothing left waiting.",
+      "assertions": [
+        "checksum verified through dlm",
+        "404 reported as failed",
+        "HTML response reported as not the file",
+        "no task left in awaiting_link"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "organize-night",
+      "prompt": "Create a queue that runs 01:00-07:00 Dhaka time daily, 2 at a time, 1 MiB/s, 5 GiB a day; sort .bin and .iso into subfolders; add two URLs.",
+      "expected_output": "Queue, categories and autoCategorize configured, tasks queued in the queue.",
+      "assertions": [
+        "schedule with Asia/Dhaka and all seven days",
+        "maxConcurrentDownloads 2, speedLimit 1048576, quota 5 GiB",
+        "categories with autoCategorize on",
+        "both tasks queued in night",
+        "states that sorting is not yet observed"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "stuck-downloads",
+      "prompt": "Diagnose and fix a stopped queue, an expired link with a fresh URL supplied, a hidden 1 KiB/s override, and remove a dead task.",
+      "expected_output": "All tasks completed, override cleared, dead task removed, each cause explained.",
+      "assertions": [
+        "all four tasks completed",
+        "override cleared",
+        "dead task removed",
+        "all three causes reported"
+      ]
+    }
+  ]
+}
