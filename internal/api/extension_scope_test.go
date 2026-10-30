@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestExtensionTokenCannotEscapeTheDownloadDirectory(t *testing.T) {
 		"capture downloadDir":    {"/v1/capture", `{"url":"` + remote + `","settings":{"downloadDir":"/etc"}}`},
 		"capture dir":            {"/v1/capture", `{"url":"` + remote + `","dir":"/Users/someone/Library/LaunchAgents"}`},
 		"task dir":               {"/v1/tasks", `{"url":"` + remote + `","dir":"/etc/cron.d"}`},
-		"dir with dots":          {"/v1/tasks", `{"url":"` + remote + `","dir":"` + f.dir + `/../../etc"}`},
+		"dir with dots":          {"/v1/tasks", `{"url":"` + remote + `","dir":` + jsonString(filepath.Join(f.dir, "..", "..", "etc")) + `}`},
 		"loopback":               {"/v1/capture", `{"url":"http://127.0.0.1:8080/x"}`},
 		"localhost":              {"/v1/tasks", `{"url":"http://localhost/x"}`},
 		"metadata address":       {"/v1/capture", `{"url":"http://169.254.169.254/latest/meta-data"}`},
