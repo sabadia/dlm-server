@@ -130,3 +130,18 @@ func TestNativeHostRefusals(t *testing.T) {
 	localCall(t, s, http.MethodPost, `{"action":"install","browsers":["netscape"],"extensionIds":["aaaabbbbccccddddeeeeffffgggghhhh"]}`, http.StatusUnprocessableEntity, nil)
 	localCall(t, s, http.MethodPost, `{"action":"explode"}`, http.StatusUnprocessableEntity, nil)
 }
+
+func TestDialableAddress(t *testing.T) {
+	for in, want := range map[string]string{
+		"127.0.0.1:7777": "127.0.0.1:7777",
+		"0.0.0.0:7777":   "127.0.0.1:7777",
+		":7777":          "127.0.0.1:7777",
+		"[::]:7777":      "127.0.0.1:7777",
+		"nas.lan:7777":   "nas.lan:7777",
+		"not an address": "not an address",
+	} {
+		if got := dialableAddress(in); got != want {
+			t.Errorf("dialableAddress(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

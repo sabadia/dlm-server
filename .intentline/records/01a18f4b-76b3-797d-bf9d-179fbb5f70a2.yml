@@ -1,0 +1,95 @@
+schema_version: 1
+id: 01a18f4b-76b3-797d-bf9d-179fbb5f70a2
+status: draft
+created_at: '2026-10-31T00:10:49Z'
+updated_at: '2026-10-31T00:10:49Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: 'Fix the server findings of the 2026-10-31 deep review that are about data integrity and lifecycle: shared .part files, tasks interrupted in post-processing, delete during post-processing, stuck refresh, servers that ignore ranges, unsafe names, torrent data on delete, queue moves, one-time links, CORS and smaller items'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/api/events.go
+  start_line: null
+  end_line: null
+- path: internal/api/middleware.go
+  start_line: null
+  end_line: null
+- path: internal/api/native_host.go
+  start_line: null
+  end_line: null
+- path: internal/api/native_host_test.go
+  start_line: null
+  end_line: null
+- path: internal/api/server_test.go
+  start_line: null
+  end_line: null
+- path: internal/auth/pairing.go
+  start_line: null
+  end_line: null
+- path: internal/auth/pairing_test.go
+  start_line: null
+  end_line: null
+- path: internal/browser/classify.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/download.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/download_test.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/engine.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/probe.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/transfer.go
+  start_line: null
+  end_line: null
+- path: internal/service/capture.go
+  start_line: null
+  end_line: null
+- path: internal/service/capture_test.go
+  start_line: null
+  end_line: null
+- path: internal/service/category_test.go
+  start_line: null
+  end_line: null
+- path: internal/service/fileexists.go
+  start_line: null
+  end_line: null
+- path: internal/service/files.go
+  start_line: null
+  end_line: null
+- path: internal/service/refresh.go
+  start_line: null
+  end_line: null
+- path: internal/service/refresh_test.go
+  start_line: null
+  end_line: null
+- path: internal/service/runner.go
+  start_line: null
+  end_line: null
+- path: internal/service/task.go
+  start_line: null
+  end_line: null
+- path: internal/service/task_test.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

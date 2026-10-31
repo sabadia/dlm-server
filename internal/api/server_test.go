@@ -254,7 +254,7 @@ func TestCORS(t *testing.T) {
 		if h.Get("Access-Control-Allow-Origin") != testOrigin {
 			t.Errorf("Access-Control-Allow-Origin = %q", h.Get("Access-Control-Allow-Origin"))
 		}
-		for _, want := range []string{"Authorization", "Content-Type", "Last-Event-ID"} {
+		for _, want := range []string{"Authorization", "Content-Type", "If-Match", "Last-Event-ID"} {
 			if !strings.Contains(h.Get("Access-Control-Allow-Headers"), want) {
 				t.Errorf("Access-Control-Allow-Headers %q lacks %q", h.Get("Access-Control-Allow-Headers"), want)
 			}
@@ -266,6 +266,14 @@ func TestCORS(t *testing.T) {
 		}
 		if h.Get("Access-Control-Max-Age") == "" {
 			t.Error("missing Access-Control-Max-Age")
+		}
+	})
+	t.Run("a browser client may read ETag and Retry-After", func(t *testing.T) {
+		w := do(t, s, request{method: http.MethodGet, path: "/v1/health", headers: map[string]string{"Origin": testOrigin}})
+		for _, want := range []string{"ETag", "Retry-After", "WWW-Authenticate", "Location"} {
+			if !strings.Contains(w.Header().Get("Access-Control-Expose-Headers"), want) {
+				t.Errorf("Access-Control-Expose-Headers %q lacks %q", w.Header().Get("Access-Control-Expose-Headers"), want)
+			}
 		}
 	})
 	t.Run("preflight disallowed", func(t *testing.T) {

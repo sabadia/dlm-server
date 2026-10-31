@@ -871,3 +871,23 @@ func TestCaptureOfTheSameClickedLinkMatchesWithoutAFileName(t *testing.T) {
 		t.Fatalf("AttachCapture = %+v, %v; want the task with the new link", got, err)
 	}
 }
+
+// A manual refresh of a task that waits for a link, cancelled half-way, must
+// not leave it in refreshing: no runner settles a manual refresh, and
+// refreshing blocks another refresh and ignores resume.
+func TestCancelledManualRefreshReturnsToWaiting(t *testing.T) {
+	e := newRefreshEnv(t)
+	task := e.task(t, domain.StatusAwaitingLink, 0)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := e.refresher.Refresh(ctx, task.ID); err == nil {
+		t.Fatal("a cancelled refresh reported success")
+	}
+	if got := e.get(t, task.ID); got.Status != domain.StatusAwaitingLink {
+		t.Errorf("status after the cancelled refresh = %s, want awaiting_link", got.Status)
+	}
+	// And a refresh can be made again.
+	if got, err := e.refresher.Refresh(t.Context(), task.ID); err != nil || got.Status != domain.StatusQueued {
+		t.Errorf("the next refresh = %+v, %v", got, err)
+	}
+}

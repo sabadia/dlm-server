@@ -9,6 +9,7 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/cookies"
 	"github.com/sabadia/dlm-server/internal/domain"
+	"github.com/sabadia/dlm-server/internal/engine/httpx"
 	"github.com/sabadia/dlm-server/internal/settings"
 )
 
@@ -320,7 +321,12 @@ func captureName(name string) string {
 	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
 		name = name[i+1:]
 	}
-	return name
+	if name == "" {
+		return ""
+	}
+	// What a browser reports is not trusted: device names (CON, aux.txt),
+	// trailing dots and control or bidi characters are made safe.
+	return httpx.SanitizeFilename(name)
 }
 
 // cookieDomains lists the distinct cookie domains of cs, or the host of

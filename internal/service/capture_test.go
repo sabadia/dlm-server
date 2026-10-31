@@ -159,7 +159,6 @@ func TestCaptureRejectsBadInputBeforeStoringCookies(t *testing.T) {
 		"candidate no url":   {MediaCandidates: []MediaCandidate{{Kind: MediaHLS}}},
 		"candidate bad kind": {URL: "https://example.com/a", MediaCandidates: []MediaCandidate{{URL: "https://x/y", Kind: "gif"}}},
 		"unknown queue":      {URL: "https://example.com/a", QueueID: "nope", Cookies: cookie},
-		"bad name":           {URL: "https://example.com/a", Filename: "..", Cookies: cookie},
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc, jar, f := newCaptureFixture(t)
@@ -182,7 +181,7 @@ func TestCaptureRejectsBadInputBeforeStoringCookies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if keeps := name == "unknown queue" || name == "bad name"; keeps != (len(stored) == 1) {
+			if keeps := name == "unknown queue"; keeps != (len(stored) == 1) {
 				t.Errorf("stored cookies = %d for %q", len(stored), name)
 			}
 		})
@@ -341,5 +340,26 @@ func TestCaptureMarksAManifestByWhatTheExtensionSaw(t *testing.T) {
 	src := f.get(t, res.Task.ID).Source
 	if src.StreamKind != domain.StreamHLS || src.MediaHint != "720p" {
 		t.Errorf("source = %+v", src)
+	}
+}
+
+func TestCaptureMakesBrowserFileNamesSafe(t *testing.T) {
+	for name, want := range map[string]string{
+		"..":            "download",
+		".":             "download",
+		"CON":           "CON_",
+		"report.pdf.":   "report.pdf",
+		"dir/../x.zip":  "x.zip",
+		"a:b?.txt":      "a_b_.txt",
+		"\u202egpj.exe": "gpj.exe",
+	} {
+		svc, _, _ := newCaptureFixture(t)
+		res, err := svc.Capture(t.Context(), CaptureInput{URL: "https://example.com/a", Filename: name, Paused: true})
+		if err != nil {
+			t.Fatalf("%q: %v", name, err)
+		}
+		if res.Task.Name != want {
+			t.Errorf("filename %q -> task name %q, want %q", name, res.Task.Name, want)
+		}
 	}
 }

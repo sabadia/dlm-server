@@ -279,6 +279,30 @@ func (p *Pairings) Deny(ctx context.Context, id string) (Pairing, error) {
 	return out, nil
 }
 
+// Sweep expires pairings that ran out of time and revokes approved tokens
+// nobody came for. Other calls do it too, but only when somebody asks; Run
+// makes sure it happens anyway.
+func (p *Pairings) Sweep(ctx context.Context) {
+	p.mu.Lock()
+	events := p.sweepLocked(ctx, p.clock())
+	p.mu.Unlock()
+	p.emit(events)
+}
+
+// Run sweeps every interval until ctx ends.
+func (p *Pairings) Run(ctx context.Context, interval time.Duration) error {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+			p.Sweep(ctx)
+		}
+	}
+}
+
 func (p *Pairings) pendingLocked(id string) (*pairing, error) {
 	it, ok := p.items[id]
 	if !ok {

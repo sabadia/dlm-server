@@ -19,8 +19,10 @@ import (
 
 const (
 	corsAllowMethods = "GET, POST, PUT, PATCH, DELETE"
-	corsAllowHeaders = "Authorization, Content-Type, Last-Event-ID"
-	corsMaxAge       = 10 * time.Minute
+	corsAllowHeaders = "Authorization, Content-Type, If-Match, Last-Event-ID"
+	// corsExposeHeaders are the response headers a browser client may read.
+	corsExposeHeaders = "ETag, Location, Retry-After, WWW-Authenticate"
+	corsMaxAge        = 10 * time.Minute
 )
 
 // buildHandler wraps the mux with the middleware chain. The outermost
@@ -265,6 +267,7 @@ func corsMiddleware(next http.Handler, allowed map[string]struct{}) http.Handler
 		}
 		if ok {
 			h.Set("Access-Control-Allow-Origin", origin)
+			h.Set("Access-Control-Expose-Headers", corsExposeHeaders)
 		}
 		next.ServeHTTP(w, r)
 	})
