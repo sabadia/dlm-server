@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -737,4 +739,120 @@ func exists(t *testing.T, path string) bool {
 		t.Fatal(err)
 	}
 	return ok
+}
+
+// A task that is post-processing is held by its run: Delete stops it first, so
+// an extract or program does not go on (and recreate files) after the delete.
+func TestTaskServiceDeleteStopsPostProcessing(t *testing.T) {
+	f := newSvcFixture(t)
+	task := f.withStatus(t, domain.StatusRunning, domain.StatusPostprocessing)
+	res := f.tasks.Delete(t.Context(), []string{task.ID}, DeleteOptions{})
+	calls := f.sched.stopCalls()
+	if len(calls) == 0 || calls[0].TaskID != task.ID || !errors.Is(calls[0].Cause, ErrRequeued) {
+		t.Fatalf("stop calls = %+v (delete result %+v)", calls, res)
+	}
+}
+
+// A running task that is moved goes back to its queue first, so the new queue
+// does not run more than it may and the old one frees the slot.
+func TestTaskServiceMoveRequeuesARunningTask(t *testing.T) {
+	f := newSvcFixture(t)
+	ctx := t.Context()
+	srv := newFileServer(t, 2<<20, 5*time.Millisecond)
+	q, err := f.queues.Create(ctx, CreateQueueInput{Name: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	running := f.create(t, CreateTaskInput{Source: domain.Source{CurrentURL: srv.URL + "/files/run.bin"}})
+	f.sched.run(t, f.store, running.ID)
+
+	moved, err := f.tasks.Move(ctx, running.ID, q.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved.QueueID != q.ID {
+		t.Errorf("queue = %s, want %s", moved.QueueID, q.ID)
+	}
+	calls := f.sched.stopCalls()
+	if len(calls) != 1 || calls[0].TaskID != running.ID || !errors.Is(calls[0].Cause, ErrRequeued) {
+		t.Fatalf("stop calls = %+v", calls)
+	}
+}
+
+// A link that works once is resolved by one request and downloaded after it
+// returned: the probe's open response must outlive the resolve call.
+func TestResolveKeepsAOneTimeLinkAliveAfterTheCallEnds(t *testing.T) {
+	f := newSvcFixture(t)
+	data := bytes.Repeat([]byte("0123456789abcdef"), 4096)
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) > 1 {
+			http.Error(w, "used", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeContent(w, r, "once.bin", time.Time{}, bytes.NewReader(data))
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	res, err := f.tasks.Resolve(ctx, ResolveInput{Source: domain.Source{CurrentURL: srv.URL + "/once.bin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel() // the HTTP request that resolved the link is over
+
+	task, err := f.tasks.Create(t.Context(), CreateTaskInput{ResolveID: res.ResolveID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.sched.run(t, f.store, task.ID)
+	waitFor(t, func() bool {
+		got := f.get(t, task.ID)
+		return got.Status == domain.StatusCompleted || got.Status == domain.StatusError
+	})
+	if got := f.get(t, task.ID); got.Status != domain.StatusCompleted {
+		t.Fatalf("status %s (%+v) after %d requests, want completed", got.Status, got.Error, hits.Load())
+	}
+	if n := hits.Load(); n != 1 {
+		t.Errorf("%d requests, want 1: the probe body must be the download", n)
+	}
+}
+
+// Deleting a multi-file torrent with its files removes what the torrent
+// listed, and only that.
+func TestTaskServiceDeleteFilesOfAMultiFileTorrent(t *testing.T) {
+	f := newSvcFixture(t)
+	dir := t.TempDir()
+	root := filepath.Join(dir, "album")
+	for _, p := range []string{"cd1/a.flac", "cd1/b.flac", "cover.jpg", "mine.txt"} {
+		full := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	task := f.create(t, CreateTaskInput{Source: domain.Source{CurrentURL: "https://example.com/album.torrent"}, Dir: dir, Name: "album", Paused: true})
+	task.Resource = &domain.Resource{Files: []domain.File{
+		{Index: 0, Path: "cd1", Name: "a.flac", Size: 1, Selected: true},
+		{Index: 1, Path: "cd1", Name: "b.flac", Size: 1, Selected: true},
+		{Index: 2, Name: "cover.jpg", Size: 1, Selected: true},
+	}}
+	if err := f.store.Tasks().Update(t.Context(), task); err != nil {
+		t.Fatal(err)
+	}
+	res := f.tasks.Delete(t.Context(), []string{task.ID}, DeleteOptions{Files: true})
+	if res[0].Err != nil {
+		t.Fatal(res[0].Err)
+	}
+	for _, gone := range []string{"cd1/a.flac", "cd1/b.flac", "cover.jpg", "cd1"} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(gone))); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s was not removed: %v", gone, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "mine.txt")); err != nil {
+		t.Errorf("a file the torrent did not list was removed: %v", err)
+	}
 }

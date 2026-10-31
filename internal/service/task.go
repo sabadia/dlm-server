@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -472,42 +474,60 @@ func (s *TaskService) Move(ctx context.Context, id, queueID string) (*domain.Tas
 	if err := resolveQueueRef(ctx, s.d.Store, &queueID); err != nil {
 		return nil, err
 	}
-	var (
-		t     *domain.Task
-		moved bool
-	)
-	err := s.d.withTaskLock(ctx, id, func() error {
-		return s.d.Store.WithTx(ctx, func(tx storage.Store) error { //nolint:wrapcheck // wrapped inside the transaction
-			var err error
-			if t, err = tx.Tasks().Get(ctx, id); err != nil {
-				return fmt.Errorf("service: move task: %w", err)
-			}
-			if t.QueueID == queueID {
+	for range retryAttempts {
+		var (
+			t       *domain.Task
+			moved   bool
+			running bool
+		)
+		err := s.d.withTaskLock(ctx, id, func() error {
+			return s.d.Store.WithTx(ctx, func(tx storage.Store) error { //nolint:wrapcheck // wrapped inside the transaction
+				var err error
+				if t, err = tx.Tasks().Get(ctx, id); err != nil {
+					return fmt.Errorf("service: move task: %w", err)
+				}
+				if t.QueueID == queueID {
+					return nil
+				}
+				// A running task counts against its queue's limits and gates:
+				// it goes back to the queue first (below), then moves.
+				if stoppable(t.Status) {
+					running = true
+					return nil
+				}
+				if _, err := tx.Queues().Get(ctx, queueID); err != nil {
+					return fmt.Errorf("service: move task: %w", err)
+				}
+				pos, err := tx.Tasks().NextPosition(ctx, queueID)
+				if err != nil {
+					return fmt.Errorf("service: move task: %w", err)
+				}
+				t.QueueID, t.Position, t.UpdatedAt = queueID, pos, s.d.now()
+				if err := tx.Tasks().Update(ctx, t); err != nil {
+					return fmt.Errorf("service: move task: %w", err)
+				}
+				moved = true
 				return nil
-			}
-			if _, err := tx.Queues().Get(ctx, queueID); err != nil {
-				return fmt.Errorf("service: move task: %w", err)
-			}
-			pos, err := tx.Tasks().NextPosition(ctx, queueID)
-			if err != nil {
-				return fmt.Errorf("service: move task: %w", err)
-			}
-			t.QueueID, t.Position, t.UpdatedAt = queueID, pos, s.d.now()
-			if err := tx.Tasks().Update(ctx, t); err != nil {
-				return fmt.Errorf("service: move task: %w", err)
-			}
-			moved = true
-			return nil
+			})
 		})
-	})
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+		if running {
+			// Stop without holding the lock (the runner persists the final
+			// state under it); the next iteration moves the requeued task.
+			if err := stopTask(ctx, s.d, id, ErrRequeued); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if moved {
+			s.d.publishTask(events.TypeTaskUpdated, t)
+			s.d.Scheduler.Wake()
+		}
+		return t, nil
 	}
-	if moved {
-		s.d.publishTask(events.TypeTaskUpdated, t)
-		s.d.Scheduler.Wake()
-	}
-	return t, nil
+	return nil, domain.ConflictCode("task.state_changed", map[string]string{"taskId": id, "operation": "move"}, "service: move task %q: it was restarted while being stopped", id)
 }
 
 // Reorder moves a task to the 0-based index position among its queue's
@@ -726,17 +746,24 @@ func (s *TaskService) delete(ctx context.Context, id string, opts DeleteOptions)
 			if t, err = s.d.Store.Tasks().Get(ctx, id); err != nil {
 				return fmt.Errorf("service: delete task: %w", err)
 			}
-			if stoppable(t.Status) {
+			// A task that is post-processing is still held by its run: it is
+			// stopped too, or its extract or program would go on against files
+			// that are being removed (and recreate them). It cannot be paused,
+			// but it can be deleted.
+			if stoppable(t.Status) || t.Status == domain.StatusPostprocessing {
 				running = true
 				return nil
 			}
-			if opts.Files {
-				if err := s.removeFiles(ctx, t); err != nil {
-					return err
-				}
-			}
+			// The row goes first: when it cannot be deleted the task stays whole,
+			// with its files, instead of a task without its files.
 			if err := s.d.Store.Tasks().Delete(ctx, id); err != nil {
 				return fmt.Errorf("service: delete task: %w", err)
+			}
+			if opts.Files {
+				if err := s.removeFiles(ctx, t); err != nil {
+					// The task is gone; the files are left, and the log says where.
+					s.d.Logger.WarnContext(ctx, "files of a deleted task could not be removed", "task_id", id, "error", err)
+				}
 			}
 			if s.d.Runner != nil {
 				s.d.Runner.ReleaseProbe(id)
@@ -774,10 +801,48 @@ func (s *TaskService) removeFiles(ctx context.Context, t *domain.Task) error {
 	}
 	if err := removeFile(final); err != nil {
 		if errors.Is(err, errIsDir) {
+			// A multi-file torrent is a directory: its files go, one by one,
+			// and the directories left empty. Anything else in it is not ours.
+			if t.Resource != nil && len(t.Resource.Files) > 0 {
+				return s.removeTreeFiles(ctx, t, final)
+			}
 			s.d.Logger.WarnContext(ctx, "not removing directory of deleted task", "task_id", t.ID, "path", final)
 			return nil
 		}
 		return fmt.Errorf("service: delete task %q files: %w", t.ID, err)
+	}
+	return nil
+}
+
+// removeTreeFiles removes the files a multi-file task listed below root (its
+// directory), then the directories that are empty afterwards, root included.
+// Files that are not in the list, and directories that still hold something,
+// stay.
+func (s *TaskService) removeTreeFiles(ctx context.Context, t *domain.Task, root string) error {
+	dirs := map[string]struct{}{root: {}}
+	for _, f := range t.Resource.Files {
+		rel := filepath.Join(filepath.FromSlash(f.Path), f.Name)
+		if rel == "" || !filepath.IsLocal(rel) {
+			continue
+		}
+		p := filepath.Join(root, rel)
+		if err := removeFile(p); err != nil && !errors.Is(err, errIsDir) {
+			return fmt.Errorf("service: delete task %q files: %w", t.ID, err)
+		}
+		for d := filepath.Dir(p); d != root && strings.HasPrefix(d, root); d = filepath.Dir(d) {
+			dirs[d] = struct{}{}
+		}
+	}
+	// Deepest first, so a parent is empty by the time it is tried.
+	ordered := make([]string, 0, len(dirs))
+	for d := range dirs {
+		ordered = append(ordered, d)
+	}
+	slices.SortFunc(ordered, func(a, b string) int { return len(b) - len(a) })
+	for _, d := range ordered {
+		if err := os.Remove(d); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			s.d.Logger.DebugContext(ctx, "directory of deleted task not removed", "task_id", t.ID, "path", d, "error", err)
+		}
 	}
 	return nil
 }

@@ -21,8 +21,10 @@ var errIsDir = errors.New("service: path is a directory")
 // isBaseName reports whether name is a single, local path element on every
 // OS: no separators, not "." or "..", no volume name.
 func isBaseName(name string) bool {
-	return name != "" && filepath.IsLocal(name) && filepath.Base(name) == name &&
-		!strings.ContainsAny(name, `/\`)
+	// filepath.IsLocal accepts ".", which would make the download path the
+	// directory itself and its ".part" a sibling outside it.
+	return name != "" && name != "." && name != ".." && filepath.IsLocal(name) &&
+		filepath.Base(name) == name && !strings.ContainsAny(name, `/\`)
 }
 
 // taskPaths returns a task's final and partial file paths. ok is false

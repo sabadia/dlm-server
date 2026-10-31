@@ -60,8 +60,12 @@ type Download struct {
 
 	started    atomic.Bool
 	downloaded atomic.Int64
-	size       atomic.Int64
-	conns      atomic.Int32
+
+	// sameFileIgnoredRange is set when the server answered a range request
+	// with the whole, unchanged file: the download goes on sequentially.
+	sameFileIgnoredRange atomic.Bool
+	size                 atomic.Int64
+	conns                atomic.Int32
 
 	// Owned by the goroutine running Run.
 	client    *http.Client
@@ -171,7 +175,7 @@ func (d *Download) run(ctx context.Context) error {
 	if ranged {
 		d.verifyMirrors(ctx)
 		err = d.runRanged(ctx)
-		if err != nil && errors.Is(err, ErrRangeIgnored) && d.onMismatch() == settings.MismatchRestart && ctx.Err() == nil {
+		if err != nil && errors.Is(err, ErrRangeIgnored) && (d.onMismatch() == settings.MismatchRestart || d.sameFileIgnoredRange.Load()) && ctx.Err() == nil {
 			err = d.restartSequential(ctx)
 		}
 	} else {
@@ -491,6 +495,9 @@ func (d *Download) snapshotCheckpoint() (engine.Checkpoint, bool) {
 	if d.srcChanged {
 		s := d.src
 		cp.Source = &s
+		// Sent once; checkpoint() sets it again if the write fails. Left set, the
+		// whole task row would be rewritten at every checkpoint.
+		d.srcChanged = false
 	}
 	return cp, true
 }
@@ -507,6 +514,11 @@ func (d *Download) checkpoint(ctx context.Context) {
 	d.lastCkpt = d.e.env.Clock()
 	if err := d.spec.Checkpointer.Checkpoint(ctx, cp); err != nil {
 		d.log.WarnContext(ctx, "httpx: checkpoint failed", "error", err)
+		if cp.Source != nil {
+			d.mu.Lock()
+			d.srcChanged = true
+			d.mu.Unlock()
+		}
 	}
 }
 

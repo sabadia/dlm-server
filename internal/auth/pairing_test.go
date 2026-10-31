@@ -191,3 +191,23 @@ func TestPairingSameNameGetsANumber(t *testing.T) {
 		t.Errorf("names = %v", names)
 	}
 }
+
+func TestSweepRevokesATokenNobodyCameFor(t *testing.T) {
+	p, reg, clk, events := newPairings(t)
+	started, err := p.Start(t.Context(), PairingStart{Browser: "chrome"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Approve(t.Context(), started.ID); err != nil {
+		t.Fatal(err)
+	}
+	*events = nil
+	clk.advance(time.Hour) // nobody fetched the token in time
+	p.Sweep(t.Context())   // no request came in: the timer does it
+	if len(*events) != 1 || (*events)[0].Pairing.Status != PairingExpired {
+		t.Fatalf("events after the sweep = %+v", *events)
+	}
+	if list, err := reg.List(t.Context()); err != nil || len(list) != 0 {
+		t.Errorf("tokens after the sweep = %v (%v), want none", list, err)
+	}
+}

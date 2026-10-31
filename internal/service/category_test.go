@@ -11,6 +11,7 @@ import (
 
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/settings"
+	"github.com/sabadia/dlm-server/internal/storage"
 )
 
 func TestCategoryServiceCRUDAndMatch(t *testing.T) {
@@ -332,5 +333,95 @@ func TestDuplicateDetection(t *testing.T) {
 	})
 	if !errors.Is(out[0].Err, domain.ErrConflict) || out[1].Err != nil {
 		t.Errorf("batch = %v / %v", out[0].Err, out[1].Err)
+	}
+}
+
+// A partial file of another task (paused, say) is not shared: this download
+// takes another name instead of truncating it.
+func TestRunnerLeavesAnotherTasksPartialFileAlone(t *testing.T) {
+	srv := newFileServer(t, 16<<10, 0)
+	f := newFixture(t)
+	foreign := []byte("the first 6 bytes of another task")
+	if err := os.WriteFile(filepath.Join(f.dir, "data.bin.part"), foreign, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	task, err := domain.NewTask(domain.NewID(), time.Now(), domain.NewTaskParams{Source: domain.Source{CurrentURL: srv.URL + "/files/data.bin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.Tasks().Create(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.runner.Run(t.Context(), task.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := f.task(t, task.ID)
+	if got.Status != domain.StatusCompleted || got.Name != "data (1).bin" {
+		t.Fatalf("status %s name %q (%+v), want completed as \"data (1).bin\"", got.Status, got.Name, got.Error)
+	}
+	if b, err := os.ReadFile(filepath.Join(f.dir, "data.bin.part")); err != nil || string(b) != string(foreign) {
+		t.Errorf("the other task's part file was touched: %q (%v)", b, err)
+	}
+	sameContent(t, filepath.Join(f.dir, "data (1).bin"), srv.data)
+}
+
+func TestPathClaimsKeepTwoTasksApart(t *testing.T) {
+	var c pathClaims
+	release, ok := c.claim("/d/a.bin", "t1")
+	if !ok {
+		t.Fatal("the first claim failed")
+	}
+	if _, ok := c.claim("/d/a.bin", "t2"); ok {
+		t.Error("another task got a path that is in use")
+	}
+	if _, ok := c.claim("/d/a.bin", "t1"); !ok {
+		t.Error("a task could not claim its own path again")
+	}
+	release()
+	if _, ok := c.claim("/d/a.bin", "t2"); !ok {
+		t.Error("the path was not given back")
+	}
+}
+
+// A task interrupted while post-processing has its file in place and its
+// segments recorded; running it again must not stop at "destination exists".
+func TestRunnerFinishesATaskWhoseFileIsAlreadyInPlace(t *testing.T) {
+	srv := newFileServer(t, 16<<10, 0)
+	f := newFixture(t)
+	task, err := domain.NewTask(domain.NewID(), time.Now(), domain.NewTaskParams{Source: domain.Source{CurrentURL: srv.URL + "/files/data.bin"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.Tasks().Create(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.runner.Run(t.Context(), task.ID); err != nil {
+		t.Fatal(err)
+	}
+	done := f.task(t, task.ID)
+	if done.Status != domain.StatusCompleted {
+		t.Fatalf("first run: %s %+v", done.Status, done.Error)
+	}
+	// The daemon stopped during post-processing: the file is there, the task
+	// is queued again with its download record kept.
+	if err := f.store.Segments().Replace(context.Background(), task.ID, []domain.Segment{{Index: 0, Start: 0, End: done.Size, Done: done.Size}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.WithTx(context.Background(), func(tx storage.Store) error {
+		again, err := tx.Tasks().Get(context.Background(), task.ID)
+		if err != nil {
+			return err
+		}
+		again.Status, again.CompletedAt = domain.StatusQueued, nil
+		return tx.Tasks().Update(context.Background(), again)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.runner.Run(t.Context(), task.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := f.task(t, task.ID)
+	if got.Status != domain.StatusCompleted || got.Name != done.Name {
+		t.Errorf("second run: %s name %q (%+v), want completed as %q", got.Status, got.Name, got.Error, done.Name)
 	}
 }

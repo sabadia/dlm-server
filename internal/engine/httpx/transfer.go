@@ -135,9 +135,12 @@ func (d *Download) attachmentStream(ctx context.Context, ranged bool) *stream {
 		_ = pr.Close() // unusable probe body; a fresh request replaces it
 		return nil
 	}
-	body := resp.Body
-	wd := newWatchdog(d.e.opts.stallTimeout, func() { _ = body.Close() })
-	return d.newStream(ctx, resp, wd, limit, func() { _ = body.Close() })
+	// The response was made under a context of its own (it outlives the
+	// resolve call), so the run's ctx ends it here: a read blocked on the
+	// body must stop when the download is paused or the daemon stops.
+	stop := context.AfterFunc(ctx, func() { _ = pr.Close() })
+	wd := newWatchdog(d.e.opts.stallTimeout, func() { _ = pr.Close() })
+	return d.newStream(ctx, resp, wd, limit, func() { stop(); _ = pr.Close() })
 }
 
 // openRange requests [next, end) of the file. Request contexts derive from
@@ -227,7 +230,7 @@ func (d *Download) openRange(runCtx, ctx context.Context, next, end int64) (*str
 func (d *Download) rangeIgnored(reqCtx context.Context, resp *http.Response, wd *watchdog, stop func() bool, cancel context.CancelFunc) error {
 	err := engine.LinkExpired(fmt.Errorf(
 		"%w (status 200 to a range request): the file changed or the server stopped honouring ranges", ErrRangeIgnored))
-	if d.onMismatch() == settings.MismatchRestart && stop() {
+	if d.mayRestartSequential(resp) && stop() {
 		body := resp.Body
 		st := d.newStream(reqCtx, resp, wd, 0, func() { _ = body.Close(); cancel() })
 		d.mu.Lock()
@@ -245,6 +248,28 @@ func (d *Download) rangeIgnored(reqCtx context.Context, resp *http.Response, wd 
 	stop()
 	cancel()
 	return err
+}
+
+// mayRestartSequential reports whether a 200 answer to a range request leads
+// to a sequential download instead of a failure: the policy says restart, or
+// nothing was written yet and the answer describes the same file (its length
+// and strong ETag are the ones probed). Then the server simply does not honour
+// ranges although it said so, and an expired link is not what happened.
+func (d *Download) mayRestartSequential(resp *http.Response) bool {
+	if d.onMismatch() == settings.MismatchRestart {
+		return true
+	}
+	if d.downloaded.Load() != 0 || resp.ContentLength != d.res.Size {
+		return false
+	}
+	etag := d.spec.Source.Fingerprint.ETag
+	if etag != "" {
+		if got := strongETag(resp.Header.Get("ETag")); got != "" && got != etag {
+			return false
+		}
+	}
+	d.sameFileIgnoredRange.Store(true)
+	return true
 }
 
 // openFull requests the whole file without Range (sequential mode).

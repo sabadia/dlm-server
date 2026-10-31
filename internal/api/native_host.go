@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -85,8 +86,23 @@ func (s *Server) nativeHostInstaller(ctx context.Context) (*nativehost.Installer
 		scheme = "https"
 	}
 	return &nativehost.Installer{
-		Executable: exe, ConfigDir: s.cfg.Paths.ConfigDir, DataDir: s.cfg.Paths.ConfigDir, ServerURL: scheme + "://" + addr,
+		Executable: exe, ConfigDir: s.cfg.Paths.ConfigDir, DataDir: s.cfg.Paths.ConfigDir, ServerURL: scheme + "://" + dialableAddress(addr),
 	}, nil
+}
+
+// dialableAddress turns a listen address into one a client on this machine can
+// connect to: a wildcard host (":7777", "0.0.0.0:7777", "[::]:7777") means
+// "every interface", which is not an address to call.
+func dialableAddress(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
 }
 
 func parseBrowsers(names []string) ([]platform.Browser, error) {

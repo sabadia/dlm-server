@@ -183,6 +183,19 @@ func (r *recorder) Checkpoint(_ context.Context, cp engine.Checkpoint) error {
 	return nil
 }
 
+// lastSource is the newest source a checkpoint carried (a changed source is
+// sent once, with the first checkpoint after the change).
+func (r *recorder) lastSource() *domain.Source {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := len(r.cps) - 1; i >= 0; i-- {
+		if r.cps[i].Source != nil {
+			return r.cps[i].Source
+		}
+	}
+	return nil
+}
+
 func (r *recorder) last(t *testing.T) engine.Checkpoint {
 	t.Helper()
 	r.mu.Lock()
@@ -437,9 +450,8 @@ func TestRangeIgnoredOnMismatch(t *testing.T) {
 			t.Fatal(err)
 		}
 		h.checkFile()
-		cp := rec.last(t)
-		if cp.Source == nil || cp.Source.Fingerprint.ETag != `"v2"` {
-			t.Errorf("checkpoint source = %+v, want new etag", cp.Source)
+		if src := rec.lastSource(); src == nil || src.Fingerprint.ETag != `"v2"` {
+			t.Errorf("checkpoint source = %+v, want new etag", src)
 		}
 		if n := fs.count.Load(); n != 1 {
 			t.Errorf("%d requests, want 1 (the 200 response is streamed)", n)
@@ -802,4 +814,27 @@ func flush(w http.ResponseWriter) {
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// A server that says "Accept-Ranges: bytes" but answers every range request
+// with the whole, unchanged file is not an expired link: the download goes on
+// sequentially instead of failing under the default onMismatch=fail.
+func TestServerThatIgnoresRangesFallsBackToSequential(t *testing.T) {
+	fs := &fileServer{data: testData(1<<20, 7), etag: `"v1"`}
+	fs.hook = func(w http.ResponseWriter, r *http.Request, _ int, _ reqInfo) bool {
+		if r.Header.Get("Range") == "" {
+			return false
+		}
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("ETag", `"v1"`)
+		w.Header().Set("Content-Length", strconv.Itoa(len(fs.data)))
+		_, _ = w.Write(fs.data)
+		return true
+	}
+	h := newHarness(t, fs)
+	h.set.Refresh.OnMismatch = settings.Some(settings.MismatchFail)
+	if _, err := h.run(context.Background(), h.specNoProbe(nil)); err != nil {
+		t.Fatalf("the download failed: %v", err)
+	}
+	h.checkFile()
 }

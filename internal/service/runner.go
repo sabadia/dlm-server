@@ -123,6 +123,36 @@ type Runner struct {
 	// redownloads counts, by task ID, how often a download was repeated
 	// because its checksum did not match. It starts over with the daemon.
 	redownloads map[string]int
+	// claims holds the destination paths of the downloads that run, by path:
+	// two tasks with the same directory and name must not write one file.
+	claims pathClaims
+}
+
+// pathClaims is the set of destination paths in use, with the task using each.
+type pathClaims struct {
+	mu sync.Mutex
+	by map[string]string
+}
+
+// claim takes path for taskID and returns the function that gives it back; ok
+// is false when another task holds it.
+func (c *pathClaims) claim(path, taskID string) (release func(), ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if owner, taken := c.by[path]; taken && owner != taskID {
+		return nil, false
+	}
+	if c.by == nil {
+		c.by = make(map[string]string)
+	}
+	c.by[path] = taskID
+	return func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.by[path] == taskID {
+			delete(c.by, path)
+		}
+	}, true
 }
 
 // NewRunner creates a Runner.
@@ -334,14 +364,23 @@ func (r *Runner) download(ctx context.Context, task *domain.Task, eff settings.S
 		return fmt.Errorf("service: load engine state of %q: %w", task.ID, err)
 	}
 
-	if len(segs) == 0 && state == nil {
-		// A download that starts from nothing meets whatever is at its
-		// destination under the file-exists policy.
-		if err := r.applyFileExists(ctx, task, eff); err != nil {
-			_ = probe.Close()
-			return err
-		}
+	// A download that was finished when the daemon stopped (it was post-
+	// processing) has nothing left to fetch: its file is the result. Starting
+	// the engine would stop at "destination exists" and the task could never
+	// be retried.
+	if (len(segs) > 0 || state != nil) && finishedFile(task) {
+		_ = probe.Close()
+		return errExistingFile
 	}
+
+	// The destination is the task's alone while it runs; one that starts from
+	// nothing also meets whatever is at it under the file-exists policy.
+	release, err := r.claimDestination(ctx, task, eff, len(segs) == 0 && state == nil)
+	if err != nil {
+		_ = probe.Close()
+		return err
+	}
+	defer release()
 
 	var limiter engine.Limiter
 	if r.d.Limits != nil {
@@ -378,6 +417,45 @@ func (r *Runner) download(ctx context.Context, task *domain.Task, eff settings.S
 	stopProgress := r.publishProgress(task, dl)
 	defer stopProgress()
 	return dl.Run(ctx) //nolint:wrapcheck // engine errors are classified; kept intact
+}
+
+// claimDestination reserves the task's file for the length of the run and
+// returns the function that gives it back. A download that starts from nothing
+// (fresh) takes another name when a running task holds its path and applies
+// the file-exists policy to what is already there; a resumed one owns its
+// partial file and cannot move, so a clash is reported.
+func (r *Runner) claimDestination(ctx context.Context, task *domain.Task, eff settings.Settings, fresh bool) (func(), error) {
+	release := func() {}
+	for range maxRenameTries {
+		path := filepath.Join(task.Dir, task.Name)
+		next, ok := r.claims.claim(path, task.ID)
+		if !ok {
+			release()
+			if !fresh {
+				return func() {}, engine.Fatal(domain.ErrorCodeFileExists, fmt.Errorf("service: %q is being written by another task", path))
+			}
+			if err := r.renameTask(ctx, task); err != nil {
+				return func() {}, err
+			}
+			release = func() {}
+			continue
+		}
+		release()
+		release = next
+		if !fresh {
+			return release, nil
+		}
+		before := task.Name
+		if err := r.applyFileExists(ctx, task, eff); err != nil {
+			release()
+			return func() {}, err
+		}
+		if task.Name == before {
+			return release, nil
+		}
+	}
+	release()
+	return func() {}, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("service: no free name for %q in %q", task.Name, task.Dir))
 }
 
 // Running returns the download that is running for taskID, if any.

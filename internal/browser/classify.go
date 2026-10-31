@@ -109,7 +109,15 @@ func dispositionFilename(disposition string) string {
 	if err != nil {
 		return ""
 	}
-	return path.Base(strings.ReplaceAll(params["filename"], `\`, "/"))
+	name := strings.ReplaceAll(params["filename"], `\`, "/")
+	// path.Base("") is ".", which is no file name.
+	if name == "" || strings.HasSuffix(name, "/") {
+		return ""
+	}
+	if base := path.Base(name); base != "." && base != ".." && base != "/" {
+		return base
+	}
+	return ""
 }
 
 // rangeStartsAtZero reports whether a Content-Range value ("bytes 0-99/200")

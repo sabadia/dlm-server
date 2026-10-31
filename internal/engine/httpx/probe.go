@@ -30,12 +30,21 @@ type ProbeResult struct {
 	Resource domain.Resource
 	// Filename is the detected, sanitised file name.
 	Filename string
+
+	// cancel ends the context the open response belongs to; Close calls it.
+	cancel context.CancelFunc
 }
 
 // Close closes the response body. It is safe to call more than once and on
 // a nil result.
 func (r *ProbeResult) Close() error {
-	if r == nil || r.Response == nil || r.Response.Body == nil {
+	if r == nil {
+		return nil
+	}
+	if r.cancel != nil {
+		defer r.cancel()
+	}
+	if r.Response == nil || r.Response.Body == nil {
 		return nil
 	}
 	return r.Response.Body.Close() //nolint:wrapcheck // body close error needs no extra context

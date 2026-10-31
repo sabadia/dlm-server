@@ -111,8 +111,15 @@ func (s *RefreshService) Refresh(ctx context.Context, taskID string) (*domain.Ta
 	if err := refreshable(t); err != nil {
 		return nil, err
 	}
+	startStatus := t.Status
 	res, err := s.runChain(ctx, t, eff, domain.RefreshCauseManual, "", nil)
 	if err != nil {
+		// A manual refresh has no runner to settle the task: one that was
+		// waiting for a link goes back to waiting, not stuck in refreshing
+		// (which blocks another refresh and ignores resume).
+		if startStatus == domain.StatusAwaitingLink {
+			s.backToWaiting(ctx, t)
+		}
 		return nil, err
 	}
 	out, gerr := s.d.Store.Tasks().Get(ctx, taskID)
@@ -123,6 +130,22 @@ func (s *RefreshService) Refresh(ctx context.Context, taskID string) (*domain.Ta
 		return out, engine.LinkExpired(errors.New("service: no refresh strategy produced a usable link; see the refresh history"))
 	}
 	return out, nil
+}
+
+// backToWaiting returns a task that a cancelled or failed manual refresh left
+// in refreshing to awaiting_link. It works without ctx, which may be the
+// reason the refresh ended.
+func (s *RefreshService) backToWaiting(ctx context.Context, t *domain.Task) {
+	wctx := context.WithoutCancel(ctx)
+	err := s.mutate(wctx, t, func(fresh *domain.Task) error {
+		if fresh.Status != domain.StatusRefreshing {
+			return nil
+		}
+		return fresh.TransitionTo(domain.StatusAwaitingLink, s.d.now()) //nolint:wrapcheck // domain error
+	})
+	if err != nil {
+		s.d.Logger.WarnContext(wctx, "cannot return a task to awaiting_link", "task_id", t.ID, "error", err)
+	}
 }
 
 // Await puts a failed or awaiting_link task into the awaiting_link state to

@@ -192,7 +192,9 @@ func (s *Server) runStream(ctx context.Context, st *sseStream, filter events.Fil
 	if lastID != "" {
 		boot, seq, ok := parseEventID(lastID)
 		if ok && boot == s.bootID {
-			replay, cursor = true, seq
+			// A cursor ahead of the bus (a wrong id) would hide every live
+			// event until the counter caught up.
+			replay, cursor = true, min(seq, s.bus.LastID())
 		} else {
 			resetWhy = ResetReasonRestart
 			replay, cursor = true, s.bus.LastID()

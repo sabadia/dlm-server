@@ -177,10 +177,25 @@ func (e *Engine) Resolve(ctx context.Context, req engine.Request) (*engine.Probe
 	if err != nil {
 		return nil, engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("httpx: resolve: client: %w", err))
 	}
-	res, err := Probe(ctx, client, req.Source, req.Settings)
+	// The open response must outlive the call that made it: a link that can be
+	// used once is probed here and downloaded later, from a request of its
+	// own. It follows ctx while the probe is made, then lives until the probe
+	// is closed (used by a download, or expired in the resolve cache).
+	probeCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	stop := context.AfterFunc(ctx, cancel)
+	res, err := Probe(probeCtx, client, req.Source, req.Settings)
 	if err != nil {
+		stop()
+		cancel()
 		return nil, e.classifier.Classify(err)
 	}
+	if !stop() {
+		// ctx ended while the probe finished: nobody is waiting for it.
+		cancel()
+		_ = res.Close() // nothing is waiting for the result
+		return nil, e.classifier.Classify(ctx.Err())
+	}
+	res.cancel = cancel
 	p := &engine.Probe{Engine: EngineName, Source: res.Source, Resource: res.Resource, Suggested: res.Filename}
 	p.Attach(res)
 	return p, nil

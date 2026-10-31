@@ -40,6 +40,11 @@ func (r *Runner) applyFileExists(ctx context.Context, task *domain.Task, eff set
 	path := filepath.Join(task.Dir, task.Name)
 	fi, err := os.Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
+		// This download starts from nothing, so a partial file at its path
+		// belongs to another task (paused, say): sharing it would corrupt both.
+		if _, perr := os.Lstat(path + partSuffix); perr == nil {
+			return r.renameTask(ctx, task)
+		}
 		return nil
 	}
 	if err != nil {
@@ -102,6 +107,18 @@ func freeName(dir, name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("service: no free name for %q in %q", name, dir)
+}
+
+// finishedFile reports whether the task's file is complete in place: it is
+// there with the size the task has, and its partial file is gone.
+func finishedFile(task *domain.Task) bool {
+	path := filepath.Join(task.Dir, task.Name)
+	fi, err := os.Lstat(path)
+	if err != nil || !fi.Mode().IsRegular() || task.Size < 0 || fi.Size() != task.Size {
+		return false
+	}
+	_, err = os.Lstat(path + partSuffix)
+	return errors.Is(err, fs.ErrNotExist)
 }
 
 // markPresent records that the file at the destination is the result: the
