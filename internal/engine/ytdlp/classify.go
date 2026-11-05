@@ -24,6 +24,9 @@ func classifyFailure(stderr string, runErr error) error {
 	}
 	err := fmt.Errorf("ytdlp: %s", msg)
 	low := strings.ToLower(msg)
+	if strings.Contains(strings.ToLower(stderr), "javascript runtime") || strings.Contains(strings.ToLower(stderr), "challenge solving failed") {
+		err = fmt.Errorf("ytdlp: %s (this site needs a JavaScript runtime that DLM could not find: install deno, for example with `brew install deno`)", msg)
+	}
 	has := func(subs ...string) bool {
 		for _, s := range subs {
 			if strings.Contains(low, s) {

@@ -118,7 +118,7 @@ func (d *Download) run(ctx context.Context) error {
 	if err := os.MkdirAll(d.workDir, 0o755); err != nil { //nolint:gosec // beside the final file
 		return d.fileError("create work directory", err)
 	}
-	args := cs.args()
+	args := append(cs.args(), runtimeArgs(bin.Version)...)
 	if d.e.ff != nil {
 		if fb, err := d.e.ff.Locate(ctx); err == nil {
 			args = append(args, "--ffmpeg-location="+fb.Path)
@@ -145,6 +145,7 @@ func (d *Download) runProcess(ctx context.Context, bin string, args []string) (s
 	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // the user's or our own yt-dlp
 	// An interrupt lets yt-dlp keep its partial files; after the grace period
 	// it is killed.
+	cmd.Env = environ()
 	cmd.Cancel = func() error { return platform.InterruptProcess(cmd.Process) }
 	cmd.WaitDelay = interruptGrace
 	var stderr bytes.Buffer

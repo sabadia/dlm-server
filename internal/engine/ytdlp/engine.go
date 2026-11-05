@@ -137,10 +137,12 @@ func (e *Engine) Resolve(ctx context.Context, req engine.Request) (*engine.Probe
 		return nil, err
 	}
 	defer cs.cleanup()
-	args := append(cs.args(), "--dump-single-json", "--no-playlist", "--skip-download")
+	args := append(cs.args(), runtimeArgs(bin.Version)...)
+	args = append(args, "--dump-single-json", "--no-playlist", "--skip-download")
 	args = append(args, "--", strings.TrimSpace(req.Source.CurrentURL))
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, bin.Path, args...) //nolint:gosec // the user's or our own yt-dlp
+	cmd.Env = environ()
 	cmd.Stdout = &limitWriter{w: &stdout, n: maxInfoBytes}
 	cmd.Stderr = &limitWriter{w: &stderr, n: 1 << 20}
 	if err := cmd.Run(); err != nil {

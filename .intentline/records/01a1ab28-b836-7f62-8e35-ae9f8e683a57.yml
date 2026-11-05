@@ -1,0 +1,47 @@
+schema_version: 1
+id: 01a1ab28-b836-7f62-8e35-ae9f8e683a57
+status: draft
+created_at: '2026-11-05T10:02:14Z'
+updated_at: '2026-11-05T10:02:14Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: Segmented downloads were limited to one TCP flow on HTTP/2 hosts, and signed-in YouTube downloads failed because the app-launched daemon could not find a JavaScript runtime for yt-dlp
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/engine/ytdlp/classify.go
+  start_line: null
+  end_line: null
+- path: internal/engine/ytdlp/download.go
+  start_line: null
+  end_line: null
+- path: internal/engine/ytdlp/engine.go
+  start_line: null
+  end_line: null
+- path: internal/engine/ytdlp/runtime.go
+  start_line: null
+  end_line: null
+- path: internal/engine/ytdlp/runtime_test.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/factory.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/http1_test.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/rules.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
