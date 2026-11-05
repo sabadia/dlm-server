@@ -124,3 +124,19 @@ func TestStreamLogs(t *testing.T) {
 		t.Errorf("foreign id replayed %+v", r)
 	}
 }
+
+// A client adds a record the moment it has the stream's headers. It must arrive: the
+// stream's starting point is taken before it subscribes, not after the headers are out.
+func TestLogStreamDeliversARecordAddedRightAfterOpening(t *testing.T) {
+	ring := logging.NewRing(50)
+	ts := startHTTP(t, newLogsServer(t, ring).Handler())
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	for i := range 100 {
+		st := openStreamAt(ctx, t, ts.URL, "/v1/logs/stream", "", nil)
+		ring.Add(logging.Record{Level: "info", Message: "now", Time: time.Now()})
+		if r := logFrame(t, st.next(t)); r.Message != "now" {
+			t.Fatalf("round %d: first live record = %+v", i, r)
+		}
+	}
+}
