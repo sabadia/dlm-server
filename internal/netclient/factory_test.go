@@ -17,10 +17,18 @@ import (
 	"github.com/sabadia/dlm-server/internal/settings"
 )
 
+// unwrapCaller returns the transport under the caller layer every client has.
+func unwrapCaller(rt http.RoundTripper) http.RoundTripper {
+	if ct, ok := rt.(*callerTransport); ok {
+		return ct.next
+	}
+	return rt
+}
+
 // baseOf returns the cached RoundTripper behind a client.
 func baseOf(t *testing.T, c *http.Client) http.RoundTripper {
 	t.Helper()
-	ht, ok := c.Transport.(*headerTransport)
+	ht, ok := unwrapCaller(c.Transport).(*headerTransport)
 	if !ok {
 		t.Fatalf("Transport is %T, want *headerTransport", c.Transport)
 	}
@@ -82,7 +90,7 @@ func TestTransportReuse(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			if ht, ok := c.Transport.(*headerTransport); ok {
+			if ht, ok := unwrapCaller(c.Transport).(*headerTransport); ok {
 				got[i] = ht.base
 			}
 		})

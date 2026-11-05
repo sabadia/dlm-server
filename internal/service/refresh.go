@@ -91,6 +91,7 @@ func (s *RefreshService) HandleExpired(ctx context.Context, taskID string, cause
 	if err != nil {
 		return err
 	}
+	ctx = taskContext(ctx, t)
 	if !eff.Settings.Refresh.Auto.OrElse(true) {
 		return ErrRefreshDisabled
 	}
@@ -108,6 +109,7 @@ func (s *RefreshService) Refresh(ctx context.Context, taskID string) (*domain.Ta
 	if err != nil {
 		return nil, err
 	}
+	ctx = taskContext(ctx, t)
 	if err := refreshable(t); err != nil {
 		return nil, err
 	}
@@ -158,6 +160,7 @@ func (s *RefreshService) Await(ctx context.Context, taskID string) (*domain.Task
 	if err != nil {
 		return nil, err
 	}
+	ctx = taskContext(ctx, t)
 	if t.Status != domain.StatusError && t.Status != domain.StatusAwaitingLink {
 		return nil, domain.ConflictCode("task.invalid_state", map[string]string{"taskId": taskID, "status": string(t.Status), "operation": "await_link"}, "service: task %q is %s; only a failed or awaiting_link task can wait for a new link", taskID, t.Status)
 	}
@@ -177,6 +180,7 @@ func (s *RefreshService) SetSource(ctx context.Context, taskID string, in SetSou
 	if err != nil {
 		return nil, err
 	}
+	ctx = taskContext(ctx, t)
 	if err := refreshable(t); err != nil {
 		return nil, err
 	}
@@ -226,6 +230,7 @@ func (s *RefreshService) AttachCapture(ctx context.Context, src domain.Source) (
 		if err != nil || t.Status != domain.StatusAwaitingLink {
 			continue // deleted or settled meanwhile
 		}
+		ctx := taskContext(ctx, t)
 		policy := eff.Settings.Refresh.OnMismatch.OrElse(settings.MismatchFail)
 		if policy == settings.MismatchAsk {
 			policy = settings.MismatchFail // a capture is not a decision; never discard data unasked
@@ -314,6 +319,7 @@ func (s *RefreshService) expireWait(ctx context.Context, w *domain.RefreshAttemp
 		}
 		return err
 	}
+	ctx = taskContext(ctx, t)
 	if t.Status != domain.StatusAwaitingLink {
 		return nil
 	}

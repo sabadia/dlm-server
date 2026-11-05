@@ -1,0 +1,80 @@
+schema_version: 1
+id: 01a1aadb-919d-7636-8c5f-dfffa4eef246
+status: draft
+created_at: '2026-11-05T08:37:58Z'
+updated_at: '2026-11-05T08:37:58Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: 'Close the two review blockers: task-only cookies are sent only with that task''s requests (not by URL for every request to the site), and work an extension token started cannot connect to the machine of the daemon, checked at connect time for every request and redirect hop'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: docs/API.md
+  start_line: null
+  end_line: null
+- path: internal/api/middleware.go
+  start_line: null
+  end_line: null
+- path: internal/callctx/callctx.go
+  start_line: null
+  end_line: null
+- path: internal/callctx/callctx_test.go
+  start_line: null
+  end_line: null
+- path: internal/cookies/store.go
+  start_line: null
+  end_line: null
+- path: internal/cookies/taskcookies_test.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/classify.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/caller.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/caller_test.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/factory.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/factory_test.go
+  start_line: null
+  end_line: null
+- path: internal/netclient/proxy.go
+  start_line: null
+  end_line: null
+- path: internal/service/capture_test.go
+  start_line: null
+  end_line: null
+- path: internal/service/origin.go
+  start_line: null
+  end_line: null
+- path: internal/service/refresh.go
+  start_line: null
+  end_line: null
+- path: internal/service/runner.go
+  start_line: null
+  end_line: null
+- path: internal/service/task.go
+  start_line: null
+  end_line: null
+- path: internal/service/task_test.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

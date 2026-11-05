@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sabadia/dlm-server/internal/callctx"
+
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/storage"
 )
@@ -204,8 +206,38 @@ func (s *Store) Run(ctx context.Context, interval time.Duration) error {
 // ForURL returns the unpartitioned, unexpired cookies that a request to u
 // would carry, in RFC 6265 order (longest path first, then oldest first),
 // with their values decrypted. A cookie that cannot be decrypted is skipped
-// and logged.
+// and logged. A task's own cookies are not among them: they belong to that
+// download, see ForTask.
 func (s *Store) ForURL(ctx context.Context, u *url.URL) ([]*domain.Cookie, error) {
+	return s.matching(ctx, u, "")
+}
+
+// ForTask returns the cookies kept for taskID only that a request to u would
+// carry, in the same order. They are not sent for any other task or request.
+func (s *Store) ForTask(ctx context.Context, taskID string, u *url.URL) ([]*domain.Cookie, error) {
+	if taskID == "" {
+		return nil, nil
+	}
+	return s.matching(ctx, u, TaskPartition(taskID))
+}
+
+// TaskCookies is ForTask for a transport: name and value only.
+func (s *Store) TaskCookies(ctx context.Context, taskID string, u *url.URL) []*http.Cookie {
+	cs, err := s.ForTask(ctx, taskID, u)
+	if err != nil {
+		s.log.Warn("cookies: cannot read the cookies of a task", "task_id", taskID, "host", u.Hostname(), "error", err)
+		return nil
+	}
+	out := make([]*http.Cookie, len(cs))
+	for i, c := range cs {
+		out[i] = &http.Cookie{Name: c.Name, Value: c.Value} //nolint:gosec // request-side cookie: only name and value are sent
+	}
+	return out
+}
+
+// matching lists the cookies a request to u would carry among those stored
+// under partition ("" for the shared jar).
+func (s *Store) matching(ctx context.Context, u *url.URL, partition string) ([]*domain.Cookie, error) {
 	now := s.now()
 	var matched []*storage.CookieRecord
 	for _, d := range candidateDomains(u.Hostname()) {
@@ -214,17 +246,16 @@ func (s *Store) ForURL(ctx context.Context, u *url.URL) ([]*domain.Cookie, error
 			return nil, fmt.Errorf("cookies: list: %w", err)
 		}
 		for _, r := range recs {
-			if r.PartitionKey != "" && !isTaskPartition(r.PartitionKey) {
+			if r.PartitionKey != partition {
 				continue
 			}
 			m := metadata(r)
-			m.PartitionKey = "" // a task's cookies are sent like ordinary ones
+			m.PartitionKey = "" // the partition was chosen above; the match is on domain, path and security
 			if m.MatchesRequest(u, "", now) {
 				matched = append(matched, r)
 			}
 		}
 	}
-	matched = preferTaskCookies(matched)
 	slices.SortStableFunc(matched, func(a, b *storage.CookieRecord) int {
 		if len(a.Path) != len(b.Path) {
 			return len(b.Path) - len(a.Path)
@@ -243,30 +274,6 @@ func (s *Store) ForURL(ctx context.Context, u *url.URL) ([]*domain.Cookie, error
 	return out, nil
 }
 
-// preferTaskCookies drops a stored cookie when a task's cookie has the same
-// domain, name and path: what the extension captured for a download wins over
-// an older value in the shared jar.
-func preferTaskCookies(rs []*storage.CookieRecord) []*storage.CookieRecord {
-	type key struct{ domain, name, path string }
-	task := map[key]bool{}
-	for _, r := range rs {
-		if isTaskPartition(r.PartitionKey) {
-			task[key{r.Domain, r.Name, r.Path}] = true
-		}
-	}
-	if len(task) == 0 {
-		return rs
-	}
-	out := rs[:0:0]
-	for _, r := range rs {
-		if !isTaskPartition(r.PartitionKey) && task[key{r.Domain, r.Name, r.Path}] {
-			continue
-		}
-		out = append(out, r)
-	}
-	return out
-}
-
 // ForSite returns the unexpired cookies of a registrable domain and of its
 // subdomains, values decrypted, for a browser to load. A cookie that cannot
 // be decrypted is skipped and logged.
@@ -280,9 +287,14 @@ func (s *Store) ForSite(ctx context.Context, site string) ([]*domain.Cookie, err
 		return nil, fmt.Errorf("cookies: list: %w", err)
 	}
 	now := s.now()
+	own := callctx.From(ctx).TaskID
 	var out []*domain.Cookie
 	for _, r := range recs {
 		if r.Domain != site && !strings.HasSuffix(r.Domain, "."+site) {
+			continue
+		}
+		// The cookies of another task are not for this browser.
+		if isTaskPartition(r.PartitionKey) && r.PartitionKey != TaskPartition(own) {
 			continue
 		}
 		if metadata(r).IsExpired(now) {

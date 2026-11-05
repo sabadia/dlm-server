@@ -226,6 +226,9 @@ func (r *Runner) Run(ctx context.Context, taskID string) error {
 	if err != nil || !started {
 		return err
 	}
+	// Everything the run requests is for this task: its cookies, and the limits
+	// of whoever started it.
+	ctx = taskContext(ctx, task)
 	runErr := r.download(ctx, task, eff)
 	if errors.Is(runErr, errExistingFile) {
 		// The file is already there (policy skip, or resume with the same

@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sabadia/dlm-server/internal/callctx"
+
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/platform"
@@ -75,6 +77,8 @@ func (c Classifier) Classify(err error) error {
 		return c.classifyStatus(se, err)
 	}
 	switch {
+	case errors.Is(err, callctx.ErrLocalAddress):
+		return engine.Fatal(domain.ErrorCodeFatal, err) // refused on purpose: asking again changes nothing
 	case platform.IsDiskFull(err):
 		return engine.Fatal(domain.ErrorCodeDiskFull, err)
 	case isCertificateError(err):

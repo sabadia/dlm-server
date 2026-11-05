@@ -10,9 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/sabadia/dlm-server/internal/callctx"
 
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
@@ -854,5 +857,67 @@ func TestTaskServiceDeleteFilesOfAMultiFileTorrent(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "mine.txt")); err != nil {
 		t.Errorf("a file the torrent did not list was removed: %v", err)
+	}
+}
+
+func TestStampOriginCannotBeChosenByARestrictedCaller(t *testing.T) {
+	ordinary := t.Context()
+	restricted := callctx.With(t.Context(), callctx.Caller{Restricted: true})
+
+	if got := stampOrigin(ordinary, map[string]string{"k": "v"}); got[OriginLabel] != "" || got["k"] != "v" {
+		t.Errorf("an ordinary caller's labels = %v", got)
+	}
+	got := stampOrigin(restricted, map[string]string{OriginLabel: "something else", "k": "v"})
+	if got[OriginLabel] != OriginExtension || got["k"] != "v" {
+		t.Errorf("a restricted caller's labels = %v", got)
+	}
+	in := map[string]string{"k": "v"}
+	stampOrigin(restricted, in)
+	if _, changed := in[OriginLabel]; changed {
+		t.Error("the caller's map was changed")
+	}
+	task := &domain.Task{ID: "t1", Labels: got}
+	if c := callctx.From(taskContext(ordinary, task)); c.TaskID != "t1" || !c.Restricted {
+		t.Errorf("task context = %+v", c)
+	}
+}
+
+// What an extension token starts may not reach the machine of the daemon,
+// neither when its link is looked at nor when it runs later (the label stays).
+func TestExtensionWorkCannotConnectToTheLocalMachine(t *testing.T) {
+	f := newSvcFixture(t)
+	srv := newFileServer(t, 64<<10, 0)
+
+	_, err := f.tasks.Resolve(callctx.With(t.Context(), callctx.Caller{Restricted: true}),
+		ResolveInput{Source: domain.Source{CurrentURL: srv.URL + "/files/a.bin"}})
+	if err == nil || !strings.Contains(err.Error(), "machine of the daemon") {
+		t.Fatalf("a restricted resolve reached the local server: %v", err)
+	}
+
+	// The same link, for a task that an extension created earlier (it has the
+	// label) and that runs after a restart.
+	task := f.create(t, CreateTaskInput{
+		Source: domain.Source{CurrentURL: srv.URL + "/files/b.bin"}, Paused: true,
+		Labels: map[string]string{OriginLabel: OriginExtension},
+	})
+	f.tasks.Resume(t.Context(), []string{task.ID})
+	if err := f.sched.runner.Run(t.Context(), task.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := f.get(t, task.ID)
+	if got.Status != domain.StatusError {
+		t.Fatalf("status = %s (%+v), want error", got.Status, got.Error)
+	}
+	if got.Error == nil || !strings.Contains(got.Error.Message, "machine of the daemon") {
+		t.Errorf("task error = %+v, want the refusal", got.Error)
+	}
+
+	// An ordinary task of the same link downloads.
+	ok := f.create(t, CreateTaskInput{Source: domain.Source{CurrentURL: srv.URL + "/files/c.bin"}})
+	if err := f.sched.runner.Run(t.Context(), ok.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.get(t, ok.ID); got.Status != domain.StatusCompleted {
+		t.Errorf("an ordinary task: %s (%+v)", got.Status, got.Error)
 	}
 }
