@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sabadia/dlm-server/internal/callctx"
+
 	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/net/proxy"
 
@@ -49,6 +51,23 @@ func (f *Factory) configureProxy(t *http.Transport, p settings.Proxy) error {
 		return fmt.Errorf("%w: unknown mode %q", ErrInvalidProxy, p.Mode)
 	}
 	return nil
+}
+
+// proxyChooser returns the function that picks the proxy for a request under p,
+// or nil when p never uses one. It matches what configureProxy installs.
+func (f *Factory) proxyChooser(p settings.Proxy) func(*http.Request) (*url.URL, error) {
+	switch p.Mode {
+	case settings.ProxySystem:
+		return f.system.proxy
+	case settings.ProxyCustom:
+		u, err := parseProxyURL(p.URL)
+		if err != nil {
+			return nil
+		}
+		return http.ProxyURL(u)
+	default:
+		return nil
+	}
 }
 
 // parseProxyURL validates a custom proxy URL. Errors never include the URL
@@ -120,6 +139,7 @@ func (f *Factory) socksLocalDNS(u *url.URL) (func(ctx context.Context, network, 
 	}
 	resolver := f.opts.Resolver
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		callctx.MarkProxied(ctx) // the connection is to the SOCKS server
 		h, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, fmt.Errorf("netclient: socks5 dial %q: %w", addr, err)

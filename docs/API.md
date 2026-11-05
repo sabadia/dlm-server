@@ -310,7 +310,7 @@ seeding rules (so no post-action that runs a program, no proxy, no `downloadDir`
 (or the `dir` query of `POST /v1/tasks/torrent`) is outside the download directory and
 `server.fs_roots`; or when a link, mirror or media candidate points at the daemon's own machine
 (`localhost`, loopback and link-local addresses such as 169.254.169.254, by address or by name;
-addresses of the local network are allowed). A batch is capped at 200 tasks after patterns are
+addresses of the local network are allowed). The task is marked with the label `dlm.origin=extension`, and the same rule is applied again at the moment of connecting, for every request the task makes later and each hop of a redirect (a name that resolves to such an address, or changes to one, is refused too; a connection through a configured proxy is not checked, the proxy makes the real one). The cookies a capture carries (`cookieScope: task`) are sent with that download's requests only, never with another request to the site, and win over a cookie of the same name for that download. A batch is capped at 200 tasks after patterns are
 expanded (10000 for other tokens, 422 `batch.too_large`). Read and extension tokens get tasks
 without the captured request headers and body, `/v1/settings` and effective settings with proxy
 credentials masked and the global `headers` left out, and no `pairing.requested` events.

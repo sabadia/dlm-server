@@ -9,9 +9,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/sabadia/dlm-server/internal/callctx"
 
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/platform"
@@ -82,6 +85,9 @@ type Options struct {
 	// Credentials, when set, supplies the logins that answer HTTP Basic and
 	// Digest challenges.
 	Credentials CredentialSource
+	// TaskCookies, when set, supplies the cookies kept for one task, which are
+	// sent with that task's requests only.
+	TaskCookies TaskCookieSource
 
 	DialTimeout           time.Duration
 	TLSHandshakeTimeout   time.Duration
@@ -156,9 +162,23 @@ func New(opts Options) *Factory {
 		opts.Clock = time.Now
 	}
 	dial := opts.DialContext
+	var guarded func(ctx context.Context, network, addr string) (net.Conn, error)
 	if dial == nil {
 		d := &net.Dialer{Timeout: opts.DialTimeout, KeepAlive: 30 * time.Second}
 		dial = d.DialContext
+		g := &net.Dialer{Timeout: opts.DialTimeout, KeepAlive: 30 * time.Second, Control: refuseLocal}
+		guarded = g.DialContext
+	}
+	if guarded != nil {
+		plain := dial
+		// Work that a browser extension started may not connect to this machine.
+		// A connection to a proxy is exempt: the proxy makes the real one.
+		dial = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if callctx.From(ctx).Restricted && !callctx.Proxied(ctx) {
+				return guarded(ctx, network, addr)
+			}
+			return plain(ctx, network, addr)
+		}
 	}
 	f := &Factory{
 		opts:  opts,
@@ -203,6 +223,17 @@ func (f *Factory) Client(s settings.Settings) (*http.Client, error) {
 	var out http.RoundTripper = newHeaderTransport(rt, s.UserAgent.OrElse(settings.DefaultUserAgent), s.Headers.Value(), f.log)
 	if f.opts.Credentials != nil {
 		out = newAuthTransport(out, f.opts.Credentials)
+	}
+	out = &callerTransport{
+		next: out, cookies: f.opts.TaskCookies, resolver: f.opts.Resolver,
+		proxied: func(r *http.Request) bool {
+			choose := f.proxyChooser(s.ProxyFor(r.URL.Hostname()))
+			if choose == nil {
+				return false
+			}
+			u, _ := choose(r)
+			return u != nil
+		},
 	}
 	return &http.Client{
 		Transport:     out,
@@ -296,6 +327,17 @@ func (f *Factory) build(cfg TransportConfig) (*cacheEntry, error) {
 
 	if err := f.configureProxy(t, cfg.Proxy); err != nil {
 		return nil, err
+	}
+	if choose := t.Proxy; choose != nil {
+		// Note a request that goes through a proxy: the connection about to be
+		// dialled is to the proxy.
+		t.Proxy = func(r *http.Request) (*url.URL, error) {
+			u, err := choose(r)
+			if u != nil {
+				callctx.MarkProxied(r.Context())
+			}
+			return u, err
+		}
 	}
 
 	entry := &cacheEntry{key: cfg, transport: t, rt: t}

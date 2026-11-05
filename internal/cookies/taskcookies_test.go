@@ -33,10 +33,16 @@ func TestTaskCookiesAreScopedAndCapped(t *testing.T) {
 		}
 	}
 
-	// Sent with requests, but never listed.
-	got, err := f.store.ForURL(t.Context(), mustURL(t, "https://example.com/"))
+	// Sent with that task's requests, never with any other, and never listed.
+	got, err := f.store.ForTask(t.Context(), "t1", mustURL(t, "https://example.com/"))
 	if err != nil || len(got) != 2 {
-		t.Fatalf("ForURL = %+v, %v", got, err)
+		t.Fatalf("ForTask = %+v, %v", got, err)
+	}
+	if shared, _ := f.store.ForURL(t.Context(), mustURL(t, "https://example.com/")); len(shared) != 0 {
+		t.Errorf("the shared jar serves the task's cookies: %+v", shared)
+	}
+	if other, _ := f.store.ForTask(t.Context(), "t9", mustURL(t, "https://example.com/")); len(other) != 0 {
+		t.Errorf("another task got the cookies: %+v", other)
 	}
 	if l, _ := f.store.List(t.Context(), storage.CookieFilter{}); len(l) != 0 {
 		t.Errorf("List shows the task's cookies: %+v", l)
@@ -52,7 +58,7 @@ func TestTaskCookiesAreScopedAndCapped(t *testing.T) {
 	if n, err := f.store.DeleteTask(t.Context(), "t1"); err != nil || n != 2 {
 		t.Fatalf("DeleteTask(t1) = %d, %v", n, err)
 	}
-	if got, _ := f.store.ForURL(t.Context(), mustURL(t, "https://example.com/")); len(got) != 1 || got[0].Name != "c" {
+	if got, _ := f.store.ForTask(t.Context(), "t2", mustURL(t, "https://example.com/")); len(got) != 1 || got[0].Name != "c" {
 		t.Errorf("after deleting t1: %+v", got)
 	}
 
@@ -66,7 +72,9 @@ func TestTaskCookiesAreScopedAndCapped(t *testing.T) {
 	}
 }
 
-func TestTaskCookieBeatsTheUsersCookieOfTheSameName(t *testing.T) {
+// What a download captured is for that download: the user's own cookie of the
+// same name stays what every other request of the site sends.
+func TestTaskCookieDoesNotShadowTheUsersCookieForOtherRequests(t *testing.T) {
 	f := newFixture(t)
 	if err := f.store.Put(t.Context(), &domain.Cookie{Domain: "example.com", Name: "sid", Value: "mine", Path: "/"}); err != nil {
 		t.Fatal(err)
@@ -75,8 +83,12 @@ func TestTaskCookieBeatsTheUsersCookieOfTheSameName(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := f.store.ForURL(t.Context(), mustURL(t, "https://example.com/"))
-	if len(got) != 1 || got[0].Value != "captured" {
-		t.Fatalf("ForURL = %+v", got)
+	if len(got) != 1 || got[0].Value != "mine" {
+		t.Fatalf("ForURL = %+v, want the user's cookie only", got)
+	}
+	mine, _ := f.store.ForTask(t.Context(), "t1", mustURL(t, "https://example.com/"))
+	if len(mine) != 1 || mine[0].Value != "captured" {
+		t.Fatalf("ForTask = %+v", mine)
 	}
 	// The user's own cookie was not replaced.
 	l, _ := f.store.List(t.Context(), storage.CookieFilter{})

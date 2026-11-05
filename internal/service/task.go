@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sabadia/dlm-server/internal/callctx"
+
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/events"
@@ -177,6 +179,12 @@ func (s *TaskService) Resolve(ctx context.Context, in ResolveInput) (*ResolveRes
 // supported by an engine. Invalid input matches domain.ErrInvalidArgument;
 // an unknown queue matches domain.ErrNotFound.
 func (s *TaskService) Create(ctx context.Context, in CreateTaskInput) (*domain.Task, error) {
+	// Its probe, and everything after, is work for this task: its own cookies,
+	// and the limits of whoever started it.
+	in.Labels = stampOrigin(ctx, in.Labels)
+	if in.ID != "" {
+		ctx = callctx.With(ctx, callctx.Caller{TaskID: in.ID})
+	}
 	if err := resolveQueueRef(ctx, s.d.Store, &in.QueueID); err != nil {
 		return nil, err
 	}

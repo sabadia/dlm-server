@@ -10,8 +10,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"time"
+
+	"github.com/sabadia/dlm-server/internal/callctx"
+	"github.com/sabadia/dlm-server/internal/domain"
 
 	"golang.org/x/sync/errgroup"
 
@@ -119,7 +123,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	jar := cookies.NewStore(store.Cookies(), cookieCipher, cookies.Options{Logger: log})
 	// Stored logins answer the Basic/Digest challenges of every client.
 	credentials := service.NewCredentialService(service.Deps{Store: store, Logger: log, Bus: bus}, cookieCipher)
-	netOpts := netclient.Options{Logger: log, CookieJar: jar, Credentials: credentials}
+	netOpts := netclient.Options{Logger: log, CookieJar: jar, TaskCookies: jar, Credentials: credentials}
 	if cfg.HTTP.TLSImpersonation {
 		netOpts.Fallback = netclient.NewImpersonation(netclient.ImpersonationOptions{Logger: log, TTL: cfg.HTTP.ImpersonationTTL})
 	}
@@ -174,7 +178,18 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	ytdlpLocator := ytdlp.NewLocator(ytdlp.Options{
 		Path: cfg.Ytdlp.Path, CacheDir: cfg.Paths.CacheDir, AutoDownload: cfg.Ytdlp.AutoDownload, Logger: log,
 	})
-	list = append(list, ytdlpengine.New(env, ytdlpLocator, ffmpegLocator, ytdlpengine.WithCookies(jar.ForURL)))
+	list = append(list, ytdlpengine.New(env, ytdlpLocator, ffmpegLocator, ytdlpengine.WithCookies(func(ctx context.Context, u *url.URL) ([]*domain.Cookie, error) {
+		// The site's cookies, and the ones kept for this download alone.
+		shared, err := jar.ForURL(ctx, u)
+		if err != nil {
+			return nil, err
+		}
+		own, err := jar.ForTask(ctx, callctx.From(ctx).TaskID, u)
+		if err != nil {
+			return nil, err
+		}
+		return mergeTaskCookies(shared, own), nil
+	})))
 	list = append(list, httpx.New(env))
 	engines, err := engine.NewRegistry(list...)
 	if err != nil {
@@ -471,4 +486,23 @@ func publishPairing(bus *events.Bus, e auth.PairingEvent) {
 		return
 	}
 	bus.Publish(events.Event{Type: events.TypePairingResolved, Data: events.PairingResolvedData{ID: p.ID, Status: string(p.Status), TokenID: p.TokenID}})
+}
+
+// mergeTaskCookies is the cookies of a download for a request: its own first,
+// and of the shared ones only those whose name it does not set.
+func mergeTaskCookies(shared, own []*domain.Cookie) []*domain.Cookie {
+	if len(own) == 0 {
+		return shared
+	}
+	taken := make(map[string]struct{}, len(own))
+	out := append([]*domain.Cookie(nil), own...)
+	for _, c := range own {
+		taken[c.Domain+"\x00"+c.Name+"\x00"+c.Path] = struct{}{}
+	}
+	for _, c := range shared {
+		if _, dup := taken[c.Domain+"\x00"+c.Name+"\x00"+c.Path]; !dup {
+			out = append(out, c)
+		}
+	}
+	return out
 }

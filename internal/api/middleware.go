@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sabadia/dlm-server/internal/callctx"
+
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/sabadia/dlm-server/internal/auth"
@@ -186,6 +188,11 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, principalKey{}, p)
 		}
 		ctx = context.WithValue(ctx, localKey{}, isLoopbackRemote(r.RemoteAddr))
+		if authed && p.Scope == auth.ScopeExtension {
+			// What an extension token starts is held to its limits all the way
+			// down: no connection to this machine, and the task is marked so.
+			ctx = callctx.With(ctx, callctx.Caller{Restricted: true})
+		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -287,11 +287,14 @@ func TestCaptureTaskCookiesLiveAndDieWithTheTask(t *testing.T) {
 		t.Fatalf("import = %+v", res.Cookies)
 	}
 
-	// The download carries the captured value; the user's cookie is untouched and the
-	// cookie list does not show the task's.
-	got, _ := jar.ForURL(t.Context(), mustParse(t, "https://example.com/x"))
+	// The download carries the captured value and every other request the
+	// user's own; the cookie list does not show the task's.
+	got, _ := jar.ForTask(t.Context(), res.Task.ID, mustParse(t, "https://example.com/x"))
 	if len(got) != 1 || got[0].Value != "captured" {
-		t.Fatalf("cookies for the request = %+v", got)
+		t.Fatalf("cookies for the download = %+v", got)
+	}
+	if other, _ := jar.ForURL(t.Context(), mustParse(t, "https://example.com/x")); len(other) != 1 || other[0].Value != "mine" {
+		t.Fatalf("cookies for any other request = %+v", other)
 	}
 	listed, _ := jar.List(t.Context(), storage.CookieFilter{})
 	if len(listed) != 1 || listed[0].Value != "mine" {
@@ -305,8 +308,10 @@ func TestCaptureTaskCookiesLiveAndDieWithTheTask(t *testing.T) {
 	if n, err := jar.DeleteTask(t.Context(), res.Task.ID); err != nil || n != 1 {
 		t.Fatalf("DeleteTask = %d, %v", n, err)
 	}
-	got, _ = jar.ForURL(t.Context(), mustParse(t, "https://example.com/x"))
-	if len(got) != 1 || got[0].Value != "mine" {
+	if got, _ = jar.ForTask(t.Context(), res.Task.ID, mustParse(t, "https://example.com/x")); len(got) != 0 {
+		t.Errorf("the task's cookies outlived it: %+v", got)
+	}
+	if got, _ = jar.ForURL(t.Context(), mustParse(t, "https://example.com/x")); len(got) != 1 || got[0].Value != "mine" {
 		t.Errorf("after the task: %+v", got)
 	}
 	_ = f
