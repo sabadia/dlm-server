@@ -210,6 +210,7 @@ the name in `dlm openapi`, where the full request and response schemas are.
 | GET | `/v1/tasks/{id}/segments` | `list-task-segments` | List a task's segments |
 | GET | `/v1/tasks/{id}/settings/effective` | `get-task-effective-settings` | Get a task's effective settings |
 | PATCH | `/v1/tasks/{id}/source` | `update-task-source` | Set a task's link |
+| POST | `/v1/tasks/{id}/stop-seeding` | `stop-seeding` | Stop seeding a torrent |
 | GET | `/v1/tasks/{id}/torrent` | `get-task-torrent` | Describe a torrent task |
 
 ## webhooks

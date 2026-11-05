@@ -57,6 +57,10 @@ type Settings struct {
 	FilenameTemplate Optional[string] `json:"filenameTemplate,omitzero"`
 	// MaxConnections is the maximum number of parallel connections per task.
 	MaxConnections Optional[int] `json:"maxConnections,omitzero"`
+	// MaxConnectionsPerHost caps the requests that all HLS and DASH downloads
+	// together have in flight to one host, so that many downloads from one
+	// site do not exhaust what it allows; 0 means no cap.
+	MaxConnectionsPerHost Optional[int] `json:"maxConnectionsPerHost,omitzero"`
 	// MaxConcurrentDownloads is the number of tasks a queue runs at once.
 	// At the global level it is the default for queues.
 	MaxConcurrentDownloads Optional[int] `json:"maxConcurrentDownloads,omitzero" levels:"global,queue"`
@@ -122,6 +126,12 @@ type RetrySettings struct {
 	InitialBackoff    Optional[Duration] `json:"initialBackoff,omitzero"`
 	MaxBackoff        Optional[Duration] `json:"maxBackoff,omitzero"`
 	RespectRetryAfter Optional[bool]     `json:"respectRetryAfter,omitzero"`
+	// TaskAttempts is how many times a task that failed on a network problem
+	// is started again by itself, each after a longer wait; 0 turns it off.
+	TaskAttempts Optional[int] `json:"taskAttempts,omitzero"`
+	// TaskBackoff is the wait before the first of those; it doubles up to
+	// 15 minutes.
+	TaskBackoff Optional[Duration] `json:"taskBackoff,omitzero"`
 }
 
 // RefreshSettings controls download-link refresh.
@@ -418,6 +428,7 @@ func Defaults(downloadDir string) Settings {
 	return Settings{
 		DownloadDir:             Some(downloadDir),
 		MaxConnections:          Some(16),
+		MaxConnectionsPerHost:   Some(DefaultMaxConnectionsPerHost),
 		MaxConcurrentDownloads:  Some(4),
 		MaxActiveDownloadsTotal: Some(0),
 		RetentionDays:           Some(0),
@@ -427,6 +438,8 @@ func Defaults(downloadDir string) Settings {
 			InitialBackoff:    Some(Duration(time.Second)),
 			MaxBackoff:        Some(Duration(time.Minute)),
 			RespectRetryAfter: Some(true),
+			TaskAttempts:      Some(DefaultTaskRetryAttempts),
+			TaskBackoff:       Some(Duration(time.Minute)),
 		},
 		Proxy:            Some(Proxy{Mode: ProxySystem}),
 		UserAgent:        Some(DefaultUserAgent),

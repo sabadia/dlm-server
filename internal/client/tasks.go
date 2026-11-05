@@ -159,6 +159,12 @@ func (c *Client) RestartTask(ctx context.Context, id string) (*Task, error) {
 	return c.taskCall(ctx, http.MethodPost, taskPath(id, "/restart"), nil)
 }
 
+// StopSeeding calls stop-seeding (POST /v1/tasks/{id}/stop-seeding): a
+// torrent that has all its data stops seeding and its task completes.
+func (c *Client) StopSeeding(ctx context.Context, id string) (*Task, error) {
+	return c.taskCall(ctx, http.MethodPost, taskPath(id, "/stop-seeding"), nil)
+}
+
 // DeleteTask calls delete-task (DELETE /v1/tasks/{id}); files also
 // deletes the task's files.
 func (c *Client) DeleteTask(ctx context.Context, id string, files bool) error {

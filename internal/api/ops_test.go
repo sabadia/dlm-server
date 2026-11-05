@@ -256,6 +256,7 @@ func TestServiceOperationsUnavailableWithoutServices(t *testing.T) {
 		{http.MethodPost, "/v1/tasks/resume", `{"ids":["x"]}`},
 		{http.MethodPost, "/v1/tasks/delete", `{"ids":["x"]}`},
 		{http.MethodPost, "/v1/tasks/x/restart", ""},
+		{http.MethodPost, "/v1/tasks/x/stop-seeding", ""},
 		{http.MethodDelete, "/v1/tasks/x", ""},
 		{http.MethodGet, "/v1/tasks/x/settings/effective", ""},
 		{http.MethodGet, "/v1/queues", ""},
@@ -351,6 +352,12 @@ func TestTaskLifecycle(t *testing.T) {
 	if !strings.Contains(p.Detail, "restart") {
 		t.Errorf("detail = %q", p.Detail)
 	}
+
+	// Only a torrent that is seeding can be told to stop.
+	decodeProblem(t, do(t, f.s, request{method: http.MethodPost, path: "/v1/tasks/" + task.ID + "/stop-seeding", headers: bearer(testToken)}),
+		http.StatusConflict)
+	decodeProblem(t, do(t, f.s, request{method: http.MethodPost, path: "/v1/tasks/missing/stop-seeding", headers: bearer(testToken)}),
+		http.StatusNotFound)
 
 	f.call(t, http.MethodDelete, "/v1/tasks/"+task.ID+"?files=true", "", http.StatusNoContent, nil)
 	decodeProblem(t, do(t, f.s, request{method: http.MethodGet, path: "/v1/tasks/" + task.ID, headers: bearer(testToken)}),

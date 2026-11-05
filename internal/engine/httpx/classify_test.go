@@ -119,6 +119,9 @@ func TestClassifyErrors(t *testing.T) {
 	}{
 		{"timeout net.Error", &url.Error{Op: "Get", URL: "https://x", Err: timeoutErr{}}, engine.KindTransient, domain.ErrorCodeNetwork},
 		{"non-timeout net.Error", plainNetErr{}, engine.KindFatal, domain.ErrorCodeFatal},
+		{"server closed idle connection", &url.Error{Op: "Get", URL: "https://x", Err: errors.New("http: server closed idle connection")}, engine.KindTransient, domain.ErrorCodeNetwork},
+		{"connection broken", &url.Error{Op: "Get", URL: "https://x", Err: errors.New("net/http: HTTP/1.x transport connection broken: unexpected EOF")}, engine.KindTransient, domain.ErrorCodeNetwork},
+		{"tls internal error alert", errors.New("remote error: tls: internal error"), engine.KindTransient, domain.ErrorCodeNetwork},
 		{"os deadline", fmt.Errorf("read: %w", os.ErrDeadlineExceeded), engine.KindTransient, domain.ErrorCodeNetwork},
 		{"request deadline", &url.Error{Op: "Get", URL: "https://x", Err: context.DeadlineExceeded}, engine.KindTransient, domain.ErrorCodeNetwork},
 		{"connection refused (real)", refused, engine.KindTransient, domain.ErrorCodeNetwork},

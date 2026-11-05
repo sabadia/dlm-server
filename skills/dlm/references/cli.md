@@ -1832,6 +1832,14 @@ Show the task's effective settings (Defaults ⊕ Global ⊕ Queue ⊕ Task) with
 dlm task settings ID [flags]
 ```
 
+### dlm task stop-seeding
+
+Stop seeding a finished torrent and mark the task completed
+
+```
+dlm task stop-seeding ID [flags]
+```
+
 ### dlm task torrent
 
 Show the swarm of a torrent task

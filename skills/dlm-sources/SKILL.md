@@ -218,4 +218,8 @@ Direct HTTP uses several connections, resumes across restarts and writes to
 
 Retries cover network errors, 5xx and 429 with backoff, honouring `Retry-After`, up to
 `retry.maxAttempts`. For a rate-limited site, lower `maxConnections` before raising
-retries: dlm cannot out-wait a limit it keeps tripping.
+retries: dlm cannot out-wait a limit it keeps tripping. HLS and DASH downloads share
+`maxConnectionsPerHost` (default 8) requests in flight to one host, and a host that keeps
+refusing or resetting rests for a while. A task that still fails on the network starts again
+by itself `retry.taskAttempts` times (default 3, waiting `retry.taskBackoff`, default 1m,
+doubling); its `error.retry` shows the attempt and when it is due.

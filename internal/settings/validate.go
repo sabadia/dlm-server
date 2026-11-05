@@ -19,7 +19,12 @@ import (
 
 // Limits for numeric settings.
 const (
-	MaxConnectionsLimit         = 128
+	MaxConnectionsLimit = 128
+	// DefaultMaxConnectionsPerHost is the default cap of in-flight requests to
+	// one host across all segmented (HLS, DASH) downloads.
+	DefaultMaxConnectionsPerHost = 8
+	// DefaultTaskRetryAttempts is how often a failed task retries by itself.
+	DefaultTaskRetryAttempts    = 3
 	MaxConcurrentDownloadsLimit = 100
 	MaxRetryAttemptsLimit       = 100
 	MaxRefreshAttemptsLimit     = 20
@@ -71,6 +76,7 @@ func (s *Settings) Validate(level Level) error {
 		v.add("filenameTemplate", "must be non-empty and must not contain path separators")
 	}
 	v.intRange("maxConnections", s.MaxConnections, 1, MaxConnectionsLimit)
+	v.intRange("maxConnectionsPerHost", s.MaxConnectionsPerHost, 0, MaxConnectionsLimit)
 	v.intRange("maxConcurrentDownloads", s.MaxConcurrentDownloads, 1, MaxConcurrentDownloadsLimit)
 	v.intRange("maxActiveDownloadsTotal", s.MaxActiveDownloadsTotal, 0, 10_000)
 	v.intRange("retentionDays", s.RetentionDays, 0, MaxRetentionDays)
@@ -79,6 +85,8 @@ func (s *Settings) Validate(level Level) error {
 	}
 
 	v.intRange("retry.maxAttempts", s.Retry.MaxAttempts, 0, MaxRetryAttemptsLimit)
+	v.intRange("retry.taskAttempts", s.Retry.TaskAttempts, 0, MaxRetryAttemptsLimit)
+	v.positiveDuration("retry.taskBackoff", s.Retry.TaskBackoff)
 	v.positiveDuration("retry.initialBackoff", s.Retry.InitialBackoff)
 	v.positiveDuration("retry.maxBackoff", s.Retry.MaxBackoff)
 	if lo, ok := s.Retry.InitialBackoff.Get(); ok {
