@@ -145,6 +145,12 @@ func TestValidate(t *testing.T) {
 			c.Server.TLSCert, c.Server.TLSKey = "c", "k"
 		}, ""},
 		{"half tls", func(c *Config) { c.Server.TLSCert = "c" }, "set together"},
+		{"origin ok", func(c *Config) {
+			c.Server.AllowedOrigins = []string{"https://app.example.com", "chrome-extension://abc"}
+		}, ""},
+		{"wildcard origin", func(c *Config) { c.Server.AllowedOrigins = []string{"*"} }, "server.allowed_origins"},
+		{"origin without scheme", func(c *Config) { c.Server.AllowedOrigins = []string{"app.example.com"} }, "server.allowed_origins"},
+		{"origin with a path", func(c *Config) { c.Server.AllowedOrigins = []string{"https://app.example.com/x"} }, "server.allowed_origins"},
 		{"bad level", func(c *Config) { c.Log.Level = "loud" }, "log.level"},
 		{"bad format", func(c *Config) { c.Log.Format = "xml" }, "log.format"},
 		{"bad rotation", func(c *Config) { c.Log.MaxSizeMB = 0 }, "rotation"},
