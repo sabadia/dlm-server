@@ -73,7 +73,11 @@ func environ() []string {
 // itself: nothing if deno is available (yt-dlp's own default) or yt-dlp is too
 // old to take the option.
 func runtimeArgs(version string) []string {
-	path := toolPath(os.Getenv("PATH"))
+	return runtimeArgsIn(version, toolPath(os.Getenv("PATH")))
+}
+
+// runtimeArgsIn is runtimeArgs searching the directories of path.
+func runtimeArgsIn(version, path string) []string {
 	find := func(name string) string {
 		for _, d := range filepath.SplitList(path) {
 			if p, err := exec.LookPath(filepath.Join(d, name)); err == nil {

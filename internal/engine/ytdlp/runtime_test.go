@@ -42,43 +42,25 @@ func TestRuntimeArgs(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script stand-ins")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	bin := filepath.Join(home, ".bun", "bin")
-	if err := os.MkdirAll(bin, 0o755); err != nil { //nolint:gosec // test directory
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", "/nonexistent")
-	if got := runtimeArgs("2026.10.26"); got != nil && !hasDeno() {
+	dir := t.TempDir()
+	if got := runtimeArgsIn("2026.10.26", dir); got != nil {
 		t.Fatalf("no runtime installed, got %v", got)
 	}
-	fakeTool(t, bin, "bun")
-	if hasDeno() {
-		t.Skip("a real deno is installed in a tool directory")
-	}
-	got := runtimeArgs("2026.10.26")
-	if len(got) != 1 || got[0] != "--js-runtimes=bun:"+filepath.Join(bin, "bun") {
+	fakeTool(t, dir, "bun")
+	got := runtimeArgsIn("2026.10.26", dir)
+	if len(got) != 1 || got[0] != "--js-runtimes=bun:"+filepath.Join(dir, "bun") {
 		t.Fatalf("got %v", got)
 	}
-	if got := runtimeArgs("2025.01.01"); got != nil {
+	if got := runtimeArgsIn("2025.01.01", dir); got != nil {
 		t.Errorf("an old yt-dlp does not know --js-runtimes, got %v", got)
 	}
-	if got := runtimeArgs(""); got != nil {
+	if got := runtimeArgsIn("", dir); got != nil {
 		t.Errorf("unknown version: got %v", got)
 	}
-	fakeTool(t, bin, "deno")
-	if got := runtimeArgs("2026.10.26"); got != nil {
+	fakeTool(t, dir, "deno")
+	if got := runtimeArgsIn("2026.10.26", dir); got != nil {
 		t.Errorf("deno is yt-dlp's default, got %v", got)
 	}
-}
-
-func hasDeno() bool {
-	for _, d := range filepath.SplitList(toolPath("")) {
-		if _, err := os.Stat(filepath.Join(d, "deno")); err == nil {
-			return true
-		}
-	}
-	return false
 }
 
 func TestClassifyJavaScriptRuntimeHint(t *testing.T) {
