@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a1ac5e-9fe9-7c54-9bf9-6565184cee83
+status: draft
+created_at: '2026-11-05T15:40:44Z'
+updated_at: '2026-11-05T15:40:44Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: An allowed origin the API cannot use (such as *) was saved and then stopped the daemon from starting; refuse it when the configuration is saved
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/api/config_ops_test.go
+  start_line: null
+  end_line: null
+- path: internal/config/config.go
+  start_line: null
+  end_line: null
+- path: internal/config/config_test.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

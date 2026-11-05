@@ -140,10 +140,16 @@ func readFrames(r io.Reader, out chan<- sseFrame) {
 // next returns the next non-comment frame.
 func (st *stream) next(t *testing.T) sseFrame {
 	t.Helper()
+	// Heartbeats are skipped, and each one would restart the per-frame wait: without an overall
+	// limit a frame that never comes would hang the test until the package times out.
+	deadline := time.Now().Add(frameTimeout)
 	for {
 		f := st.nextAny(t)
 		if f.comment == "" {
 			return f
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for a frame (only heartbeats arrived)")
 		}
 	}
 }

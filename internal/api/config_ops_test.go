@@ -73,6 +73,8 @@ func TestConfigOperations(t *testing.T) {
 		"read only":   {`{"values":{"paths.config_dir":"/x"}}`, "config.read_only", "body.values.paths.config_dir"},
 		"bad type":    {`{"values":{"torrent.dht":"yes"}}`, "config.bad_value", "body.values.torrent.dht"},
 		"invalid":     {`{"values":{"log.level":"loud"}}`, "config.invalid", "body.values"},
+		// An origin the API cannot use would stop the daemon at its next start: it is refused when saved.
+		"wildcard origin": {`{"values":{"server.allowed_origins":["*"]}}`, "config.invalid", "body.values"},
 	} {
 		w := do(t, s, request{method: http.MethodPatch, path: "/v1/config", body: tc.body, headers: bearer(testToken)})
 		p := decodeProblem(t, w, http.StatusUnprocessableEntity)
@@ -88,7 +90,7 @@ func TestConfigOperations(t *testing.T) {
 	}
 	callServer(t, s, http.MethodPatch, "/v1/config", `{"values":{}}`, "", http.StatusUnprocessableEntity, nil)
 	// The file still only holds what was valid.
-	if data, _ := os.ReadFile(file); strings.Contains(string(data), "loud") || strings.Contains(string(data), "no.such") {
+	if data, _ := os.ReadFile(file); strings.Contains(string(data), "loud") || strings.Contains(string(data), "no.such") || strings.Contains(string(data), "'*'") {
 		t.Errorf("a refused change reached the file:\n%s", data)
 	}
 }

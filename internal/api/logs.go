@@ -150,12 +150,15 @@ func (s *Server) runLogStream(ctx context.Context, st *sseStream, f logging.Filt
 			replay, cursor = true, id
 		}
 	}
+	// Live records at or below this are not sent: a stream without an id starts at the next
+	// record. It is read before subscribing, not after the headers are out: a record added by
+	// a client that has just seen the headers would otherwise fall at or below it and be lost.
+	sent := s.logs.LastID()
 	sub := s.logs.Subscribe(ctx, f)
 	defer sub.Unsubscribe()
 	if err := st.flush(); err != nil {
 		return
 	}
-	sent := s.logs.LastID() // live records at or below this are not sent twice
 	if replay {
 		recs, complete := s.logs.Since(cursor, f)
 		if !complete {

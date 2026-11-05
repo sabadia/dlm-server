@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -333,6 +334,13 @@ func (c *Config) Validate() error {
 	}
 	if (c.Server.TLSCert == "") != (c.Server.TLSKey == "") {
 		errs = append(errs, errors.New("server.tls_cert and server.tls_key must be set together"))
+	}
+	// The API refuses to start with an origin it cannot use, so it is refused here, where
+	// it is typed, and not when the daemon next starts.
+	for _, origin := range c.Server.AllowedOrigins {
+		if err := http.NewCrossOriginProtection().AddTrustedOrigin(origin); err != nil {
+			errs = append(errs, fmt.Errorf("server.allowed_origins entry %q: %w (write a full origin such as https://app.example.com; a wildcard is not accepted)", origin, err))
+		}
 	}
 	for _, r := range c.Server.FSRoots {
 		if !filepath.IsAbs(r) {
