@@ -53,7 +53,16 @@ type TransportConfig struct {
 	// LogValue redact them).
 	Proxy     settings.Proxy
 	TLSVerify bool
+	// HTTP1Only keeps the transport off HTTP/2. A download split over several
+	// connections needs it: HTTP/2 carries all requests to a host on one TCP
+	// connection, so the parts would share one congestion window and any
+	// per-connection throttle of the server instead of adding up.
+	HTTP1Only bool
 }
+
+// parallel reports whether the settings split a download over several
+// connections.
+func parallel(s settings.Settings) bool { return s.MaxConnections.OrElse(0) > 1 }
 
 // String describes the config with proxy credentials redacted.
 func (c TransportConfig) String() string {
@@ -212,13 +221,14 @@ func (f *Factory) Client(s settings.Settings) (*http.Client, error) {
 	cfg := TransportConfig{
 		Proxy:     s.Proxy.OrElse(settings.Proxy{Mode: settings.ProxySystem}),
 		TLSVerify: s.TLSVerify.OrElse(true),
+		HTTP1Only: parallel(s),
 	}
 	rt, err := f.transport(cfg)
 	if err != nil {
 		return nil, err
 	}
 	if rules := s.ProxyRules.Value(); len(rules) > 0 {
-		rt = &ruleTransport{factory: f, settings: s, tlsVerify: cfg.TLSVerify}
+		rt = &ruleTransport{factory: f, settings: s, tlsVerify: cfg.TLSVerify, http1Only: cfg.HTTP1Only}
 	}
 	var out http.RoundTripper = newHeaderTransport(rt, s.UserAgent.OrElse(settings.DefaultUserAgent), s.Headers.Value(), f.log)
 	if f.opts.Credentials != nil {
@@ -323,7 +333,7 @@ func (f *Factory) build(cfg TransportConfig) (*cacheEntry, error) {
 	}
 	t.Protocols = new(http.Protocols)
 	t.Protocols.SetHTTP1(true)
-	t.Protocols.SetHTTP2(true)
+	t.Protocols.SetHTTP2(!cfg.HTTP1Only)
 
 	if err := f.configureProxy(t, cfg.Proxy); err != nil {
 		return nil, err

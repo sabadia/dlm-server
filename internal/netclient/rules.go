@@ -14,12 +14,14 @@ type ruleTransport struct {
 	factory   *Factory
 	settings  settings.Settings
 	tlsVerify bool
+	http1Only bool
 }
 
 func (t *ruleTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	cfg := TransportConfig{
 		Proxy:     t.settings.ProxyFor(req.URL.Hostname()),
 		TLSVerify: t.tlsVerify,
+		HTTP1Only: t.http1Only,
 	}
 	rt, err := t.factory.transport(cfg)
 	if err != nil {
