@@ -47,7 +47,7 @@ New codes may appear, and generated ones follow the pattern `<entity>.not_found`
 | Area | Codes |
 |---|---|
 | Auth | 401 for a missing token; `auth.admin_required`, `auth.read_only`, `auth.extension_scope` (403); `rate_limited` (429, extension tokens) |
-| Tasks | `task.not_found`, `task.duplicate`, `task.invalid_state`, `task.invalid_transition`, `task.state_changed`, `task.locked`, `task.file_exists` |
+| Tasks | `task.not_found`, `task.duplicate`, `task.invalid_state`, `task.invalid_transition`, `task.state_changed`, `task.locked`, `task.file_exists`, `task.not_seeding` |
 | Task files | `task.files_locked`, `task.no_files`, `task.no_file_selected`, `task.unknown_file`, `task.no_torrent`, `torrent.not_a_torrent` |
 | Queues | `queue.not_found`, `queue.name_taken`, `queue.not_empty` |
 | Settings | `settings.invalid`, `settings.changed` (412) |

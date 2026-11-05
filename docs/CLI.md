@@ -121,6 +121,7 @@ Every REST API operation has a command; `dlm --help` and `dlm COMMAND --help` pr
 | [`dlm task set`](#dlm-task-set) | Change a task |
 | [`dlm task set-url`](#dlm-task-set-url) | Replace a task's link |
 | [`dlm task settings`](#dlm-task-settings) | Show a task's effective settings and where each value comes from |
+| [`dlm task stop-seeding`](#dlm-task-stop-seeding) | Stop seeding a finished torrent and mark the task completed |
 | [`dlm task torrent`](#dlm-task-torrent) | Show the swarm of a torrent task |
 | [`dlm task update-tasks`](#dlm-task-update-tasks) | Change several tasks at once |
 | [`dlm tls`](#dlm-tls) | Set up TLS for a daemon other machines connect to |
@@ -4289,6 +4290,7 @@ dlm task [flags]
 * [dlm task set](#dlm-task-set)	 - Change a task
 * [dlm task set-url](#dlm-task-set-url)	 - Replace a task's link
 * [dlm task settings](#dlm-task-settings)	 - Show a task's effective settings and where each value comes from
+* [dlm task stop-seeding](#dlm-task-stop-seeding)	 - Stop seeding a finished torrent and mark the task completed
 * [dlm task torrent](#dlm-task-torrent)	 - Show the swarm of a torrent task
 * [dlm task update-tasks](#dlm-task-update-tasks)	 - Change several tasks at once
 
@@ -5456,6 +5458,46 @@ dlm task settings ID [flags]
 
 ```
   -h, --help   help for settings
+```
+
+### Options inherited from parent commands
+
+```
+      --address string      listen address host:port (default "127.0.0.1:17171")
+      --allow-remote        allow binding a non-loopback address (requires TLS)
+      --cache-dir string    cache directory
+      --config string       path to a YAML config file (env DLM_CONFIG)
+      --config-dir string   configuration directory
+      --data-dir string     data directory (database, state)
+      --home string         place all dlm directories below this directory (portable mode)
+      --log-dir string      log directory
+      --log-format string   log format: json, text (default "json")
+      --log-level string    log level: debug, info, warn, error (default "info")
+      --log-stderr          also write logs to stderr
+  -o, --output string       output format: table, json, yaml (default "table")
+      --server string       API base URL (default: derived from --address)
+      --tls-cert string     TLS certificate file
+      --tls-key string      TLS private key file
+      --token string        API bearer token (default: read from the daemon's token file)
+```
+
+### SEE ALSO
+
+* [dlm task](#dlm-task)	 - Manage download tasks
+
+
+## dlm task stop-seeding
+
+Stop seeding a finished torrent and mark the task completed
+
+```
+dlm task stop-seeding ID [flags]
+```
+
+### Options
+
+```
+  -h, --help   help for stop-seeding
 ```
 
 ### Options inherited from parent commands

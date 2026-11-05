@@ -74,6 +74,7 @@ var fieldMetas = map[string]fieldMeta{
 	"checksum": {group: "general", desc: "Expected hash of the downloaded file"},
 
 	"maxConnections":          {group: "speed", desc: "Parallel connections per task", min: bound(1), max: bound(MaxConnectionsLimit)},
+	"maxConnectionsPerHost":   {group: "speed", desc: "Requests in flight to one host across all HLS/DASH downloads (0 = no cap)", min: bound(0), max: bound(MaxConnectionsLimit)},
 	"maxConcurrentDownloads":  {group: "speed", desc: "Tasks a queue runs at once", min: bound(1), max: bound(MaxConcurrentDownloadsLimit)},
 	"maxActiveDownloadsTotal": {group: "speed", desc: "Running tasks across all queues; 0 means no cap", min: bound(0), max: bound(10_000)},
 	"speedLimit":              {group: "speed", desc: "Speed limit; 0 means unlimited", unit: "bytes/s", min: bound(0)},
@@ -83,6 +84,8 @@ var fieldMetas = map[string]fieldMeta{
 	"retry.maxAttempts":       {group: "retry", desc: "Retries after the first failure", min: bound(0), max: bound(MaxRetryAttemptsLimit)},
 	"retry.initialBackoff":    {group: "retry", desc: "Delay before the first retry", unit: "duration"},
 	"retry.maxBackoff":        {group: "retry", desc: "Upper bound of the retry delay", unit: "duration"},
+	"retry.taskAttempts":      {group: "retry", desc: "Times a task that failed on the network starts again by itself (0 = off)", min: bound(0), max: bound(MaxRetryAttemptsLimit)},
+	"retry.taskBackoff":       {group: "retry", desc: "Wait before a task's first automatic retry; it doubles each time", unit: "duration"},
 	"retry.respectRetryAfter": {group: "retry", desc: "Honour the server's Retry-After header"},
 
 	"proxy":      {group: "network", desc: "Outbound proxy", enum: allProxyModes},

@@ -221,6 +221,46 @@ func TestKeepSeedingUntilPausedAndSeedTimeCarriesOver(t *testing.T) {
 	}
 }
 
+func TestStopSeedingFinishesATorrentThatKeepsSeeding(t *testing.T) {
+	data := payload(100_000, 31)
+	sw := newSwarm(t, "single.bin", content{"": data}, false)
+	e := newEngine(t, testConfig())
+	rec := &recorder{}
+	dl, err := e.NewDownload(spec(tempDir(t), sw.dataURL(), "single.bin", testSettings(withSeeding(0, 0, true)), rec))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopper, ok := dl.(engine.SeedStopper)
+	if !ok {
+		t.Fatal("the bt download is not a SeedStopper")
+	}
+	if stopper.StopSeeding() {
+		t.Fatal("StopSeeding reported success before any data had arrived")
+	}
+	done := make(chan error, 1)
+	go func() { done <- dl.Run(t.Context()) }()
+	waitComplete(t, rec)
+	select {
+	case err := <-done:
+		t.Fatalf("Run returned (%v) although the task keeps seeding", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if !stopper.StopSeeding() {
+		t.Fatal("StopSeeding = false while seeding")
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run = %v, want nil: stopping the seeding completes the task", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after StopSeeding")
+	}
+	if !stopper.StopSeeding() {
+		t.Error("a second StopSeeding should be harmless")
+	}
+}
+
 func isCanceled(err error) bool { return err != nil && err.Error() == context.Canceled.Error() }
 
 func TestFinishedFilesAreTrustedOnResume(t *testing.T) {

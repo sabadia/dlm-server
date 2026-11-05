@@ -87,12 +87,26 @@ const (
 	ErrorCodeFatal = "fatal"
 )
 
+// LabelAutoRetry counts the automatic retries a task has used.
+const LabelAutoRetry = "dlm.autoRetry"
+
+// TaskRetry says that a failed task will be tried again by itself: this is
+// retry Attempt of Max, due at NextAt. A task whose error has no Retry has
+// given up.
+type TaskRetry struct {
+	Attempt int       `json:"attempt"`
+	Max     int       `json:"max"`
+	NextAt  time.Time `json:"nextAt"`
+}
+
 // TaskError describes why a task is in the error state.
 type TaskError struct {
 	Code      string    `json:"code"`
 	Message   string    `json:"message"`
 	Retryable bool      `json:"retryable"`
 	At        time.Time `json:"at"`
+	// Retry is set while an automatic retry is waiting.
+	Retry *TaskRetry `json:"retry,omitempty"`
 }
 
 // Task is one download.

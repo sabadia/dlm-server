@@ -209,6 +209,7 @@ func (a *app) newTaskCommand() *cobra.Command {
 		a.newTaskBulkCommand("pause", "Pause tasks", "pause-tasks", (*client.Client).PauseTasks),
 		a.newTaskBulkCommand("resume", "Resume paused or failed tasks", "resume-tasks", (*client.Client).ResumeTasks),
 		a.newTaskRestartCommand(),
+		a.newTaskStopSeedingCommand(),
 		a.newTaskMoveTasksCommand(),
 		a.newTaskUpdateTasksCommand(),
 		a.newTaskRestartTasksCommand(),
@@ -673,6 +674,26 @@ func (a *app) newTaskRestartCommand() *cobra.Command {
 				return err
 			}
 			t, err := c.RestartTask(cmd.Context(), args[0])
+			if err != nil {
+				return err //nolint:wrapcheck // client errors are already user-facing
+			}
+			return a.printTask(cmd, t)
+		},
+	}
+}
+
+func (a *app) newTaskStopSeedingCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:         "stop-seeding ID",
+		Short:       "Stop seeding a finished torrent and mark the task completed",
+		Args:        cobra.ExactArgs(1),
+		Annotations: map[string]string{annotationOperationID: "stop-seeding"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := a.newClient(cmd, client.DefaultTimeout)
+			if err != nil {
+				return err
+			}
+			t, err := c.StopSeeding(cmd.Context(), args[0])
 			if err != nil {
 				return err //nolint:wrapcheck // client errors are already user-facing
 			}

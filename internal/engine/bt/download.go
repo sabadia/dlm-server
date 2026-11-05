@@ -65,6 +65,9 @@ type Download struct {
 	uploaded   atomic.Int64 // bytes uploaded by this run
 	writeErr   atomic.Pointer[error]
 	live       atomic.Pointer[liveTorrent] // set once the torrent joined the client
+	seeding    atomic.Bool                 // all the data has arrived and the torrent is being served
+	seedStop   chan struct{}               // closed to end the seeding early
+	seedStopMu sync.Once
 
 	fresh    bool      // the metadata was not in the engine state; owned by Run
 	lastCkpt time.Time // owned by the goroutine running Run
@@ -73,10 +76,22 @@ type Download struct {
 	ready    bool // checkpoints may be written
 }
 
-var _ engine.Download = (*Download)(nil)
+var (
+	_ engine.Download    = (*Download)(nil)
+	_ engine.SeedStopper = (*Download)(nil)
+)
+
+// StopSeeding ends the seeding: Run returns nil and the task completes.
+func (d *Download) StopSeeding() bool {
+	if !d.seeding.Load() {
+		return false
+	}
+	d.seedStopMu.Do(func() { close(d.seedStop) })
+	return true
+}
 
 func newDownload(e *Engine, spec engine.Spec, mi *metainfo.MetaInfo) *Download {
-	d := &Download{e: e, spec: spec, mi: mi, st: state{V: stateVersion}, log: e.env.Logger.With("engine", EngineName, "task_id", spec.TaskID)}
+	d := &Download{e: e, spec: spec, mi: mi, st: state{V: stateVersion}, seedStop: make(chan struct{}), log: e.env.Logger.With("engine", EngineName, "task_id", spec.TaskID)}
 	d.size.Store(-1)
 	if spec.Resource != nil && spec.Resource.Size > 0 {
 		d.size.Store(spec.Resource.SelectedSize())
@@ -478,6 +493,7 @@ func (d *Download) transfer(ctx context.Context, cl *torrent.Client, mi *metainf
 		now := d.e.env.Clock()
 		if seedStart.IsZero() && completeAt() {
 			seedStart = now
+			d.seeding.Store(true)
 			lt.seedingSince.Store(now.UnixNano())
 			lastState = now
 			d.update(func(s *state) { s.Complete = true })
@@ -506,6 +522,10 @@ func (d *Download) transfer(ctx context.Context, cl *torrent.Client, mi *metainf
 				d.recordSeeding(t, st, seedStart)
 			}
 			return ctx.Err() //nolint:wrapcheck // cancellation is reported as is
+		case <-d.seedStop:
+			d.recordSeeding(t, st, seedStart)
+			d.checkpoint(ctx, true)
+			return nil
 		case <-t.Closed():
 			return engine.Transient(domain.ErrorCodeNetwork, errors.New("bt: the torrent was removed from the client"))
 		case <-tick.C:

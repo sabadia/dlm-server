@@ -683,7 +683,7 @@ func (s *TaskService) Resume(ctx context.Context, ids []string) []BatchResult {
 			case domain.StatusQueued, domain.StatusRunning, domain.StatusRefreshing, domain.StatusPostprocessing:
 				return nil
 			case domain.StatusPaused, domain.StatusError:
-				t, err = s.transitionLocked(ctx, id, domain.StatusQueued, false)
+				t, err = s.transitionLocked(ctx, id, domain.StatusQueued, false, clearAutoRetry)
 				return err
 			default:
 				return domain.ConflictCode("task.invalid_state", map[string]string{"taskId": id, "status": string(t.Status), "operation": "resume"}, "service: task %q: cannot resume a %s task", id, t.Status)
@@ -859,7 +859,7 @@ func (s *TaskService) removeTreeFiles(ctx context.Context, t *domain.Task, root 
 // re-reads it, persists it and publishes a task.status event. With reset
 // it also clears the task's download progress (segments, engine state,
 // Downloaded). The caller holds the task's lock.
-func (s *TaskService) transitionLocked(ctx context.Context, id string, to domain.TaskStatus, reset bool) (*domain.Task, error) {
+func (s *TaskService) transitionLocked(ctx context.Context, id string, to domain.TaskStatus, reset bool, edits ...func(*domain.Task)) (*domain.Task, error) {
 	var (
 		t    *domain.Task
 		from domain.TaskStatus
@@ -872,6 +872,9 @@ func (s *TaskService) transitionLocked(ctx context.Context, id string, to domain
 		from = t.Status
 		if err := t.TransitionTo(to, s.d.now()); err != nil {
 			return fmt.Errorf("service: task status: %w", err)
+		}
+		for _, edit := range edits {
+			edit(t)
 		}
 		if reset {
 			if err := tx.Segments().Replace(ctx, id, nil); err != nil {
@@ -944,4 +947,31 @@ func cleanDir(dir string) (string, error) {
 		return "", domain.InvalidArgument("service: dir %q must be an absolute path", dir)
 	}
 	return filepath.Clean(dir), nil
+}
+
+// clearAutoRetry forgets the automatic retries a task has used: a person who
+// starts it again gets a fresh set.
+func clearAutoRetry(t *domain.Task) { delete(t.Labels, domain.LabelAutoRetry) }
+
+// StopSeeding ends the seeding of a torrent that has all its data: the task
+// completes instead of serving the swarm until its ratio or time limit. A task
+// that is not seeding matches domain.ErrConflict.
+func (s *TaskService) StopSeeding(ctx context.Context, id string) (*domain.Task, error) {
+	t, err := s.d.Store.Tasks().Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("service: stop seeding of task %q: %w", id, err)
+	}
+	notSeeding := domain.ConflictCode("task.not_seeding", map[string]string{"taskId": id, "status": string(t.Status)}, "service: task %q is not seeding", id)
+	if t.Status != domain.StatusRunning || s.d.Runner == nil {
+		return nil, notSeeding
+	}
+	dl, ok := s.d.Runner.Running(id)
+	if !ok {
+		return nil, notSeeding
+	}
+	stopper, ok := dl.(engine.SeedStopper)
+	if !ok || !stopper.StopSeeding() {
+		return nil, notSeeding
+	}
+	return t, nil
 }

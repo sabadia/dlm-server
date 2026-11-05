@@ -372,6 +372,7 @@ func Run(ctx context.Context, cfg *config.Config, version string, stderr io.Writ
 	g.Go(func() error { return jar.RunTaskCleanup(sweepCtx, bus) })
 	g.Go(func() error { return services.Refresh.Run(sweepCtx) })
 	g.Go(func() error { return service.NewHousekeeper(limitsDeps, services.Tasks).Run(sweepCtx) })
+	g.Go(func() error { return service.NewAutoRetrier(limitsDeps, services.Tasks).Run(sweepCtx) })
 	g.Go(func() error { return resolver.Run(sweepCtx) })
 	g.Go(func() error { return webhooks.Run(sweepCtx) })
 	g.Go(func() error { return plugins.Run(sweepCtx) })

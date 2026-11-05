@@ -287,6 +287,16 @@ func (s *Server) registerTasks() {
 	}, s.restartTask)
 
 	Register(s, huma.Operation{
+		OperationID: "stop-seeding",
+		Method:      http.MethodPost,
+		Path:        "/v1/tasks/{id}/stop-seeding",
+		Summary:     "Stop seeding a torrent",
+		Description: "Ends the seeding of a torrent that has all its data, so the task completes now instead of serving the swarm until its ratio or time limit. Fails with 409 when the task is not seeding. The new status follows as an event.",
+		Tags:        []string{tagTasks},
+		Errors:      []int{http.StatusNotFound, http.StatusConflict, http.StatusServiceUnavailable},
+	}, s.stopSeeding)
+
+	Register(s, huma.Operation{
 		OperationID:   "delete-task",
 		Method:        http.MethodDelete,
 		Path:          "/v1/tasks/{id}",
@@ -632,6 +642,17 @@ func (s *Server) restartTask(ctx context.Context, in *taskPathInput) (*taskOutpu
 	t, err := s.tasks.Restart(ctx, in.ID)
 	if err != nil {
 		return nil, s.fail(ctx, "restart-task", err, locBody)
+	}
+	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
+}
+
+func (s *Server) stopSeeding(ctx context.Context, in *taskPathInput) (*taskOutput, error) {
+	if s.tasks == nil {
+		return nil, errServicesUnavailable()
+	}
+	t, err := s.tasks.StopSeeding(ctx, in.ID)
+	if err != nil {
+		return nil, s.fail(ctx, "stop-seeding", err, locBody)
 	}
 	return &taskOutput{Body: redactTaskFor(ctx, t)}, nil
 }

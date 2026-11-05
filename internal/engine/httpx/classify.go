@@ -189,7 +189,32 @@ func isNetworkError(err error) bool {
 	if errors.As(err, &opErr) {
 		return true
 	}
-	return isHTTP2TransportError(err)
+	return isHTTP2TransportError(err) || isTransportBreakage(err)
+}
+
+// isTransportBreakage detects connection failures that net/http reports as
+// plain errors of its own (unexported values), so they match by message: a
+// server that closed an idle connection a moment before it was reused, a
+// connection that broke in the middle of a response, or a TLS alert. All of
+// them say "try again", none says "the answer is no".
+func isTransportBreakage(err error) bool {
+	msg := err.Error()
+	for _, s := range []string{
+		"server closed idle connection",
+		"transport connection broken",
+		"unexpected EOF reading trailer",
+		"transport closed",
+		"use of closed network connection",
+		"remote error: tls: internal error",
+		"remote error: tls: handshake failure",
+		"tls: bad record mac",
+		"tls: first record does not look like a TLS handshake",
+	} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // isHTTP2TransportError detects connection-level HTTP/2 failures (stream

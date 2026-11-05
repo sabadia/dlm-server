@@ -15,6 +15,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/engine"
 	"github.com/sabadia/dlm-server/internal/engine/httpx"
+	"github.com/sabadia/dlm-server/internal/hostgate"
 	"github.com/sabadia/dlm-server/internal/settings"
 )
 
@@ -84,18 +85,76 @@ func newRequest(ctx context.Context, src domain.Source, s settings.Settings, raw
 // fetch is Client.Fetch reading through wrap (a rate limiter; nil reads
 // directly).
 func fetch(ctx context.Context, c Client, rawURL string, rng *ByteRange, limit int64, wrap func(io.Reader) io.Reader) ([]byte, Meta, error) {
+	name := hostName(rawURL)
+	release, err := hostgate.Default.Acquire(ctx, name, c.Settings.MaxConnectionsPerHost.OrElse(0))
+	if err != nil {
+		return nil, Meta{}, err //nolint:wrapcheck // cancellation is reported as is
+	}
+	defer release()
+	data, m, err := fetchOnce(ctx, c, rawURL, rng, limit, wrap)
+	switch {
+	case err == nil:
+		hostgate.Default.Success(name)
+	case ctx.Err() == nil && hostIsStruggling(err):
+		hostgate.Default.Trouble(name)
+	}
+	return data, m, err
+}
+
+// hostName is the host of an address, for the per-host limit.
+func hostName(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// hostIsStruggling tells a refusal or a broken connection, which a host
+// answers when it has too many of ours, from an error that says nothing about
+// its load (a missing file, a bad key).
+func hostIsStruggling(err error) bool {
+	var ee *engine.Error
+	if !errors.As(err, &ee) {
+		return false
+	}
+	switch {
+	case ee.StatusCode == http.StatusTooManyRequests, ee.StatusCode == http.StatusForbidden,
+		ee.StatusCode == http.StatusServiceUnavailable:
+		return true
+	case ee.Kind == engine.KindTransient && ee.StatusCode == 0:
+		return true // a reset, a timeout, a handshake that did not finish
+	}
+	return false
+}
+
+func fetchOnce(ctx context.Context, c Client, rawURL string, rng *ByteRange, limit int64, wrap func(io.Reader) io.Reader) ([]byte, Meta, error) {
 	req, err := newRequest(ctx, c.Source, c.Settings, rawURL, rng)
 	if err != nil {
 		return nil, Meta{}, engine.Fatal(domain.ErrorCodeFatal, err)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
+		// The *url.Error repeats the whole address, token and all; the address
+		// is already in the message in its redacted form.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
 		return nil, Meta{}, httpx.Classify(fmt.Errorf("segmented: GET %s: %w", Redact(rawURL), err))
 	}
 	defer func() { _ = resp.Body.Close() }() // fully read below
 	m := Meta{URL: resp.Request.URL, ContentType: resp.Header.Get("Content-Type"), Status: resp.StatusCode}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, m, httpx.Classify(httpx.NewStatusError(resp))
+		cerr := httpx.Classify(httpx.NewStatusError(resp))
+		if resp.StatusCode == http.StatusBadRequest {
+			// Media hosts answer a signed address that is no longer valid with
+			// 400: a fresh address, not a bug in the request, is what is needed.
+			e := engine.LinkExpired(cerr)
+			e.StatusCode = resp.StatusCode
+			return nil, m, e
+		}
+		return nil, m, cerr
 	}
 	var body io.Reader = resp.Body
 	if rng != nil && resp.StatusCode == http.StatusOK {

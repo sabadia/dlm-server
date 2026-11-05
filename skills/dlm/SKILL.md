@@ -186,6 +186,8 @@ dlm task pause ID...     dlm task resume ID...
 dlm task set ID --priority high --set speedLimit=1048576
 dlm task set-url ID URL                     # keeps progress when the file matches
 dlm task restart ID                         # from scratch, discards progress
+dlm task stop-seeding ID                    # a finished torrent stops seeding and completes
+                                            # (409 task.not_seeding when it is not seeding)
 dlm task rm ID                              # keeps the files
 dlm task rm ID --files                      # also deletes them
 ```

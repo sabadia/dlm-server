@@ -107,6 +107,15 @@ type Inspectable interface {
 	Torrent() (info *domain.TorrentInfo, ok bool)
 }
 
+// SeedStopper is implemented by downloads that keep serving the data after it
+// has all arrived (torrents) and can be told to stop and finish.
+type SeedStopper interface {
+	// StopSeeding ends the seeding of a download that has all its data, which
+	// makes Run return nil. ok is false while the data has not all arrived,
+	// when there is nothing to stop.
+	StopSeeding() (ok bool)
+}
+
 // Describer is implemented by engines that can describe a task that is not
 // running from the state its last run saved.
 type Describer interface {

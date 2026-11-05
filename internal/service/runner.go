@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -538,8 +539,41 @@ func (r *Runner) finish(runCtx context.Context, task *domain.Task, eff settings.
 	default:
 		te := engine.TaskError(runErr, r.d.Clock())
 		r.d.Logger.WarnContext(ctx, "task failed", "task_id", task.ID, "code", te.Code, "error", runErr)
+		return r.fail(ctx, task, eff, te)
+	}
+}
+
+// maxTaskBackoff bounds the wait before an automatic retry of a task.
+const maxTaskBackoff = 15 * time.Minute
+
+// fail records a failed run. A network problem is not the end of a download:
+// while the task has automatic retries left it is marked as waiting for one
+// (TaskError.Retry) and the AutoRetrier starts it again when due.
+func (r *Runner) fail(ctx context.Context, task *domain.Task, eff settings.Settings, te domain.TaskError) error {
+	maxRetries := eff.Retry.TaskAttempts.OrElse(0)
+	transient := te.Retryable && (te.Code == domain.ErrorCodeNetwork || te.Code == domain.ErrorCodeHTTPStatus)
+	if !transient || maxRetries <= 0 {
 		return r.transition(ctx, task, domain.StatusError, &te)
 	}
+	return r.mutate(ctx, task, func(fresh *domain.Task) error {
+		used, _ := strconv.Atoi(fresh.Labels[domain.LabelAutoRetry])
+		now := r.d.Clock()
+		if used < maxRetries {
+			wait := eff.Retry.TaskBackoff.OrElse(settings.Duration(time.Minute)).Std() << used
+			if wait <= 0 || wait > maxTaskBackoff {
+				wait = maxTaskBackoff
+			}
+			te.Retry = &domain.TaskRetry{Attempt: used + 1, Max: maxRetries, NextAt: now.Add(wait).UTC()}
+			if fresh.Labels == nil {
+				fresh.Labels = map[string]string{}
+			}
+			fresh.Labels[domain.LabelAutoRetry] = strconv.Itoa(used + 1)
+		}
+		if err := fresh.SetError(te, now); err != nil {
+			return fmt.Errorf("service: task %q: %w", fresh.ID, err)
+		}
+		return nil
+	})
 }
 
 // postprocess runs the post-processing steps of a task that is in the

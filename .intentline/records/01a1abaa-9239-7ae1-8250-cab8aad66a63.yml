@@ -1,0 +1,113 @@
+schema_version: 1
+id: 01a1abaa-9239-7ae1-8250-cab8aad66a63
+status: draft
+created_at: '2026-11-05T12:24:04Z'
+updated_at: '2026-11-05T12:24:04Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: 'Bulk downloads failed in large numbers: cap requests per host across HLS/DASH downloads, classify transport breakage as retryable, retry failed tasks by themselves with visible retry state, and let a finished torrent stop seeding and complete'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: docs/CLI.md
+  start_line: null
+  end_line: null
+- path: docs/openapi-3.0.json
+  start_line: null
+  end_line: null
+- path: docs/openapi.json
+  start_line: null
+  end_line: null
+- path: internal/api/ops_test.go
+  start_line: null
+  end_line: null
+- path: internal/api/tasks.go
+  start_line: null
+  end_line: null
+- path: internal/cli/tasks.go
+  start_line: null
+  end_line: null
+- path: internal/client/tasks.go
+  start_line: null
+  end_line: null
+- path: internal/daemon/daemon.go
+  start_line: null
+  end_line: null
+- path: internal/domain/task.go
+  start_line: null
+  end_line: null
+- path: internal/engine/bt/download.go
+  start_line: null
+  end_line: null
+- path: internal/engine/bt/seed_test.go
+  start_line: null
+  end_line: null
+- path: internal/engine/engine.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/classify.go
+  start_line: null
+  end_line: null
+- path: internal/engine/httpx/classify_test.go
+  start_line: null
+  end_line: null
+- path: internal/engine/segmented/fetch.go
+  start_line: null
+  end_line: null
+- path: internal/engine/segmented/hostcap_test.go
+  start_line: null
+  end_line: null
+- path: internal/hostgate/hostgate.go
+  start_line: null
+  end_line: null
+- path: internal/hostgate/hostgate_test.go
+  start_line: null
+  end_line: null
+- path: internal/service/autoretry.go
+  start_line: null
+  end_line: null
+- path: internal/service/autoretry_test.go
+  start_line: null
+  end_line: null
+- path: internal/service/runner.go
+  start_line: null
+  end_line: null
+- path: internal/service/task.go
+  start_line: null
+  end_line: null
+- path: internal/settings/schema.go
+  start_line: null
+  end_line: null
+- path: internal/settings/settings.go
+  start_line: null
+  end_line: null
+- path: internal/settings/validate.go
+  start_line: null
+  end_line: null
+- path: skills/dlm-admin/references/events-and-errors.md
+  start_line: null
+  end_line: null
+- path: skills/dlm-sources/SKILL.md
+  start_line: null
+  end_line: null
+- path: skills/dlm/SKILL.md
+  start_line: null
+  end_line: null
+- path: skills/dlm/references/cli.md
+  start_line: null
+  end_line: null
+- path: skills/dlm/references/rest-api.md
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null
