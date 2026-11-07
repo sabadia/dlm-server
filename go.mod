@@ -7,9 +7,9 @@ require (
 	github.com/Eyevinn/hls-m3u8 v0.6.5
 	github.com/anacrolix/generics v0.2.0
 	github.com/anacrolix/torrent v1.61.0
-	github.com/chromedp/cdproto v0.158.4
-	github.com/chromedp/chromedp v0.21.0
-	github.com/danielgtaylor/huma/v2 v2.39.1
+	github.com/chromedp/cdproto v0.159.1
+	github.com/chromedp/chromedp v0.22.0
+	github.com/danielgtaylor/huma/v2 v2.40.0
 	github.com/dop251/goja v0.0.0-20261018113103-d42f16bb6161
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -24,17 +24,18 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/monkeyWie/goed2k v0.0.0-20260602122456-f2a71d599dee
 	github.com/pressly/goose/v3 v3.29.0
+	github.com/refraction-networking/utls v1.8.2
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/zalando/go-keyring v0.2.8
-	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/net v0.61.0
+	go.yaml.in/yaml/v3 v3.0.6
+	golang.org/x/net v0.62.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/time v0.16.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	lukechampine.com/blake3 v1.4.1
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.61.1
 )
 
 require (
@@ -91,8 +92,8 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/klauspost/compress v1.20.1 // indirect
-	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
@@ -129,7 +130,6 @@ require (
 	github.com/pion/webrtc/v4 v4.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/protolambda/ctxlock v0.1.0 // indirect
-	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/dnscache v0.0.0-20211102005908-e0241e321417 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
