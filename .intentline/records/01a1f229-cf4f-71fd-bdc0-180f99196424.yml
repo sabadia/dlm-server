@@ -1,0 +1,29 @@
+schema_version: 1
+id: 01a1f229-cf4f-71fd-bdc0-180f99196424
+status: draft
+created_at: '2026-11-19T04:56:28Z'
+updated_at: '2026-11-19T04:56:28Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: 'A null settings patch in a task, queue or bulk update is no patch instead of a 422: the desktop app''s generated client sends every absent field as null, so every bulk update (archive, priority) failed'
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/api/ops_test.go
+  start_line: null
+  end_line: null
+- path: internal/api/schema.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

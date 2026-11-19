@@ -1005,10 +1005,8 @@ func TestUpdateAcceptsNullFieldsLikeTheDartClientSendsThem(t *testing.T) {
 	}
 	// A patch that is not an object is still refused.
 	f.call(t, http.MethodPost, "/v1/tasks/update", `{"ids":["`+a.ID+`"],"settings":5}`, http.StatusUnprocessableEntity, nil)
-	// One task, the same way.
-	var one domain.Task
-	f.call(t, http.MethodPatch, "/v1/tasks/"+a.ID, `{"name":null,"dir":null,"priority":null,"labels":null,"settings":null}`,
-		http.StatusOK, &one)
+	// A merge patch of one task still refuses it: there a null settings would mean "unset everything".
+	f.call(t, http.MethodPatch, "/v1/tasks/"+a.ID, `{"settings":null}`, http.StatusUnprocessableEntity, nil)
 	// A body that is only a patch cannot be null: there is nothing to apply.
 	f.call(t, http.MethodPatch, "/v1/settings", `null`, http.StatusUnprocessableEntity, nil)
 }
