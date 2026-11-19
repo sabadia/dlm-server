@@ -71,9 +71,19 @@ func (SettingsPatch) Schema(huma.Registry) *huma.Schema {
 	}
 }
 
-// UnmarshalJSON keeps the raw JSON.
+// UnmarshalJSON keeps the raw JSON. A null is no patch: clients that write every
+// field of a request body, absent ones as null (the generated Dart client does),
+// send `"settings": null` to mean "no settings patch", and refusing it failed
+// the whole request. A patch that is not an object is still refused, and a body
+// that is only a patch (PATCH /v1/settings) is then empty, which the service
+// refuses as an invalid patch.
 func (p *SettingsPatch) UnmarshalJSON(data []byte) error {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		*p = nil
+		return nil
+	}
+	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return errors.New("api: settings patch must be a JSON object")
 	}
 	*p = append((*p)[:0], data...)
