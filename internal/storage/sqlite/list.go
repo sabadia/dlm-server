@@ -15,7 +15,7 @@ import (
 
 // taskColumns is the column list scanned by scanTask, in db.Task field order.
 const taskColumns = `id, queue_id, status, priority, position, engine, name, dir, size, downloaded,
-	source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at`
+	source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at, archived`
 
 // taskCursor is the decoded form of an opaque pagination cursor: the sort
 // key of the last row on the previous page plus its ID as a tie-breaker.
@@ -83,6 +83,15 @@ func filterConds(f storage.TaskFilter) (conds []string, args []any, err error) {
 	if f.QueueID != "" {
 		conds = append(conds, "queue_id = ?")
 		args = append(args, f.QueueID)
+	}
+	switch f.Archived {
+	case storage.ArchivedExclude:
+		conds = append(conds, "archived = 0")
+	case storage.ArchivedOnly:
+		conds = append(conds, "archived = 1")
+	case storage.ArchivedAny:
+	default:
+		return nil, nil, domain.InvalidArgument("storage: unknown archived filter %q", f.Archived)
 	}
 	if len(f.Statuses) > 0 {
 		ph := make([]string, len(f.Statuses))
@@ -259,7 +268,7 @@ func (r taskRepo) List(ctx context.Context, f storage.TaskFilter) (storage.TaskP
 		if err := rows.Scan(
 			&t.ID, &t.QueueID, &t.Status, &t.Priority, &t.Position, &t.Engine, &t.Name, &t.Dir,
 			&t.Size, &t.Downloaded, &t.Source, &t.Resource, &t.Settings, &t.Labels, &t.Error,
-			&t.CreatedAt, &t.UpdatedAt, &t.StartedAt, &t.CompletedAt,
+			&t.CreatedAt, &t.UpdatedAt, &t.StartedAt, &t.CompletedAt, &t.Archived,
 		); err != nil {
 			return storage.TaskPage{}, fmt.Errorf("storage: list tasks: %w", err)
 		}

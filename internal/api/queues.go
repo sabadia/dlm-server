@@ -17,7 +17,9 @@ const tagQueues = "queues"
 type QueueList struct {
 	Queues []*domain.Queue `json:"queues" doc:"Every queue, ordered by position."`
 	// Counts maps a queue ID to the number of its tasks per status.
-	Counts map[string]map[string]int `json:"counts" doc:"Per queue ID, the number of tasks in each status (statuses without tasks are left out)."`
+	Counts map[string]map[string]int `json:"counts" doc:"Per queue ID, the number of tasks in each status (statuses without tasks are left out; archived tasks are not counted)."`
+	// Archived is the number of archived tasks.
+	Archived int `json:"archived" doc:"The number of archived tasks, across all queues."`
 }
 
 // CreateQueueBody is the request of create-queue.
@@ -166,7 +168,11 @@ func (s *Server) listQueues(ctx context.Context, _ *struct{}) (*struct{ Body Que
 		}
 		out[id] = m
 	}
-	return &struct{ Body QueueList }{Body: QueueList{Queues: qs, Counts: out}}, nil
+	archived, err := s.queues.ArchivedCount(ctx)
+	if err != nil {
+		return nil, s.fail(ctx, "list-queues", err, locBody)
+	}
+	return &struct{ Body QueueList }{Body: QueueList{Queues: qs, Counts: out, Archived: archived}}, nil
 }
 
 func (s *Server) createQueue(ctx context.Context, in *struct{ Body CreateQueueBody }) (*queueOutput, error) {

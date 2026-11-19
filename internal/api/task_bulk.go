@@ -25,6 +25,7 @@ type UpdateTasksBody struct {
 	Labels       map[string]string `json:"labels,omitempty" doc:"Labels to add or change; the other labels of each task stay."`
 	RemoveLabels []string          `json:"removeLabels,omitempty" doc:"Labels to drop (by key)."`
 	Settings     SettingsPatch     `json:"settings,omitempty" doc:"Merge patch of each task's settings overrides; null values unset fields."`
+	Archived     *bool             `json:"archived,omitempty" doc:"true moves the tasks into the archive (only completed or failed tasks can be archived), false takes them out again."`
 }
 
 func (s *Server) registerTaskBulk() {
@@ -80,7 +81,7 @@ func (s *Server) moveTasks(ctx context.Context, in *struct{ Body MoveTasksBody }
 func (s *Server) updateTasks(ctx context.Context, in *struct{ Body UpdateTasksBody }) (*BatchOutput, error) {
 	b := in.Body
 	change := service.UpdateTaskInput{
-		Priority: b.Priority, LabelsSet: b.Labels, LabelsRemove: b.RemoveLabels, SettingsPatch: []byte(b.Settings),
+		Priority: b.Priority, LabelsSet: b.Labels, LabelsRemove: b.RemoveLabels, SettingsPatch: []byte(b.Settings), Archived: b.Archived,
 	}
 	return s.bulk(ctx, "update-tasks", b.TaskSelector, func(ctx context.Context, ids []string) []service.BatchResult {
 		return s.tasks.UpdateMany(ctx, ids, change, b.QueueID)

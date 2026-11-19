@@ -1,0 +1,32 @@
+schema_version: 1
+id: 01a1ac83-5ca9-7b41-ade9-3841f00913dd
+status: draft
+created_at: '2026-11-05T16:20:52Z'
+updated_at: '2026-11-05T16:20:52Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: The log stream could drop a record added right after the client got the headers, and its test then hung the whole package for 10 minutes on CI; take the stream's starting point before subscribing and bound the test helper
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: internal/api/events_test.go
+  start_line: null
+  end_line: null
+- path: internal/api/logs.go
+  start_line: null
+  end_line: null
+- path: internal/api/logs_test.go
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

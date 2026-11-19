@@ -67,6 +67,8 @@ type DuplicateHint struct {
 	TaskID string            `json:"taskId"`
 	Name   string            `json:"name"`
 	Status domain.TaskStatus `json:"status"`
+	// Archived is true when the existing task is in the archive.
+	Archived bool `json:"archived,omitempty"`
 }
 
 // CreateTaskInput are the fields of a new task.
@@ -113,6 +115,9 @@ type UpdateTaskInput struct {
 	// SettingsPatch is an RFC 7396 JSON merge patch applied to the task's
 	// overrides (see settings.MergePatch).
 	SettingsPatch []byte
+	// Archived moves the task into (true) or out of (false) the archive. Only a
+	// completed or failed task can be archived.
+	Archived *bool
 }
 
 // DeleteOptions controls TaskService.Delete.
@@ -164,7 +169,7 @@ func (s *TaskService) Resolve(ctx context.Context, in ResolveInput) (*ResolveRes
 	if dup, err := s.d.Store.Tasks().FindDuplicate(ctx, storage.DuplicateQuery{
 		URLs: []string{probe.Source.CurrentURL, probe.Source.OriginalURL}, Name: res.Name, Size: probe.Resource.Size,
 	}); err == nil && dup != nil {
-		res.DuplicateOf = &DuplicateHint{TaskID: dup.ID, Name: dup.Name, Status: dup.Status}
+		res.DuplicateOf = &DuplicateHint{TaskID: dup.ID, Name: dup.Name, Status: dup.Status, Archived: dup.Archived}
 	}
 	res.ResolveID = s.d.Resolves.Put(probe)
 	res.ExpiresAt = s.d.now().Add(s.d.Resolves.TTL())
@@ -459,6 +464,13 @@ func (s *TaskService) update(ctx context.Context, id string, in UpdateTaskInput,
 				t.Labels = nil
 			}
 		}
+		if in.Archived != nil && *in.Archived != t.Archived {
+			if *in.Archived && t.Status != domain.StatusCompleted && t.Status != domain.StatusError {
+				return domain.ConflictCode("task.invalid_state", map[string]string{"taskId": id, "status": string(t.Status), "operation": "archive"},
+					"service: task %q: only a completed or failed task can be archived, not %s", id, t.Status)
+			}
+			t.Archived = *in.Archived
+		}
 		if in.SettingsPatch != nil {
 			if t.Settings, err = patchSettings(t.Settings, in.SettingsPatch); err != nil {
 				return err
@@ -711,7 +723,7 @@ func (s *TaskService) Restart(ctx context.Context, id string) (*domain.Task, err
 		if t.Status != domain.StatusCompleted && t.Status != domain.StatusError {
 			return domain.ConflictCode("task.invalid_state", map[string]string{"taskId": id, "status": string(t.Status), "operation": "restart"}, "service: task %q: only completed or failed tasks can be restarted, not %s", id, t.Status)
 		}
-		if final, part, ok := taskPaths(t); ok {
+		if final, _, ok := taskPaths(t); ok {
 			exists, err := fileExists(final)
 			if err != nil {
 				return fmt.Errorf("service: restart task %q: %w", id, err)
@@ -719,7 +731,7 @@ func (s *TaskService) Restart(ctx context.Context, id string) (*domain.Task, err
 			if exists {
 				return domain.ConflictCode("task.file_exists", map[string]string{"taskId": id, "path": final}, "service: task %q: file %q exists; delete or move it before restarting", id, final)
 			}
-			if err := removeFile(part); err != nil {
+			if err := removeWork(final); err != nil {
 				return fmt.Errorf("service: restart task %q: %w", id, err)
 			}
 		}
@@ -800,12 +812,24 @@ func (s *TaskService) delete(ctx context.Context, id string, opts DeleteOptions)
 // removeFiles deletes a task's .part and final file. Only plain files and
 // symlinks directly inside the task's directory are removed.
 func (s *TaskService) removeFiles(ctx context.Context, t *domain.Task) error {
-	final, part, ok := taskPaths(t)
+	final, _, ok := taskPaths(t)
 	if !ok {
 		return nil
 	}
-	if err := removeFile(part); err != nil {
-		return fmt.Errorf("service: delete task %q files: %w", t.ID, err)
+	// The work artifacts go first and are all tried: a failure on one must not
+	// leave the others (a yt-dlp .part directory, an HLS segment directory).
+	workErr := removeWork(final)
+	if t.Resource != nil && len(t.Resource.Files) > 0 {
+		// Unfinished files of a multi-file torrent carry .part.
+		for _, f := range t.Resource.Files {
+			rel := filepath.Join(filepath.FromSlash(f.Path), f.Name)
+			if rel != "" && filepath.IsLocal(rel) {
+				workErr = errors.Join(workErr, removeFile(filepath.Join(final, rel)+partSuffix))
+			}
+		}
+	}
+	if workErr != nil {
+		s.d.Logger.WarnContext(ctx, "work files of a deleted task could not be removed", "task_id", t.ID, "error", workErr)
 	}
 	if err := removeFile(final); err != nil {
 		if errors.Is(err, errIsDir) {

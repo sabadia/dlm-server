@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -323,6 +324,8 @@ func (c *Config) Validate() error {
 	} else {
 		if port == "" {
 			errs = append(errs, fmt.Errorf("server.address %q: missing port", c.Server.Address))
+		} else if n, perr := strconv.Atoi(port); perr != nil || n < 0 || n > 65535 {
+			errs = append(errs, fmt.Errorf("server.address %q: the port %q is not a number from 0 to 65535", c.Server.Address, port))
 		}
 		if !isLoopbackHost(host) {
 			if !c.Server.AllowRemote {
@@ -334,6 +337,22 @@ func (c *Config) Validate() error {
 	}
 	if (c.Server.TLSCert == "") != (c.Server.TLSKey == "") {
 		errs = append(errs, errors.New("server.tls_cert and server.tls_key must be set together"))
+	}
+	for name, port := range map[string]int{"torrent.listen_port": c.Torrent.ListenPort, "ed2k.listen_port": c.ED2K.ListenPort} {
+		if port < 0 || port > 65535 {
+			errs = append(errs, fmt.Errorf("%s %d: want a port from 0 to 65535 (0 picks a free one)", name, port))
+		}
+	}
+	if c.Torrent.ListenHost != "" {
+		if _, aerr := netip.ParseAddr(c.Torrent.ListenHost); aerr != nil {
+			errs = append(errs, fmt.Errorf("torrent.listen_host %q is not an IP address", c.Torrent.ListenHost))
+		}
+	}
+	if c.Torrent.UploadLimit < 0 || c.ED2K.UploadLimitKB < 0 {
+		errs = append(errs, errors.New("torrent.upload_limit and ed2k.upload_limit_kb must not be negative (0 is unlimited)"))
+	}
+	if c.Torrent.MetadataTimeout <= 0 {
+		errs = append(errs, errors.New("torrent.metadata_timeout must be positive"))
 	}
 	// The API refuses to start with an origin it cannot use, so it is refused here, where
 	// it is typed, and not when the daemon next starts.
@@ -367,6 +386,29 @@ func (c *Config) Validate() error {
 	}
 	if c.Log.MaxSizeMB < 1 || c.Log.MaxBackups < 0 || c.Log.MaxAgeDays < 0 {
 		errs = append(errs, errors.New("log rotation: max_size_mb must be >= 1, max_backups and max_age_days >= 0"))
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("config: invalid configuration: %w", err)
+	}
+	return nil
+}
+
+// ValidateFiles checks the files the configuration names: the TLS certificate
+// and key must be readable. It is separate from Validate, which does no I/O, and
+// runs when the configuration is saved, so a typo is refused there and not when
+// the daemon next starts.
+func (c *Config) ValidateFiles() error {
+	var errs []error
+	for _, f := range []struct{ name, path string }{{"server.tls_cert", c.Server.TLSCert}, {"server.tls_key", c.Server.TLSKey}} {
+		if f.path == "" {
+			continue
+		}
+		file, err := os.Open(f.path) //nolint:gosec // the configured certificate file
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s %q cannot be read: %w", f.name, f.path, err))
+			continue
+		}
+		_ = file.Close() // only readability matters
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("config: invalid configuration: %w", err)

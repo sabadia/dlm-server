@@ -55,7 +55,7 @@ type ResolvePageInput struct {
 // the browser downloaded itself) is kept for a while: pass its ID and a
 // candidate index to Download.
 func (s *BrowserService) ResolvePage(ctx context.Context, in ResolvePageInput) (*browser.PageResult, error) {
-	res, err := s.b.ResolvePage(ctx, in.URL, browser.ResolveOptions{Wait: in.Wait})
+	res, err := s.b.ResolvePage(ctx, in.URL, browser.ResolveOptions{Wait: in.Wait, RequirePage: true})
 	if err != nil {
 		return nil, browserError(err)
 	}

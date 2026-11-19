@@ -143,6 +143,7 @@ func decodeTask(r *db.Task) (*domain.Task, error) {
 		UpdatedAt:   fromMillis(r.UpdatedAt),
 		StartedAt:   fromNullMillis(r.StartedAt),
 		CompletedAt: fromNullMillis(r.CompletedAt),
+		Archived:    r.Archived != 0,
 	}
 	if err := unmarshalJSON("source", r.Source, &t.Source); err != nil {
 		return nil, fmt.Errorf("storage: task %q: %w", r.ID, err)

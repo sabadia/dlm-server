@@ -151,10 +151,16 @@ func (d *Download) concat(t *Track, dest string) error {
 				lastInit = id
 			}
 		}
-		if err := appendFile(out, d.segPath(t.Index, s.Seq)); err != nil {
+		seg := d.segPath(t.Index, s.Seq)
+		if err := appendFile(out, seg); err != nil {
 			_ = out.Close() // the append failed; the error is what matters
-			return d.fileError("append", d.segPath(t.Index, s.Seq), err)
+			return d.fileError("append", seg, err)
 		}
+		// The bytes are in the track now: freeing the segment keeps the disk
+		// use at about one copy of the stream (plus ffmpeg's output) instead of
+		// two or three. A merge that fails later finds the segment missing,
+		// like a resumed run does, and fetches it again.
+		_ = os.Remove(seg)
 		copied++
 	}
 	if err := out.Close(); err != nil {

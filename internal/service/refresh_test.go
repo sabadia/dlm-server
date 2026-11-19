@@ -487,6 +487,32 @@ func TestAttachCapture(t *testing.T) {
 	}
 }
 
+func TestAttachCaptureToRenewsTheNamedTask(t *testing.T) {
+	e := newRefreshEnv(t)
+	manual := e.task(t, domain.StatusRunning, 0)
+	e.setSettings(t, manual.ID, refreshSettings(settings.RefreshSettings{
+		Strategies: settings.Some([]settings.RefreshStrategy{settings.RefreshManual}),
+	}))
+	if err := e.refresher.HandleExpired(t.Context(), manual.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	newLink := e.origin.URL + "/file?token=new"
+	src := domain.Source{CurrentURL: newLink, Fingerprint: domain.Fingerprint{Size: int64(len(e.data)), Filename: "file.bin"}}
+
+	// Untargeted matching leaves a manual wait alone; the named capture does not.
+	if got, err := e.refresher.AttachCapture(t.Context(), src); err != nil || got != nil {
+		t.Fatalf("AttachCapture = %+v, %v; want no match", got, err)
+	}
+	got, err := e.refresher.AttachCaptureTo(t.Context(), manual.ID, src)
+	if err != nil || got == nil || got.Status != domain.StatusQueued || got.Source.CurrentURL != newLink {
+		t.Fatalf("AttachCaptureTo = %+v, %v; want the renewed task", got, err)
+	}
+	// A task that is not waiting is refused, not silently ignored.
+	if _, err := e.refresher.AttachCaptureTo(t.Context(), manual.ID, src); !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("second AttachCaptureTo error = %v; want a conflict", err)
+	}
+}
+
 func TestAttachCaptureIgnoresManualWaitsAndBrokenLinks(t *testing.T) {
 	e := newRefreshEnv(t)
 	manual := e.task(t, domain.StatusRunning, 0)

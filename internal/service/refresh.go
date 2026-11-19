@@ -247,6 +247,38 @@ func (s *RefreshService) AttachCapture(ctx context.Context, src domain.Source) (
 	return nil, nil //nolint:nilnil // no waiting task matched: not an error
 }
 
+// AttachCaptureTo gives the captured link to one named task that is waiting for
+// a new link. Unlike AttachCapture it never falls through to "no task
+// matched": the caller named the task, so a task that is not waiting, or a
+// link that serves other content, is an error and no new task should be
+// created behind the user's back.
+func (s *RefreshService) AttachCaptureTo(ctx context.Context, taskID string, src domain.Source) (*domain.Task, error) {
+	t, eff, err := s.load(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if t.Status != domain.StatusAwaitingLink {
+		return nil, domain.ConflictCode("task.invalid_state", map[string]string{"taskId": taskID, "status": string(t.Status), "operation": "attach-capture"},
+			"service: task %q is not waiting for a new link (it is %s)", taskID, t.Status)
+	}
+	ctx = taskContext(ctx, t)
+	policy := eff.Settings.Refresh.OnMismatch.OrElse(settings.MismatchFail)
+	if policy == settings.MismatchAsk {
+		policy = settings.MismatchFail // a capture is not a decision; never discard data unasked
+	}
+	applied, err := s.tryCandidate(ctx, t, eff, refresh.Candidate{Source: mergeSource(t.Source, src)}, domain.RefreshCauseCapture, settings.RefreshExtensionCapture, policy)
+	if err != nil {
+		return nil, err
+	}
+	if !applied.ok {
+		if applied.err != nil {
+			return nil, domain.ConflictCode("refresh.capture_mismatch", map[string]string{"taskId": taskID}, "service: the captured link was not accepted: %v", applied.err)
+		}
+		return nil, domain.ConflictCode("refresh.capture_mismatch", map[string]string{"taskId": taskID}, "service: the captured link was not accepted for task %q", taskID)
+	}
+	return s.d.Store.Tasks().Get(ctx, taskID) //nolint:wrapcheck // plain store read
+}
+
 // History returns a task's refresh history, oldest first.
 func (s *RefreshService) History(ctx context.Context, taskID string) ([]*domain.RefreshAttempt, error) {
 	if _, err := s.d.Store.Tasks().Get(ctx, taskID); err != nil {

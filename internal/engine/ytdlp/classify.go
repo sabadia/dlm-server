@@ -25,7 +25,7 @@ func classifyFailure(stderr string, runErr error) error {
 	err := fmt.Errorf("ytdlp: %s", msg)
 	low := strings.ToLower(msg)
 	if strings.Contains(strings.ToLower(stderr), "javascript runtime") || strings.Contains(strings.ToLower(stderr), "challenge solving failed") {
-		err = fmt.Errorf("ytdlp: %s (this site needs a JavaScript runtime that DLM could not find: install deno, for example with `brew install deno`)", msg)
+		err = fmt.Errorf("ytdlp: %s (this site needs a JavaScript runtime that DLM could not find: install deno: see https://deno.com)", msg)
 	}
 	has := func(subs ...string) bool {
 		for _, s := range subs {
@@ -36,6 +36,8 @@ func classifyFailure(stderr string, runErr error) error {
 		return false
 	}
 	switch {
+	case has("ffmpeg is not installed", "ffmpeg not found", "ffprobe and ffmpeg not found", "requires ffmpeg", "postprocessing: ffmpeg"):
+		return engine.Fatal(domain.ErrorCodeFatal, fmt.Errorf("%w (ffmpeg is needed to merge video and audio: install it, or set its path in the settings)", err))
 	case has("no space left on device", "disk full", "not enough space"):
 		return engine.Fatal(domain.ErrorCodeDiskFull, err)
 	case has("http error 403", "http error 404", "http error 410", "has been removed", "no longer available"):

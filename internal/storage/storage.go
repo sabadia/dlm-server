@@ -86,6 +86,18 @@ const (
 
 // TaskFilter selects and orders tasks for TaskRepository.List. Zero values
 // mean "no filter" / defaults.
+// ArchivedFilter says how a listing treats archived tasks.
+type ArchivedFilter string
+
+const (
+	// ArchivedExclude (the default) leaves archived tasks out.
+	ArchivedExclude ArchivedFilter = ""
+	// ArchivedOnly lists only archived tasks.
+	ArchivedOnly ArchivedFilter = "only"
+	// ArchivedAny lists archived and other tasks together.
+	ArchivedAny ArchivedFilter = "any"
+)
+
 type TaskFilter struct {
 	// QueueID restricts the listing to one queue.
 	QueueID string
@@ -113,6 +125,8 @@ type TaskFilter struct {
 	// completion time leaves out tasks that are not completed.
 	CreatedAfter, CreatedBefore     time.Time
 	CompletedAfter, CompletedBefore time.Time
+	// Archived selects archived tasks; the zero value leaves them out.
+	Archived ArchivedFilter
 	// Sort defaults to TaskSortPosition.
 	Sort TaskSort
 	// Order is the direction; empty means the default of Sort.
@@ -164,6 +178,9 @@ type TaskRepository interface {
 	// CountByStatus counts the tasks of a queue per status; an empty queueID
 	// counts across all queues. Statuses without tasks are absent.
 	CountByStatus(ctx context.Context, queueID string) (map[domain.TaskStatus]int, error)
+	// CountArchived counts the archived tasks of a queue (all queues when
+	// queueID is empty). CountByStatus leaves them out.
+	CountArchived(ctx context.Context, queueID string) (int, error)
 	// Stats summarizes every task: counts per status, tasks and bytes per
 	// engine, the bytes of all tasks, and for each time in since the tasks
 	// completed at or after it.

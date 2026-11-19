@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/sabadia/dlm-server/internal/domain"
 	"github.com/sabadia/dlm-server/internal/events"
@@ -84,6 +85,9 @@ func (s *SettingsService) updateGlobal(ctx context.Context, etag string, next fu
 		if err := validateLevel(g, settings.LevelGlobal); err != nil {
 			return err
 		}
+		if err := checkDownloadDir(g); err != nil {
+			return err
+		}
 		if err := tx.Settings().SaveGlobal(ctx, g); err != nil {
 			return fmt.Errorf("service: save global settings: %w", err)
 		}
@@ -145,4 +149,30 @@ func effective(ctx context.Context, d Deps, queueID string, task settings.Settin
 		return settings.Effective{}, fmt.Errorf("service: effective settings: %w", err)
 	}
 	return settings.Resolve(settings.Layers{Defaults: d.Defaults(), Global: g, Queue: q.Settings, Task: task}), nil
+}
+
+// checkDownloadDir refuses a default download directory the daemon cannot use,
+// at the time it is typed: it must be creatable and writable. Without the check
+// every new download would fail later, one task at a time, with a file error.
+func checkDownloadDir(g settings.Settings) error {
+	dir, ok := g.DownloadDir.Get()
+	if !ok {
+		return nil
+	}
+	fail := func(msg string) error {
+		return domain.InvalidArgument("service: %w", &settings.ValidationError{
+			Level: settings.LevelGlobal, Fields: []*settings.FieldError{{Path: "downloadDir", Message: msg}},
+		})
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // download directories are user-visible
+		return fail("cannot be created: " + err.Error())
+	}
+	f, err := os.CreateTemp(dir, ".dlm-write-check-*")
+	if err != nil {
+		return fail("is not writable: " + err.Error())
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return nil
 }
