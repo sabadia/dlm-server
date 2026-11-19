@@ -6,10 +6,10 @@ require (
 	github.com/Eyevinn/dash-mpd v0.19.0
 	github.com/Eyevinn/hls-m3u8 v0.6.5
 	github.com/anacrolix/generics v0.2.0
-	github.com/anacrolix/torrent v1.61.1-0.20260911233437-76452a2c8a2f
-	github.com/chromedp/cdproto v0.158.4
-	github.com/chromedp/chromedp v0.21.0
-	github.com/danielgtaylor/huma/v2 v2.39.1
+	github.com/anacrolix/torrent v1.62.0
+	github.com/chromedp/cdproto v0.160.3
+	github.com/chromedp/chromedp v0.23.1
+	github.com/danielgtaylor/huma/v2 v2.40.0
 	github.com/dop251/goja v0.0.0-20261018113103-d42f16bb6161
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -23,19 +23,19 @@ require (
 	github.com/mholt/archives v0.1.5
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/monkeyWie/goed2k v0.0.0-20260602122456-f2a71d599dee
-	github.com/pressly/goose/v3 v3.29.0
+	github.com/pressly/goose/v3 v3.30.1
 	github.com/refraction-networking/utls v1.8.2
 	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 	github.com/zalando/go-keyring v0.2.8
-	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/net v0.61.0
-	golang.org/x/sync v0.24.0
-	golang.org/x/sys v0.49.0
+	go.yaml.in/yaml/v3 v3.0.6
+	golang.org/x/net v0.62.0
+	golang.org/x/sync v0.25.0
+	golang.org/x/sys v0.50.0
 	golang.org/x/time v0.16.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	lukechampine.com/blake3 v1.4.1
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.62.0
 )
 
 require (
@@ -57,7 +57,7 @@ require (
 	github.com/anacrolix/stm v0.5.0 // indirect
 	github.com/anacrolix/sync v0.5.5-0.20251119100342-d78dd1f686f1 // indirect
 	github.com/anacrolix/upnp v0.1.4 // indirect
-	github.com/andybalholm/brotli v1.2.7 // indirect
+	github.com/andybalholm/brotli v1.3.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/barkimedes/go-deepcopy v0.0.0-20220514131651-17c30cfc62df // indirect
 	github.com/benbjohnson/immutable v0.4.1-0.20221220213129-8932b999621d // indirect
@@ -68,6 +68,7 @@ require (
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/coder/websocket v1.8.15 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -88,16 +89,15 @@ require (
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/pprof v0.0.0-20261016150608-1facf8f91b50 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/klauspost/compress v1.20.2 // indirect
-	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
+	github.com/klauspost/compress v1.20.4 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/mfridman/interpolate v0.0.2 // indirect
+	github.com/mfridman/interpolate v0.2.0 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
 	github.com/minio/minlz v1.0.1 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
@@ -152,10 +152,10 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
-	golang.org/x/exp v0.0.0-20261011100332-faecfb24eb49 // indirect
+	golang.org/x/exp v0.0.0-20261109185158-a52e3aef5920 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
-	modernc.org/libc v1.79.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
+	modernc.org/libc v1.80.2 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 	zombiezen.com/go/sqlite v0.13.1 // indirect
