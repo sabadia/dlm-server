@@ -1,0 +1,29 @@
+schema_version: 1
+id: 01a1f1b7-7b00-79a9-9f6a-390c9eb5c106
+status: draft
+created_at: '2026-11-19T02:51:36Z'
+updated_at: '2026-11-19T02:51:36Z'
+affirmed_at: null
+affirmed_by: null
+author:
+  kind: human
+  name: null
+  tool: null
+goal: Bump anacrolix/torrent, brotli and klauspost/compress to the versions that fix GO-2026-6894, GO-2026-6888 and GO-2026-6865, which failed govulncheck
+constraints: []
+rejected: []
+assumptions: []
+falsifier: ''
+evidence: []
+links:
+- path: go.mod
+  start_line: null
+  end_line: null
+- path: go.sum
+  start_line: null
+  end_line: null
+adr: null
+risks: []
+source:
+  kind: flags
+  ref: null

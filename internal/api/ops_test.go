@@ -986,3 +986,27 @@ func TestArchiveHidesTasksFromListingsAndCounts(t *testing.T) {
 		t.Fatalf("delete by q = %+v", res.Results)
 	}
 }
+
+// A client that writes every field of a request body, the absent ones as null
+// (the generated Dart client does), must be understood: null settings is no
+// settings patch. It used to be refused with "settings patch must be a JSON
+// object", which failed every bulk update of the desktop app.
+func TestUpdateAcceptsNullFieldsLikeTheDartClientSendsThem(t *testing.T) {
+	f := newOpsFixture(t)
+	a := f.createTask(t, `{"url":"`+f.fileURL()+`","paused":true}`)
+	var res struct {
+		Results []BatchItem `json:"results"`
+	}
+	nulls := `"$schema":null,"filter":null,"labels":null,"queueId":null,"removeLabels":null,"settings":null`
+	f.call(t, http.MethodPost, "/v1/tasks/update",
+		`{`+nulls+`,"archived":null,"priority":"high","ids":["`+a.ID+`"]}`, http.StatusOK, &res)
+	if len(res.Results) != 1 || !res.Results[0].OK || res.Results[0].Task.Priority != domain.PriorityHigh {
+		t.Fatalf("priority with nulls = %+v", res.Results)
+	}
+	// A patch that is not an object is still refused.
+	f.call(t, http.MethodPost, "/v1/tasks/update", `{"ids":["`+a.ID+`"],"settings":5}`, http.StatusUnprocessableEntity, nil)
+	// A merge patch of one task still refuses it: there a null settings would mean "unset everything".
+	f.call(t, http.MethodPatch, "/v1/tasks/"+a.ID, `{"settings":null}`, http.StatusUnprocessableEntity, nil)
+	// A body that is only a patch cannot be null: there is nothing to apply.
+	f.call(t, http.MethodPatch, "/v1/settings", `null`, http.StatusUnprocessableEntity, nil)
+}

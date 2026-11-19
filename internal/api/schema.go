@@ -87,3 +87,34 @@ func (p SettingsPatch) MarshalJSON() ([]byte, error) {
 	}
 	return json.RawMessage(p).MarshalJSON() //nolint:wrapcheck // RawMessage.MarshalJSON never fails
 }
+
+// OptionalSettingsPatch is a SettingsPatch for a field of a request that is not
+// itself a merge patch (the bulk update). There an absent field and a null one
+// mean the same: no patch. A client that writes every field of a body, absent
+// ones as null (the generated Dart client does), sends `"settings": null`, and
+// refusing it failed every bulk update of the desktop app. Anything else that is
+// not an object is still refused. (A merge patch such as PATCH /v1/tasks/{id}
+// keeps refusing a null `settings`: there null would mean "unset everything".)
+type OptionalSettingsPatch []byte
+
+// Schema implements huma.SchemaProvider.
+func (OptionalSettingsPatch) Schema(r huma.Registry) *huma.Schema {
+	return SettingsPatch(nil).Schema(r)
+}
+
+// UnmarshalJSON keeps the raw JSON; null is no patch.
+func (p *OptionalSettingsPatch) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		*p = nil
+		return nil
+	}
+	var inner SettingsPatch
+	if err := inner.UnmarshalJSON(data); err != nil {
+		return err
+	}
+	*p = OptionalSettingsPatch(inner)
+	return nil
+}
+
+// MarshalJSON returns the raw JSON (null when empty).
+func (p OptionalSettingsPatch) MarshalJSON() ([]byte, error) { return SettingsPatch(p).MarshalJSON() }
