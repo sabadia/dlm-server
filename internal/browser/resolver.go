@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -37,6 +38,12 @@ type ResolveOptions struct {
 	// Quiet is how long nothing new has to appear before the page counts as
 	// settled.
 	Quiet time.Duration
+	// RequirePage refuses an address that serves a file instead of a web page
+	// (a download, an archive, a video file), with the error code
+	// browser.not_a_page, before any browser is started. A probe that cannot
+	// tell (the server refuses HEAD, is slow or unreachable) lets the page
+	// load go ahead.
+	RequirePage bool
 }
 
 // PageResult is what opening a page found.
@@ -120,6 +127,11 @@ func (r *Resolver) ResolvePage(ctx context.Context, pageURL string, opts Resolve
 	u, err := url.Parse(pageURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, domain.InvalidArgument("browser: %q is not an http(s) URL", pageURL)
+	}
+	if opts.RequirePage {
+		if err := requirePage(ctx, pageURL); err != nil {
+			return nil, err
+		}
 	}
 	if opts.Wait <= 0 {
 		opts.Wait = DefaultResolveWait
@@ -339,4 +351,61 @@ func hostsMatch(hosts map[string]bool, cookieDomain string) bool {
 		}
 	}
 	return false
+}
+
+// pageProbeTimeout bounds the look at an address before it is opened.
+const pageProbeTimeout = 8 * time.Second
+
+// requirePage looks at what pageURL serves (HEAD, then a one-byte GET when HEAD
+// is refused) and returns a browser.not_a_page error for a file: anything that
+// is not HTML, or is sent as an attachment. It returns nil when the answer is
+// a page or when it cannot be told.
+func requirePage(ctx context.Context, pageURL string) error {
+	ctx, cancel := context.WithTimeout(ctx, pageProbeTimeout)
+	defer cancel()
+	for _, method := range []string{http.MethodHead, http.MethodGet} {
+		req, err := http.NewRequestWithContext(ctx, method, pageURL, nil)
+		if err != nil {
+			return nil //nolint:nilerr // an unusable request is the browser's to report
+		}
+		if method == http.MethodGet {
+			req.Header.Set("Range", "bytes=0-0")
+		}
+		req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
+		resp, err := (&http.Client{Timeout: pageProbeTimeout}).Do(req) //nolint:gosec // the address is the one the user asked to open
+		if err != nil {
+			return nil //nolint:nilerr // cannot tell; let the browser try
+		}
+		_ = resp.Body.Close() // only the headers matter
+		if method == http.MethodHead && (resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented || resp.StatusCode == http.StatusForbidden) {
+			continue
+		}
+		if resp.StatusCode >= 400 {
+			return nil // an error page is still a page; the browser shows what the site says
+		}
+		if isFileResponse(resp.Header) {
+			return domain.InvalidArgumentCode("browser.not_a_page", map[string]string{
+				"url": pageURL, "contentType": resp.Header.Get("Content-Type"),
+			}, "browser: %q is a file (%s), not a web page; add it as a download instead", pageURL, cmpOr(resp.Header.Get("Content-Type"), "unknown type"))
+		}
+		return nil
+	}
+	return nil
+}
+
+// isFileResponse reports whether the headers describe a file rather than a page.
+func isFileResponse(h http.Header) bool {
+	if cd := strings.ToLower(h.Get("Content-Disposition")); strings.HasPrefix(strings.TrimSpace(cd), "attachment") {
+		return true
+	}
+	ct := strings.ToLower(strings.TrimSpace(h.Get("Content-Type")))
+	if ct == "" {
+		return false
+	}
+	mt := mediaType(ct)
+	switch mt {
+	case "text/html", "application/xhtml+xml", "text/plain", "application/xml", "text/xml":
+		return false
+	}
+	return true
 }

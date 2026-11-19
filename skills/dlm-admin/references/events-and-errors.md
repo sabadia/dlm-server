@@ -54,9 +54,9 @@ New codes may appear, and generated ones follow the pattern `<entity>.not_found`
 | Config | `config.unknown_key`, `config.read_only`, `config.bad_value`, `config.invalid` |
 | Limits and stats | `limits.bad_limit`, `limits.bad_duration`, `stats.bad_bucket`, `stats.bad_range`, `stats.range_too_large` |
 | Cleanup | `cleanup.bad_age` |
-| Capture | `capture.bad_resolver`, `capture.body_too_large`, `capture.too_large` |
+| Capture | `capture.bad_resolver`, `capture.body_too_large`, `capture.too_large`, `refresh.capture_mismatch` (409: a capture sent with `refreshTaskId` did not fit that task) |
 | Filesystem | `fs.disabled`, `fs.outside_roots`, `fs.not_absolute`, `fs.not_directory`, `fs.path_not_found`, `fs.unreadable` |
 | Pairing | `pairing.not_found`, `pairing.not_pending`, `pairing.bad_browser`, `pairing.bad_field`, `pairing.too_many`, `pairing.local_only` |
 | Native host | `native_host.local_only`, `native_host.nothing_to_install` |
 | Tokens | `token.bad_name`, `token.bad_scope` |
-| System | `origin.failed`, `browser.unavailable`, `browser.running`, `service.unavailable`, `request.cancelled` |
+| System | `origin.failed`, `browser.unavailable`, `browser.running`, `browser.not_a_page` (the address is a file: add it as a download), `service.unavailable`, `request.cancelled` |

@@ -198,6 +198,9 @@ func layer(path string, running *Config) (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	if err := cfg.ValidateFiles(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 

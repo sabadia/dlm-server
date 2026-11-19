@@ -280,6 +280,10 @@
             "description": "Referer the browser sent (default pageUrl).",
             "type": "string"
           },
+          "refreshTaskId": {
+            "description": "ID of a task that is waiting for a new link: the capture then only renews that task (409 when it is not waiting or the link serves other content) and never creates a task.",
+            "type": "string"
+          },
           "resolverKind": {
             "description": "How the link is turned into a download: direct (a file, the default), ytdlp (a video or audio page yt-dlp can extract) or browser (a page that needs the headless browser).",
             "enum": [
@@ -1284,6 +1288,9 @@
       "DuplicateHint": {
         "additionalProperties": false,
         "properties": {
+          "archived": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           },
@@ -3376,6 +3383,11 @@
             "readOnly": true,
             "type": "string"
           },
+          "archived": {
+            "description": "The number of archived tasks, across all queues.",
+            "format": "int64",
+            "type": "integer"
+          },
           "counts": {
             "additionalProperties": {
               "additionalProperties": {
@@ -3384,7 +3396,7 @@
               },
               "type": "object"
             },
-            "description": "Per queue ID, the number of tasks in each status (statuses without tasks are left out).",
+            "description": "Per queue ID, the number of tasks in each status (statuses without tasks are left out; archived tasks are not counted).",
             "type": "object"
           },
           "queues": {
@@ -3400,7 +3412,8 @@
         },
         "required": [
           "queues",
-          "counts"
+          "counts",
+          "archived"
         ],
         "type": "object"
       },
@@ -5278,6 +5291,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "archived": {
+            "type": "boolean"
+          },
           "completedAt": {
             "format": "date-time",
             "type": "string"
@@ -5357,7 +5373,8 @@
           "source",
           "settings",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "archived"
         ],
         "type": "object"
       },
@@ -5687,6 +5704,31 @@
       "TaskSelectorFilter": {
         "additionalProperties": false,
         "properties": {
+          "archived": {
+            "description": "Archived tasks: exclude (the default), only, or any.",
+            "enum": [
+              "exclude",
+              "only",
+              "any"
+            ],
+            "type": "string"
+          },
+          "category": {
+            "description": "Only tasks of this category (ID or name).",
+            "type": "string"
+          },
+          "engine": {
+            "description": "Only tasks of this engine.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Only tasks with this label: key, or key=value.",
+            "type": "string"
+          },
+          "q": {
+            "description": "Case-insensitive substring of the task name or URL.",
+            "type": "string"
+          },
           "queueId": {
             "description": "Only tasks of this queue.",
             "type": "string"
@@ -6467,6 +6509,10 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "archived": {
+            "description": "true moves the tasks into the archive (only completed or failed tasks can be archived), false takes them out again.",
+            "type": "boolean"
           },
           "filter": {
             "$ref": "#/components/schemas/TaskSelectorFilter",
@@ -12743,6 +12789,22 @@
             "name": "cursor",
             "schema": {
               "description": "nextCursor of the previous page (same sort and order).",
+              "type": "string"
+            }
+          },
+          {
+            "description": "exclude (the default) leaves archived tasks out, only lists just them, any lists both.",
+            "explode": false,
+            "in": "query",
+            "name": "archived",
+            "schema": {
+              "default": "exclude",
+              "description": "exclude (the default) leaves archived tasks out, only lists just them, any lists both.",
+              "enum": [
+                "exclude",
+                "only",
+                "any"
+              ],
               "type": "string"
             }
           }

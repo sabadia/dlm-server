@@ -134,6 +134,13 @@ func TestValidate(t *testing.T) {
 		{"ipv6 loopback ok", func(c *Config) { c.Server.Address = "[::1]:80" }, ""},
 		{"bad address", func(c *Config) { c.Server.Address = "nope" }, "server.address"},
 		{"missing port", func(c *Config) { c.Server.Address = "127.0.0.1:" }, "missing port"},
+		{"port not a number", func(c *Config) { c.Server.Address = "127.0.0.1:http" }, "port"},
+		{"port too large", func(c *Config) { c.Server.Address = "127.0.0.1:99999" }, "0 to 65535"},
+		{"torrent port out of range", func(c *Config) { c.Torrent.ListenPort = 70000 }, "torrent.listen_port"},
+		{"ed2k port negative", func(c *Config) { c.ED2K.ListenPort = -1 }, "ed2k.listen_port"},
+		{"torrent host not an ip", func(c *Config) { c.Torrent.ListenHost = "not-an-ip" }, "torrent.listen_host"},
+		{"negative upload limit", func(c *Config) { c.Torrent.UploadLimit = -5 }, "upload_limit"},
+		{"metadata timeout zero", func(c *Config) { c.Torrent.MetadataTimeout = 0 }, "metadata_timeout"},
 		{"all interfaces rejected", func(c *Config) { c.Server.Address = ":80" }, "allow_remote"},
 		{"remote without tls", func(c *Config) {
 			c.Server.Address = "0.0.0.0:80"

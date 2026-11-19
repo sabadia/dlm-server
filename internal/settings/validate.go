@@ -37,6 +37,14 @@ type FieldError struct {
 	Message string
 }
 
+// MaxWaitDuration bounds the durations that make a task wait (a retry backoff,
+// how long a task waits for a new link): beyond it a typo, not a plan, is the
+// likelier reading, and a task would sit unseen for months.
+const MaxWaitDuration = 30 * 24 * time.Hour
+
+// MaxQuotaPeriod is the longest quota window.
+const MaxQuotaPeriod = 366 * 24 * time.Hour
+
 // MaxRetentionDays is the largest retentionDays.
 const MaxRetentionDays = 36500
 
@@ -86,9 +94,9 @@ func (s *Settings) Validate(level Level) error {
 
 	v.intRange("retry.maxAttempts", s.Retry.MaxAttempts, 0, MaxRetryAttemptsLimit)
 	v.intRange("retry.taskAttempts", s.Retry.TaskAttempts, 0, MaxRetryAttemptsLimit)
-	v.positiveDuration("retry.taskBackoff", s.Retry.TaskBackoff)
-	v.positiveDuration("retry.initialBackoff", s.Retry.InitialBackoff)
-	v.positiveDuration("retry.maxBackoff", s.Retry.MaxBackoff)
+	v.waitDuration("retry.taskBackoff", s.Retry.TaskBackoff)
+	v.waitDuration("retry.initialBackoff", s.Retry.InitialBackoff)
+	v.waitDuration("retry.maxBackoff", s.Retry.MaxBackoff)
 	if lo, ok := s.Retry.InitialBackoff.Get(); ok {
 		if hi, ok := s.Retry.MaxBackoff.Get(); ok && hi < lo {
 			v.add("retry.maxBackoff", "must be >= retry.initialBackoff")
@@ -132,7 +140,7 @@ func (s *Settings) Validate(level Level) error {
 	}
 
 	v.intRange("refresh.maxAttempts", s.Refresh.MaxAttempts, 0, MaxRefreshAttemptsLimit)
-	v.positiveDuration("refresh.awaitTimeout", s.Refresh.AwaitTimeout)
+	v.waitDuration("refresh.awaitTimeout", s.Refresh.AwaitTimeout)
 	enum(v, "refresh.onMismatch", s.Refresh.OnMismatch, MismatchRestart, MismatchFail, MismatchAsk)
 	if strategies, ok := s.Refresh.Strategies.Get(); ok {
 		known := []RefreshStrategy{RefreshOriginRedirect, RefreshPageReload, RefreshExtensionCapture, RefreshPlugin, RefreshManual}
@@ -186,6 +194,8 @@ func (s *Settings) Validate(level Level) error {
 		}
 		if q.Period.Std() < MinQuotaPeriod {
 			v.add("quota.period", "must be at least "+MinQuotaPeriod.String())
+		} else if q.Period.Std() > MaxQuotaPeriod {
+			v.add("quota.period", "must be at most "+MaxQuotaPeriod.String())
 		}
 	}
 	if a, ok := s.OnQueueComplete.Get(); ok {
@@ -207,6 +217,14 @@ func (v *validator) add(path, msg string) {
 func (v *validator) intRange(path string, o Optional[int], lo, hi int) {
 	if n, ok := o.Get(); ok && (n < lo || n > hi) {
 		v.add(path, fmt.Sprintf("must be between %d and %d", lo, hi))
+	}
+}
+
+// waitDuration is positiveDuration with an upper bound, MaxWaitDuration.
+func (v *validator) waitDuration(path string, o Optional[Duration]) {
+	v.positiveDuration(path, o)
+	if d, ok := o.Get(); ok && d.Std() > MaxWaitDuration {
+		v.add(path, "must be at most "+MaxWaitDuration.String())
 	}
 }
 

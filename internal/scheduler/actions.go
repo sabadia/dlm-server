@@ -13,6 +13,7 @@ import (
 	"github.com/sabadia/dlm-server/internal/events"
 	"github.com/sabadia/dlm-server/internal/platform"
 	"github.com/sabadia/dlm-server/internal/settings"
+	"github.com/sabadia/dlm-server/internal/storage"
 )
 
 // CommandTimeout bounds a post-queue "command" action.
@@ -109,7 +110,10 @@ func (s *Scheduler) queueActions(ctx context.Context, st *passState, now time.Ti
 		if runningPer[id] > 0 {
 			return true, nil
 		}
-		return s.hasQueued(ctx, id)
+		if busy, err := s.hasQueued(ctx, id); busy || err != nil {
+			return busy, err
+		}
+		return s.hasWaiting(ctx, id)
 	}
 
 	for id, p := range s.pending {
@@ -201,6 +205,35 @@ func (s *Scheduler) hasQueued(ctx context.Context, queueID string) (bool, error)
 		return false, err
 	}
 	return len(ids) > 0, nil
+}
+
+// hasWaiting reports whether a task of the queue is still on its way without
+// being queued or running: waiting for a new link, being refreshed or
+// post-processed, or failed with an automatic retry due. The queue is not
+// finished while one is: a shutdown or sleep now would cut it off.
+func (s *Scheduler) hasWaiting(ctx context.Context, queueID string) (bool, error) {
+	filter := storage.TaskFilter{
+		QueueID: queueID,
+		Statuses: []domain.TaskStatus{
+			domain.StatusAwaitingLink, domain.StatusRefreshing, domain.StatusPostprocessing, domain.StatusError,
+		},
+		Limit: storage.MaxTaskLimit,
+	}
+	for {
+		page, err := s.o.Store.Tasks().List(ctx, filter)
+		if err != nil {
+			return false, fmt.Errorf("scheduler: list waiting tasks of queue %q: %w", queueID, err)
+		}
+		for _, t := range page.Tasks {
+			if t.Status != domain.StatusError || (t.Error != nil && t.Error.Retry != nil) {
+				return true, nil
+			}
+		}
+		if page.NextCursor == "" {
+			return false, nil
+		}
+		filter.Cursor = page.NextCursor
+	}
 }
 
 // execute runs a due post-queue action in an owned goroutine; ctx is the

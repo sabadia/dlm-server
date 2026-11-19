@@ -69,6 +69,8 @@ type CaptureBody struct {
 	Headers         map[string]string    `json:"headers,omitempty" doc:"Request headers to repeat; Cookie and Host are ignored."`
 	MediaCandidates []MediaCandidateBody `json:"mediaCandidates,omitempty" doc:"Media found on the page. Selects the download when url is absent; when url equals a candidate its variant, mime and size fill in what the request omits."`
 
+	RefreshTaskID string `json:"refreshTaskId,omitempty" doc:"ID of a task that is waiting for a new link: the capture then only renews that task (409 when it is not waiting or the link serves other content) and never creates a task."`
+
 	QueueID  string            `json:"queueId,omitempty" doc:"Queue ID or name (default: the Main queue)."`
 	Dir      string            `json:"dir,omitempty" doc:"Absolute download directory."`
 	Settings settings.Settings `json:"settings,omitzero" doc:"Task-level settings overrides."`
@@ -106,7 +108,7 @@ func (b *CaptureBody) toInput(extension bool) service.CaptureInput {
 		taskCookies = false
 	}
 	in := service.CaptureInput{
-		Name: b.Name, ResolverKind: b.ResolverKind, Mirrors: b.Mirrors, Method: b.Method, Body: b.Body, TaskCookies: taskCookies,
+		RefreshTaskID: b.RefreshTaskID, Name: b.Name, ResolverKind: b.ResolverKind, Mirrors: b.Mirrors, Method: b.Method, Body: b.Body, TaskCookies: taskCookies,
 		URL: b.URL, FinalURL: b.FinalURL, PageURL: b.PageURL, Referrer: b.Referrer,
 		Filename: b.Filename, MIME: b.MIME, Size: b.Size, UserAgent: b.UserAgent, Headers: b.Headers,
 		QueueID: b.QueueID, Dir: b.Dir, Settings: b.Settings, Priority: b.Priority, Labels: b.Labels, Paused: b.Paused, AllowDuplicate: b.AllowDuplicate,

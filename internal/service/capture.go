@@ -46,6 +46,11 @@ type MediaCandidate struct {
 // CaptureInput is a download captured by a browser extension, with the
 // context needed to download it and to obtain the link again later.
 type CaptureInput struct {
+	// RefreshTaskID names the task waiting for a new link that this capture is
+	// the link of. When set, the capture only renews that task: it is an error
+	// when the task is not waiting or the link does not match, and no task
+	// is created.
+	RefreshTaskID string
 	// URL is the link the user clicked. It may be empty when MediaCandidates
 	// is not: the best candidate is then downloaded.
 	URL string
@@ -155,6 +160,24 @@ func (s *CaptureService) Capture(ctx context.Context, in CaptureInput) (*Capture
 		return nil, fmt.Errorf("service: capture: %w", err)
 	}
 	src.CookieDomains = cookieDomains(in.Cookies, src.CurrentURL)
+	if in.RefreshTaskID != "" {
+		if s.refresh == nil {
+			s.dropTaskCookies(ctx, taskID)
+			return nil, domain.InvalidArgument("service: capture: link renewal is not available")
+		}
+		waiting, err := s.refresh.AttachCaptureTo(ctx, in.RefreshTaskID, src)
+		if err != nil {
+			s.dropTaskCookies(ctx, taskID)
+			return nil, err
+		}
+		if in.TaskCookies {
+			s.dropTaskCookies(ctx, taskID)
+			if _, err := s.cookies.ImportForTask(ctx, waiting.ID, in.Cookies); err != nil {
+				return nil, fmt.Errorf("service: capture: %w", err)
+			}
+		}
+		return &CaptureResult{Task: waiting, Cookies: res, Refreshed: true}, nil
+	}
 	if s.refresh != nil {
 		// A task waiting for a new link (extension-capture) that this
 		// capture matches gets the link instead of a duplicate being created.
