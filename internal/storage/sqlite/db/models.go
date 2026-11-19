@@ -124,6 +124,7 @@ type Task struct {
 	UpdatedAt   int64
 	StartedAt   sql.NullInt64
 	CompletedAt sql.NullInt64
+	Archived    int64
 }
 
 type TaskSegment struct {

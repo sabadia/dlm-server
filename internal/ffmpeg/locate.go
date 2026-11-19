@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -57,7 +58,7 @@ type Locator struct {
 // NewLocator creates a Locator. It does nothing until Locate.
 func NewLocator(opts Options) *Locator {
 	if opts.LookPath == nil {
-		opts.LookPath = exec.LookPath
+		opts.LookPath = lookPathWithToolDirs
 	}
 	if opts.Version == nil {
 		opts.Version = runVersion
@@ -181,4 +182,25 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// lookPathWithToolDirs is exec.LookPath that also searches the directories
+// where distro packages, Homebrew and snap put ffmpeg. A daemon started from a
+// desktop launcher or a service has a short PATH that often leaves them out,
+// so ffmpeg would "not exist" for it while it works in a terminal.
+func lookPathWithToolDirs(name string) (string, error) {
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+	dirs := []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/snap/bin"}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		dirs = append(dirs, filepath.Join(home, ".local", "bin"))
+	}
+	for _, d := range dirs {
+		p := filepath.Join(d, name)
+		if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+			return p, nil
+		}
+	}
+	return "", exec.ErrNotFound
 }

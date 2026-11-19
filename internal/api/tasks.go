@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -125,10 +126,16 @@ type BatchOutput struct {
 	}
 }
 
-// TaskSelectorFilter selects tasks by queue and status.
+// TaskSelectorFilter selects the tasks a list-tasks call with the same
+// filters would return.
 type TaskSelectorFilter struct {
-	QueueID string              `json:"queueId,omitempty" doc:"Only tasks of this queue."`
-	Status  []domain.TaskStatus `json:"status,omitempty" enum:"queued,running,paused,awaiting_link,refreshing,postprocessing,completed,error" doc:"Only tasks in any of these states."`
+	QueueID  string              `json:"queueId,omitempty" doc:"Only tasks of this queue."`
+	Status   []domain.TaskStatus `json:"status,omitempty" enum:"queued,running,paused,awaiting_link,refreshing,postprocessing,completed,error" doc:"Only tasks in any of these states."`
+	Q        string              `json:"q,omitempty" doc:"Case-insensitive substring of the task name or URL."`
+	Engine   string              `json:"engine,omitempty" doc:"Only tasks of this engine."`
+	Label    string              `json:"label,omitempty" doc:"Only tasks with this label: key, or key=value."`
+	Category string              `json:"category,omitempty" doc:"Only tasks of this category (ID or name)."`
+	Archived string              `json:"archived,omitempty" enum:"exclude,only,any" doc:"Archived tasks: exclude (the default), only, or any."`
 }
 
 // TaskSelector names the tasks of a bulk operation: explicit ids or a
@@ -429,6 +436,39 @@ type ListTasksInput struct {
 	Total           bool      `query:"total" doc:"Also count every task matching the filters (total)."`
 	Limit           int       `query:"limit" minimum:"1" maximum:"500" default:"50" doc:"Page size."`
 	Cursor          string    `query:"cursor" doc:"nextCursor of the previous page (same sort and order)."`
+	Archived        string    `query:"archived" enum:"exclude,only,any" default:"exclude" doc:"exclude (the default) leaves archived tasks out, only lists just them, any lists both."`
+}
+
+// archivedFilter maps the API's archived parameter to the storage filter.
+func archivedFilter(v string) storage.ArchivedFilter {
+	switch v {
+	case "only":
+		return storage.ArchivedOnly
+	case "any":
+		return storage.ArchivedAny
+	default:
+		return storage.ArchivedExclude
+	}
+}
+
+// Resolve reads every status parameter: huma gives one value per name, so
+// "?status=queued&status=paused" would keep only the first. Both that and the
+// comma-separated form select tasks in any of the listed states.
+func (in *ListTasksInput) Resolve(ctx huma.Context) []error {
+	u := ctx.URL()
+	values := u.Query()["status"]
+	if len(values) < 2 {
+		return nil
+	}
+	in.Status = in.Status[:0]
+	for _, v := range values {
+		for _, st := range strings.Split(v, ",") {
+			if st = strings.TrimSpace(st); st != "" {
+				in.Status = append(in.Status, st)
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Server) listTasks(ctx context.Context, in *ListTasksInput) (*struct{ Body TaskList }, error) {
@@ -440,7 +480,7 @@ func (s *Server) listTasks(ctx context.Context, in *ListTasksInput) (*struct{ Bo
 		CreatedAfter: in.CreatedAfter, CreatedBefore: in.CreatedBefore,
 		CompletedAfter: in.CompletedAfter, CompletedBefore: in.CompletedBefore,
 		Sort: storage.TaskSort(in.Sort), Order: storage.SortOrder(in.Order),
-		Limit: in.Limit, Cursor: in.Cursor, WithTotal: in.Total,
+		Limit: in.Limit, Cursor: in.Cursor, WithTotal: in.Total, Archived: archivedFilter(in.Archived),
 	}
 	for _, st := range in.Status {
 		f.Statuses = append(f.Statuses, domain.TaskStatus(st))
@@ -596,7 +636,21 @@ func (s *Server) selectTasks(ctx context.Context, op string, sel TaskSelector) (
 			&huma.ErrorDetail{Message: "ids or filter is required", Location: "body.ids"})
 	default:
 	}
-	f := storage.TaskFilter{QueueID: sel.Filter.QueueID, Statuses: sel.Filter.Status, Limit: storage.MaxTaskLimit}
+	sf := sel.Filter
+	f := storage.TaskFilter{
+		QueueID: sf.QueueID, Statuses: sf.Status, Search: sf.Q, Engine: sf.Engine, Label: sf.Label,
+		Archived: archivedFilter(sf.Archived), Limit: storage.MaxTaskLimit,
+	}
+	if sf.Category != "" {
+		if s.categories == nil {
+			return nil, errServicesUnavailable()
+		}
+		c, err := s.categories.Find(ctx, sf.Category)
+		if err != nil {
+			return nil, s.fail(ctx, op, err, "body.filter.category")
+		}
+		f.NameSuffixes, f.ContentTypes = c.Suffixes(), c.MIMETypes
+	}
 	var ids []string
 	for {
 		page, err := s.tasks.List(ctx, f)

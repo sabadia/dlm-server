@@ -72,3 +72,38 @@ func removeFile(path string) error {
 	}
 	return nil
 }
+
+// workSuffixes are the suffixes, appended to the final path, of the work
+// files and directories an engine leaves while a download is unfinished: the
+// single .part file (HTTP, FTP) or directory (yt-dlp) and the HLS/DASH
+// segment directory.
+var workSuffixes = []string{partSuffix, ".hls", ".ytdl"}
+
+// removeWork removes the work artifacts of an unfinished download next to
+// final: files are unlinked and directories removed with everything in them.
+// A symlink is unlinked, never followed, and only paths built from the task's
+// own file name are touched. A missing path is not an error. Every artifact
+// is tried; the errors are joined.
+func removeWork(final string) error {
+	var errs []error
+	for _, suffix := range workSuffixes {
+		p := final + suffix
+		fi, err := os.Lstat(p)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			continue
+		case err != nil:
+			errs = append(errs, fmt.Errorf("service: stat %q: %w", p, err))
+			continue
+		}
+		if fi.IsDir() {
+			err = os.RemoveAll(p)
+		} else {
+			err = os.Remove(p)
+		}
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("service: remove %q: %w", p, err))
+		}
+	}
+	return errors.Join(errs...)
+}

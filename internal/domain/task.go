@@ -134,6 +134,9 @@ type Task struct {
 	UpdatedAt   time.Time         `json:"updatedAt"`
 	StartedAt   *time.Time        `json:"startedAt,omitempty"`
 	CompletedAt *time.Time        `json:"completedAt,omitempty"`
+	// Archived tasks are kept, with their files, but left out of every
+	// listing and count except the archive's own. Duplicate checks still see them.
+	Archived bool `json:"archived"`
 }
 
 // NewTaskParams are the caller-supplied fields of a new task.

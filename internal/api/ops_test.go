@@ -542,6 +542,11 @@ func TestListTasksPaginationAndFilters(t *testing.T) {
 	if len(page.Tasks) != 6 {
 		t.Fatalf("multi-status filter returned %d tasks", len(page.Tasks))
 	}
+	// The same states as repeated parameters, which some clients send.
+	f.call(t, http.MethodGet, "/v1/tasks?status=queued&status=paused", "", http.StatusOK, &page)
+	if len(page.Tasks) != 6 {
+		t.Fatalf("repeated status parameters returned %d tasks", len(page.Tasks))
+	}
 }
 
 func TestBulkDeleteWithFilter(t *testing.T) {
@@ -913,5 +918,71 @@ func TestCleanupOperation(t *testing.T) {
 	f.call(t, http.MethodPost, "/v1/tasks/cleanup", `{"olderThanDays":0}`, http.StatusOK, &res)
 	if res.Deleted != 1 {
 		t.Errorf("everything completed = %+v", res)
+	}
+}
+
+func TestArchiveHidesTasksFromListingsAndCounts(t *testing.T) {
+	f := newOpsFixture(t)
+	done := f.createTask(t, `{"url":"`+f.fileURL()+`","paused":true}`)
+	other := f.createTask(t, `{"url":"`+f.fileURL()+`?other=1","paused":true}`)
+
+	var res struct {
+		Results []BatchItem `json:"results"`
+	}
+	// A task that is not finished cannot be archived.
+	f.call(t, http.MethodPost, "/v1/tasks/update", `{"ids":["`+done.ID+`"],"archived":true}`, http.StatusOK, &res)
+	if len(res.Results) != 1 || res.Results[0].OK || res.Results[0].Error == nil {
+		t.Fatalf("archiving a paused task = %+v", res.Results)
+	}
+
+	// Make it completed through the store, as a finished download would be.
+	ctx := context.Background()
+	task, err := f.store.Tasks().Get(ctx, done.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.Status = domain.StatusCompleted
+	if err := f.store.Tasks().Update(ctx, task); err != nil {
+		t.Fatal(err)
+	}
+	f.call(t, http.MethodPost, "/v1/tasks/update", `{"ids":["`+done.ID+`"],"archived":true}`, http.StatusOK, &res)
+	if len(res.Results) != 1 || !res.Results[0].OK || !res.Results[0].Task.Archived {
+		t.Fatalf("archive = %+v", res.Results)
+	}
+
+	var page TaskList
+	f.call(t, http.MethodGet, "/v1/tasks", "", http.StatusOK, &page)
+	if len(page.Tasks) != 1 || page.Tasks[0].ID != other.ID {
+		t.Fatalf("default listing = %+v", page.Tasks)
+	}
+	f.call(t, http.MethodGet, "/v1/tasks?archived=only", "", http.StatusOK, &page)
+	if len(page.Tasks) != 1 || page.Tasks[0].ID != done.ID {
+		t.Fatalf("archive listing = %+v", page.Tasks)
+	}
+	f.call(t, http.MethodGet, "/v1/tasks?archived=any", "", http.StatusOK, &page)
+	if len(page.Tasks) != 2 {
+		t.Fatalf("archived=any listing = %+v", page.Tasks)
+	}
+	var queues QueueList
+	f.call(t, http.MethodGet, "/v1/queues", "", http.StatusOK, &queues)
+	if queues.Archived != 1 || queues.Counts[domain.MainQueueID]["completed"] != 0 {
+		t.Fatalf("archived=%d counts=%v", queues.Archived, queues.Counts)
+	}
+
+	// A duplicate check still sees the archived task.
+	var dup service.ResolveResult
+	f.call(t, http.MethodPost, "/v1/resolve", `{"url":"`+f.fileURL()+`"}`, http.StatusOK, &dup)
+	if dup.DuplicateOf == nil || dup.DuplicateOf.TaskID != done.ID || !dup.DuplicateOf.Archived {
+		t.Fatalf("duplicateOf = %+v", dup.DuplicateOf)
+	}
+
+	// Bulk selection by filter honours the archive and the text search.
+	f.call(t, http.MethodPost, "/v1/tasks/update", `{"filter":{"archived":"only"},"archived":false}`, http.StatusOK, &res)
+	if len(res.Results) != 1 || !res.Results[0].OK || res.Results[0].Task.Archived {
+		t.Fatalf("unarchive = %+v", res.Results)
+	}
+	f.call(t, http.MethodPost, "/v1/tasks/delete", `{"filter":{"q":"other=1"}}`, http.StatusOK, &res)
+	if len(res.Results) != 1 || res.Results[0].ID != other.ID {
+		t.Fatalf("delete by q = %+v", res.Results)
 	}
 }

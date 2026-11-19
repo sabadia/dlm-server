@@ -78,6 +78,15 @@ func (s *QueueService) Counts(ctx context.Context) (map[string]map[domain.TaskSt
 	return out, nil
 }
 
+// ArchivedCount returns how many tasks are archived, across all queues.
+func (s *QueueService) ArchivedCount(ctx context.Context) (int, error) {
+	n, err := s.d.Store.Tasks().CountArchived(ctx, "")
+	if err != nil {
+		return 0, fmt.Errorf("service: count archived tasks: %w", err)
+	}
+	return n, nil
+}
+
 // Get returns a queue or an error matching domain.ErrNotFound.
 func (s *QueueService) Get(ctx context.Context, id string) (*domain.Queue, error) {
 	if err := resolveQueueRef(ctx, s.d.Store, &id); err != nil {

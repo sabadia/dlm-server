@@ -10,8 +10,30 @@ import (
 	"database/sql"
 )
 
+const countArchivedTasks = `-- name: CountArchivedTasks :one
+SELECT COUNT(*) FROM tasks WHERE archived = 1
+`
+
+func (q *Queries) CountArchivedTasks(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countArchivedTasks)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countQueueArchivedTasks = `-- name: CountQueueArchivedTasks :one
+SELECT COUNT(*) FROM tasks WHERE archived = 1 AND queue_id = ?1
+`
+
+func (q *Queries) CountQueueArchivedTasks(ctx context.Context, queueID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countQueueArchivedTasks, queueID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countQueueTasksByStatus = `-- name: CountQueueTasksByStatus :many
-SELECT status, COUNT(*) AS n FROM tasks WHERE queue_id = ?1 GROUP BY status
+SELECT status, COUNT(*) AS n FROM tasks WHERE queue_id = ?1 AND archived = 0 GROUP BY status
 `
 
 type CountQueueTasksByStatusRow struct {
@@ -43,7 +65,7 @@ func (q *Queries) CountQueueTasksByStatus(ctx context.Context, queueID string) (
 }
 
 const countTasksByStatus = `-- name: CountTasksByStatus :many
-SELECT status, COUNT(*) AS n FROM tasks GROUP BY status
+SELECT status, COUNT(*) AS n FROM tasks WHERE archived = 0 GROUP BY status
 `
 
 type CountTasksByStatusRow struct {
@@ -77,10 +99,10 @@ func (q *Queries) CountTasksByStatus(ctx context.Context) ([]CountTasksByStatusR
 const createTask = `-- name: CreateTask :exec
 INSERT INTO tasks (
     id, queue_id, status, priority, position, engine, name, dir, size, downloaded,
-    source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at
+    source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at, archived
 ) VALUES (
     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-    ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19
+    ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20
 )
 `
 
@@ -104,6 +126,7 @@ type CreateTaskParams struct {
 	UpdatedAt   int64
 	StartedAt   sql.NullInt64
 	CompletedAt sql.NullInt64
+	Archived    int64
 }
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
@@ -127,6 +150,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 		arg.UpdatedAt,
 		arg.StartedAt,
 		arg.CompletedAt,
+		arg.Archived,
 	)
 	return err
 }
@@ -144,7 +168,7 @@ func (q *Queries) DeleteTask(ctx context.Context, id string) (int64, error) {
 }
 
 const findTaskByChecksum = `-- name: FindTaskByChecksum :one
-SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at FROM tasks
+SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at, archived FROM tasks
 WHERE json_extract(settings, '$.checksum.expected') = ?1
 ORDER BY created_at, id
 LIMIT 1
@@ -173,12 +197,13 @@ func (q *Queries) FindTaskByChecksum(ctx context.Context, expected string) (Task
 		&i.UpdatedAt,
 		&i.StartedAt,
 		&i.CompletedAt,
+		&i.Archived,
 	)
 	return i, err
 }
 
 const findTaskByNameSize = `-- name: FindTaskByNameSize :one
-SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at FROM tasks
+SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at, archived FROM tasks
 WHERE name = ?1 AND size = ?2 AND status <> 'error'
 ORDER BY created_at, id
 LIMIT 1
@@ -212,12 +237,13 @@ func (q *Queries) FindTaskByNameSize(ctx context.Context, arg FindTaskByNameSize
 		&i.UpdatedAt,
 		&i.StartedAt,
 		&i.CompletedAt,
+		&i.Archived,
 	)
 	return i, err
 }
 
 const findTaskBySourceURL = `-- name: FindTaskBySourceURL :one
-SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at FROM tasks
+SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at, archived FROM tasks
 WHERE json_extract(source, '$.currentUrl') = ?1 OR json_extract(source, '$.originalUrl') = ?1
 ORDER BY created_at, id
 LIMIT 1
@@ -246,12 +272,13 @@ func (q *Queries) FindTaskBySourceURL(ctx context.Context, url string) (Task, er
 		&i.UpdatedAt,
 		&i.StartedAt,
 		&i.CompletedAt,
+		&i.Archived,
 	)
 	return i, err
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at FROM tasks WHERE id = ?1
+SELECT id, queue_id, status, priority, position, engine, name, dir, size, downloaded, source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at, archived FROM tasks WHERE id = ?1
 `
 
 func (q *Queries) GetTask(ctx context.Context, id string) (Task, error) {
@@ -277,6 +304,7 @@ func (q *Queries) GetTask(ctx context.Context, id string) (Task, error) {
 		&i.UpdatedAt,
 		&i.StartedAt,
 		&i.CompletedAt,
+		&i.Archived,
 	)
 	return i, err
 }
@@ -374,8 +402,9 @@ SET queue_id = ?1,
     error = ?14,
     updated_at = ?15,
     started_at = ?16,
-    completed_at = ?17
-WHERE id = ?18
+    completed_at = ?17,
+    archived = ?18
+WHERE id = ?19
 `
 
 type UpdateTaskParams struct {
@@ -396,6 +425,7 @@ type UpdateTaskParams struct {
 	UpdatedAt   int64
 	StartedAt   sql.NullInt64
 	CompletedAt sql.NullInt64
+	Archived    int64
 	ID          string
 }
 
@@ -418,6 +448,7 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (int64, 
 		arg.UpdatedAt,
 		arg.StartedAt,
 		arg.CompletedAt,
+		arg.Archived,
 		arg.ID,
 	)
 	if err != nil {

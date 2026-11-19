@@ -1,10 +1,10 @@
 -- name: CreateTask :exec
 INSERT INTO tasks (
     id, queue_id, status, priority, position, engine, name, dir, size, downloaded,
-    source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at
+    source, resource, settings, labels, error, created_at, updated_at, started_at, completed_at, archived
 ) VALUES (
     @id, @queue_id, @status, @priority, @position, @engine, @name, @dir, @size, @downloaded,
-    @source, @resource, @settings, @labels, @error, @created_at, @updated_at, @started_at, @completed_at
+    @source, @resource, @settings, @labels, @error, @created_at, @updated_at, @started_at, @completed_at, @archived
 );
 
 -- name: GetTask :one
@@ -28,7 +28,8 @@ SET queue_id = @queue_id,
     error = @error,
     updated_at = @updated_at,
     started_at = @started_at,
-    completed_at = @completed_at
+    completed_at = @completed_at,
+    archived = @archived
 WHERE id = @id;
 
 -- name: UpdateTaskProgress :execrows
@@ -45,10 +46,16 @@ FROM tasks
 WHERE queue_id = @queue_id;
 
 -- name: CountTasksByStatus :many
-SELECT status, COUNT(*) AS n FROM tasks GROUP BY status;
+SELECT status, COUNT(*) AS n FROM tasks WHERE archived = 0 GROUP BY status;
 
 -- name: CountQueueTasksByStatus :many
-SELECT status, COUNT(*) AS n FROM tasks WHERE queue_id = @queue_id GROUP BY status;
+SELECT status, COUNT(*) AS n FROM tasks WHERE queue_id = @queue_id AND archived = 0 GROUP BY status;
+
+-- name: CountArchivedTasks :one
+SELECT COUNT(*) FROM tasks WHERE archived = 1;
+
+-- name: CountQueueArchivedTasks :one
+SELECT COUNT(*) FROM tasks WHERE archived = 1 AND queue_id = @queue_id;
 
 -- name: FindTaskBySourceURL :one
 SELECT * FROM tasks

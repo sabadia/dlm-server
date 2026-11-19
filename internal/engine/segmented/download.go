@@ -115,6 +115,9 @@ func (d *Download) Progress() engine.Progress {
 		} else if d.plan != nil {
 			size = estimateSize(d.plan.Bandwidth, float64(d.totalDurMs.Load())/1000)
 		}
+		if size >= 0 && size < got {
+			size = got // never less than what is already on disk
+		}
 	}
 	return engine.Progress{Downloaded: got, Size: size, Connections: d.workers}
 }
@@ -263,7 +266,13 @@ func (d *Download) verifyDone(p *Plan) {
 		}
 	}
 	if !live && len(p.Tracks) > 0 {
-		total = p.Tracks[0].totalDuration()
+		// Every track counts: doneDurMs adds up the segments of all of them
+		// (video and a separate audio rendition), so the total must too, or
+		// the estimate comes out at about 1/tracks of the real size and jumps
+		// when the merged file is measured.
+		for _, t := range p.Tracks {
+			total += t.totalDuration()
+		}
 		d.totalDurMs.Store(int64(total * 1000))
 	}
 }

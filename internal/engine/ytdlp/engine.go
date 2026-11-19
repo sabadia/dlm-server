@@ -138,6 +138,13 @@ func (e *Engine) Resolve(ctx context.Context, req engine.Request) (*engine.Probe
 	}
 	defer cs.cleanup()
 	args := append(cs.args(), runtimeArgs(bin.Version)...)
+	if e.ff != nil {
+		// The same ffmpeg as the download, or yt-dlp may pick other formats
+		// here than it merges there (a different size and extension).
+		if fb, err := e.ff.Locate(ctx); err == nil {
+			args = append(args, "--ffmpeg-location="+fb.Path)
+		}
+	}
 	args = append(args, "--dump-single-json", "--no-playlist", "--skip-download")
 	args = append(args, "--", strings.TrimSpace(req.Source.CurrentURL))
 	var stdout, stderr bytes.Buffer

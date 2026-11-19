@@ -27,6 +27,9 @@ import (
 // downloads into.
 const WorkSuffix = ".part"
 
+// engineStateV1 is the resume marker a checkpoint carries (see checkpoint).
+const engineStateV1 = "ytdlp/1"
+
 const (
 	progressPrefix = "DLM|"
 	filePrefix     = "DLMFILE|"
@@ -148,6 +151,7 @@ func (d *Download) runProcess(ctx context.Context, bin string, args []string) (s
 	cmd.Env = environ()
 	cmd.Cancel = func() error { return platform.InterruptProcess(cmd.Process) }
 	cmd.WaitDelay = interruptGrace
+	platform.OwnProcessGroup(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &limitWriter{w: &stderr, n: 1 << 20}
 	out, err := cmd.StdoutPipe()
@@ -176,6 +180,11 @@ func (d *Download) runProcess(ctx context.Context, bin string, args []string) (s
 	}
 	waitErr := cmd.Wait()
 	d.conns.Store(0)
+	if ctx.Err() != nil || waitErr != nil {
+		// A helper (ffmpeg) that outlived yt-dlp must not keep writing into
+		// the work directory a pause, retry or delete is about to use.
+		platform.KillProcessGroup(cmd)
+	}
 	switch {
 	case ctx.Err() != nil:
 		return "", ctx.Err() //nolint:wrapcheck // cancellation is reported as is
@@ -280,7 +289,10 @@ func (d *Download) checkpoint(ctx context.Context) {
 		defer cancel()
 	}
 	d.lastCkpt = d.e.env.Clock()
-	cp := engine.Checkpoint{Downloaded: d.downloaded.Load(), Size: d.size.Load()}
+	// EngineState marks the run as having work on disk: without it the runner
+	// sees every retry or resume as a fresh start, renames the task around its
+	// own .part directory and begins again in a new one, never resuming.
+	cp := engine.Checkpoint{Downloaded: d.downloaded.Load(), Size: d.size.Load(), EngineState: []byte(engineStateV1)}
 	if err := d.spec.Checkpointer.Checkpoint(ctx, cp); err != nil {
 		d.log.WarnContext(ctx, "ytdlp: checkpoint failed", "error", err)
 	}

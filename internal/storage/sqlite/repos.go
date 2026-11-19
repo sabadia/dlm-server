@@ -181,6 +181,7 @@ func (r taskRepo) Create(ctx context.Context, t *domain.Task) error {
 		UpdatedAt:   toMillis(t.UpdatedAt),
 		StartedAt:   toNullMillis(t.StartedAt),
 		CompletedAt: toNullMillis(t.CompletedAt),
+		Archived:    boolToInt(t.Archived),
 	})
 	if err != nil {
 		return taskWriteError("create", t, err)
@@ -234,6 +235,7 @@ func (r taskRepo) Update(ctx context.Context, t *domain.Task) error {
 		UpdatedAt:   toMillis(t.UpdatedAt),
 		StartedAt:   toNullMillis(t.StartedAt),
 		CompletedAt: toNullMillis(t.CompletedAt),
+		Archived:    boolToInt(t.Archived),
 	})
 	if err != nil {
 		return taskWriteError("update", t, err)
@@ -299,6 +301,20 @@ func (r taskRepo) CountByStatus(ctx context.Context, queueID string) (map[domain
 		out[domain.TaskStatus(row.Status)] = int(row.N)
 	}
 	return out, nil
+}
+
+func (r taskRepo) CountArchived(ctx context.Context, queueID string) (int, error) {
+	var n int64
+	var err error
+	if queueID == "" {
+		n, err = r.s.read().CountArchivedTasks(ctx)
+	} else {
+		n, err = r.s.read().CountQueueArchivedTasks(ctx, queueID)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("storage: count archived tasks: %w", err)
+	}
+	return int(n), nil
 }
 
 func (r taskRepo) Stats(ctx context.Context, since []time.Time) (storage.TaskStats, error) {
